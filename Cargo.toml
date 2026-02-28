@@ -1,0 +1,44 @@
+[package]
+name = "kira-spliceqc"
+description = "Deterministic, explainable splicing QC for single-cell expression data."
+version = "0.1.0"
+rust-version = "1.95"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/ARyaskov/kira-spliceqc"
+keywords = [
+    "bioinformatics",
+    "splicing",
+    "single-cell",
+    "sc-rna",
+    "oncology"
+]
+categories = [
+    "science",
+    "science::bioinformatics",
+    "science::bioinformatics::proteomics",
+    "command-line-utilities"
+]
+
+[dependencies]
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+thiserror = "1"
+flate2 = "1.0"
+hdf5 = "0.8.1"
+hdf5-sys = { version = "0.8.1", features = ["static"] }
+memmap2 = "0.9"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+clap = { version = "4", features = ["derive"] }
+rayon = "1"
+kira-shared-sc-cache = "0.1"
+kira-scio = { version = "0.1", features = ["h5ad"] }
+
+
+[dev-dependencies]
+tempfile = "3"
+sha2 = "0.10"
+
+[lib]
+path = "src/lib.rs"
