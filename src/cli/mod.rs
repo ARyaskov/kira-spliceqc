@@ -13,6 +13,7 @@ use crate::model::imbalance::SpliceosomeImbalanceMetrics;
 use crate::model::isoform_dispersion::IsoformDispersionMetrics;
 use crate::model::missplicing::MissplicingMetrics;
 use crate::model::sis::SpliceIntegrityMetrics;
+use crate::model::splicing_instability::SplicingInstabilityMetrics;
 use crate::model::splicing_noise::SplicingNoiseMetrics;
 use crate::model::timecourse::TimecourseSplicingMetrics;
 
@@ -31,4 +32,5 @@ pub struct PipelineContext {
     pub stage12: Option<CrypticSplicingRiskMetrics>,
     pub stage13: Option<SpliceosomeCollapseMetrics>,
     pub stage14: Option<TimecourseSplicingMetrics>,
+    pub stage15: SplicingInstabilityMetrics,
 }

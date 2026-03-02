@@ -69,6 +69,16 @@ fn summary_json_schema() {
     assert!(v["regimes"]["fractions"].is_object());
     assert!(v["qc"]["low_confidence_fraction"].is_number());
     assert!(v["qc"]["high_splice_noise_fraction"].is_number());
+    assert_eq!(
+        v["splicing_instability"]["panel_version"],
+        "SPLICEQC_INSTABILITY_PANEL_V1"
+    );
+    assert!(v["splicing_instability"]["thresholds"]["splice_overload_high"].is_number());
+    assert!(
+        v["splicing_instability"]["global_stats"]["sos_p50"].is_number()
+            || v["splicing_instability"]["global_stats"]["sos_p50"].is_null()
+    );
+    assert!(v["splicing_instability"]["missingness"]["panel_coverage"].is_array());
 }
 
 #[test]

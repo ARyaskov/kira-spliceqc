@@ -13,6 +13,7 @@ use crate::model::imbalance::SpliceosomeImbalanceMetrics;
 use crate::model::isoform_dispersion::IsoformDispersionMetrics;
 use crate::model::missplicing::MissplicingMetrics;
 use crate::model::sis::SpliceIntegrityMetrics;
+use crate::model::splicing_instability::SplicingInstabilityMetrics;
 use crate::model::splicing_noise::SplicingNoiseMetrics;
 use crate::model::timecourse::TimecourseSplicingMetrics;
 use crate::output::{json, summary, tsv};
@@ -36,6 +37,7 @@ pub fn run_stage7(
     cryptic_risk: Option<&CrypticSplicingRiskMetrics>,
     collapse: Option<&SpliceosomeCollapseMetrics>,
     timecourse: Option<&TimecourseSplicingMetrics>,
+    splicing_instability: &SplicingInstabilityMetrics,
     options: OutputOptions,
 ) -> Result<String, InputError> {
     validate_lengths(
@@ -49,6 +51,7 @@ pub fn run_stage7(
         assembly,
         cryptic_risk,
         collapse,
+        splicing_instability,
     )?;
     std::fs::create_dir_all(out_dir).map_err(|e| InputError::io(out_dir, e))?;
 
@@ -73,6 +76,7 @@ pub fn run_stage7(
             cryptic_risk,
             collapse,
             timecourse,
+            splicing_instability,
         )?;
         info!("wrote {}", path.display());
     }
@@ -128,6 +132,7 @@ pub fn run_stage7(
             missplicing,
             imbalance,
             sis,
+            splicing_instability,
             coupling_ref,
             exon_intron_ref,
             assembly_ref,
@@ -155,6 +160,7 @@ fn validate_lengths(
     assembly: Option<&AssemblyPhaseImbalanceMetrics>,
     cryptic_risk: Option<&CrypticSplicingRiskMetrics>,
     collapse: Option<&SpliceosomeCollapseMetrics>,
+    splicing_instability: &SplicingInstabilityMetrics,
 ) -> Result<(), InputError> {
     let n = cell_names.len();
     if isoform.entropy.len() != n || isoform.z_entropy.len() != n || isoform.dispersion.len() != n {
@@ -175,6 +181,23 @@ fn validate_lengths(
     if sis.sis.len() != n || sis.class.len() != n {
         return Err(InputError::LengthMismatch(
             "sis length mismatch".to_string(),
+        ));
+    }
+    if splicing_instability.sos.len() != n
+        || splicing_instability.rlr.len() != n
+        || splicing_instability.sii.len() != n
+        || splicing_instability.splice_core.len() != n
+        || splicing_instability.rbp_core.len() != n
+        || splicing_instability.rloop_resolve_core.len() != n
+        || splicing_instability.conflict_risk_core.len() != n
+        || splicing_instability.nmd_core.len() != n
+        || splicing_instability.splice_overload_high.len() != n
+        || splicing_instability.rloop_risk_high.len() != n
+        || splicing_instability.splicing_instability_high.len() != n
+        || splicing_instability.genome_instability_splicing_flag.len() != n
+    {
+        return Err(InputError::LengthMismatch(
+            "splicing instability length mismatch".to_string(),
         ));
     }
     if let Some(coupling) = coupling {

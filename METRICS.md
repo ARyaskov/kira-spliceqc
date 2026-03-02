@@ -102,6 +102,66 @@ Class:
 - `Impaired` if `0.40 <= sis < 0.60`
 - `Broken` if `sis < 0.40` or if SIS inputs are non-finite
 
+## Splicing Instability Proxies (Stage 15, expression-only)
+
+Panel version:
+- `SPLICEQC_INSTABILITY_PANEL_V1`
+
+Panels (human symbols, stable order):
+- Core spliceosome / snRNP load proxy:
+  - `SNRPB,SNRPD1,SNRPD2,SNRPD3,SNRPE,SNRPF,SNRPG,SF3A1,SF3A2,SF3A3,SF3B1,SF3B2,SF3B3,SF3B4,SF3B5,PRPF3,PRPF4,PRPF6,PRPF8,PRPF19,U2AF1,U2AF2`
+- Splicing regulation / stress-sensitive RBPs:
+  - `HNRNPA1,HNRNPA2B1,HNRNPC,HNRNPK,SRSF1,SRSF2,SRSF3,SRSF6,SRSF7,RBM39,RBM10,RBM17`
+- R-loop resolution (protective axis):
+  - `SETX,DDX5,DDX21,DHX9,RNASEH1,RNASEH2A,RNASEH2B,RNASEH2C,BRCA1,BRCA2`
+- Transcription-replication conflict risk (optional):
+  - `TOP1,TOP2A,TOP2B,POLR2A,SUPT5H,SUPT6H`
+- NMD surveillance (optional):
+  - `UPF1,UPF2,UPF3B,SMG1,SMG5,SMG6,SMG7`
+
+Panel trimmed mean:
+- collect `v_i = log_cp10k(g_i, c)` for mapped genes in panel
+- if mapped values `< MIN_GENES_PER_PANEL_CELL (3)`, score = `NaN`
+- `TM(P,c) = mean(v_sorted[k:n-k])`, `k = floor(0.1*n)`
+
+Robust z-score:
+- `Z(x) = (x - median(x)) / (1.4826 * MAD(x) + EPS_ROBUST)`
+- if `MAD == 0`, z-score for finite values is `0`
+
+Spliceosome Overload Score (SOS):
+- `splice_core = TM(SpliceosomePanel, c)`
+- `rbp_core = TM(SplicingRBPPanel, c)`
+- `SOS(c) = 0.65 * Z(splice_core) + 0.35 * Z(rbp_core)`
+
+R-loop Risk Proxy (RLR):
+- `rloop_resolve = TM(RloopResolutionPanel, c)`
+- `conflict_risk = TM(ConflictPanel, c)` when conflict panel enabled
+- if conflict panel enabled:
+  - `RLR(c) = 0.7 * relu(-Z(rloop_resolve)) + 0.3 * relu(Z(conflict_risk))`
+- if conflict panel disabled:
+  - `RLR(c) = relu(-Z(rloop_resolve))`
+
+Splicing Instability Index (SII):
+- with NMD panel enabled:
+  - `SII(c) = 0.6 * relu(SOS(c)) + 0.4 * relu(-Z(nmd_core))`
+- with NMD panel disabled:
+  - `SII(c) = relu(SOS(c))`
+
+Flags:
+- `splice_overload_high`: `SOS >= 2.0`
+- `rloop_risk_high`: `RLR >= 1.5`
+- `splicing_instability_high`: `SII >= 2.0`
+- `genome_instability_splicing_flag`: `splice_overload_high && rloop_risk_high`
+
+NaN behavior:
+- flags evaluate to `false` for non-finite scores
+- missingness counters are emitted in JSON outputs
+
+Optional junction-aware mode (future placeholder):
+- `JE` (junction entropy)
+- `IRB` (intron retention burden)
+- `CSP` (cryptic splicing proxy)
+
 ## Coupling Stress (Stage 8)
 
 Required panel ids:
@@ -217,6 +277,20 @@ Summary metrics in `summary.json`:
 - Quantile rule: index `round((n-1)*q)` on sorted values
 - `low_confidence_fraction = #cells(confidence < 0.5) / n_cells`
 - `high_splice_noise_fraction = #cells(splice_junction_noise > 0.7) / n_cells`
+- `splicing_instability` block:
+  - panel metadata and thresholds
+  - z-score reference medians/MAD
+  - global `p50/p90` for `SOS`,`RLR`,`SII`
+  - cluster stats (empty when cluster labels are unavailable)
+  - missingness counters and panel coverage
+
+## Caveats and Integration Note
+
+- SOS/RLR/SII are transcriptional proxies, not direct molecular assays.
+- RLR does not directly measure RNA:DNA hybrid occupancy.
+- Interpretation is strongest when integrated with replication stress / DDR axes (e.g., `kira-nuclearqc`).
+- Recommended downstream cross-axis predicate in `kira-organelle`:
+  - `replication_stress_high && splicing_instability_high`
 
 ## Constants
 

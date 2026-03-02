@@ -7,6 +7,10 @@ use kira_spliceqc::model::imbalance::SpliceosomeImbalanceMetrics;
 use kira_spliceqc::model::isoform_dispersion::IsoformDispersionMetrics;
 use kira_spliceqc::model::missplicing::MissplicingMetrics;
 use kira_spliceqc::model::sis::{SpliceIntegrityClass, SpliceIntegrityMetrics};
+use kira_spliceqc::model::splicing_instability::{
+    PanelCoverage, SplicingInstabilityGlobalStats, SplicingInstabilityMetrics,
+    SplicingInstabilityMissingness, SplicingInstabilityRobustRef, SplicingInstabilityZReference,
+};
 use kira_spliceqc::output::{json, summary, tsv};
 use kira_spliceqc::pipeline::stage7_output::{OutputOptions, run_stage7};
 use tempfile::tempdir;
@@ -22,6 +26,7 @@ fn make_metrics(
     CouplingStressMetrics,
     ExonIntronDefinitionMetrics,
     AssemblyPhaseImbalanceMetrics,
+    SplicingInstabilityMetrics,
 ) {
     let cells = (0..n).map(|i| format!("cell{}", i)).collect::<Vec<_>>();
     let isoform = IsoformDispersionMetrics {
@@ -76,6 +81,70 @@ fn make_metrics(
         b_imbalance: vec![0.02; n],
         cat_imbalance: vec![0.03; n],
     };
+    let splicing_instability = SplicingInstabilityMetrics {
+        panel_version: "SPLICEQC_INSTABILITY_PANEL_V1",
+        min_genes: 3,
+        conflict_panel_enabled: true,
+        nmd_panel_enabled: true,
+        splice_core: vec![0.2; n],
+        rbp_core: vec![0.3; n],
+        rloop_resolve_core: vec![0.4; n],
+        conflict_risk_core: vec![0.5; n],
+        nmd_core: vec![0.6; n],
+        sos: vec![0.7; n],
+        rlr: vec![0.8; n],
+        sii: vec![0.9; n],
+        splice_overload_high: vec![false; n],
+        rloop_risk_high: vec![false; n],
+        splicing_instability_high: vec![false; n],
+        genome_instability_splicing_flag: vec![false; n],
+        z_reference: SplicingInstabilityZReference {
+            splice_core: SplicingInstabilityRobustRef {
+                median: 0.0,
+                mad: 1.0,
+            },
+            rbp_core: SplicingInstabilityRobustRef {
+                median: 0.0,
+                mad: 1.0,
+            },
+            rloop_resolve_core: SplicingInstabilityRobustRef {
+                median: 0.0,
+                mad: 1.0,
+            },
+            conflict_risk_core: Some(SplicingInstabilityRobustRef {
+                median: 0.0,
+                mad: 1.0,
+            }),
+            nmd_core: Some(SplicingInstabilityRobustRef {
+                median: 0.0,
+                mad: 1.0,
+            }),
+        },
+        global_stats: SplicingInstabilityGlobalStats {
+            sos_p50: 0.7,
+            sos_p90: 0.7,
+            rlr_p50: 0.8,
+            rlr_p90: 0.8,
+            sii_p50: 0.9,
+            sii_p90: 0.9,
+        },
+        cluster_stats: Vec::new(),
+        missingness: SplicingInstabilityMissingness {
+            splice_core_nan_cells: 0,
+            rbp_core_nan_cells: 0,
+            rloop_resolve_core_nan_cells: 0,
+            conflict_risk_core_nan_cells: 0,
+            nmd_core_nan_cells: 0,
+            sos_nan_cells: 0,
+            rlr_nan_cells: 0,
+            sii_nan_cells: 0,
+            panel_coverage: vec![PanelCoverage {
+                panel_name: "spliceosome_panel",
+                genes_defined: 22,
+                genes_mapped: 22,
+            }],
+        },
+    };
     (
         cells,
         isoform,
@@ -85,13 +154,23 @@ fn make_metrics(
         coupling,
         exon_intron,
         assembly,
+        splicing_instability,
     )
 }
 
 #[test]
 fn json_schema_sanity() {
-    let (cells, isoform, missplicing, imbalance, sis, coupling, exon_intron, assembly) =
-        make_metrics(2);
+    let (
+        cells,
+        isoform,
+        missplicing,
+        imbalance,
+        sis,
+        coupling,
+        exon_intron,
+        assembly,
+        splicing_instability,
+    ) = make_metrics(2);
     let dir = tempdir().unwrap();
     let path = dir.path().join("spliceqc.json");
     json::write_json(
@@ -108,6 +187,7 @@ fn json_schema_sanity() {
         None,
         None,
         None,
+        &splicing_instability,
     )
     .unwrap();
 
@@ -121,12 +201,26 @@ fn json_schema_sanity() {
     assert!(v["cells"][0]["coupling"]["coupling_stress"].is_number());
     assert!(v["cells"][0]["exon_intron_bias"]["exon_definition_bias"].is_number());
     assert!(v["cells"][0]["assembly_phase"]["ea_imbalance"].is_number());
+    assert!(v["cells"][0]["splicing_instability"]["sos"].is_number());
+    assert_eq!(
+        v["splicing_instability"]["panel_version"],
+        "SPLICEQC_INSTABILITY_PANEL_V1"
+    );
 }
 
 #[test]
 fn tsv_header_order() {
-    let (cells, isoform, missplicing, imbalance, sis, coupling, exon_intron, assembly) =
-        make_metrics(1);
+    let (
+        cells,
+        isoform,
+        missplicing,
+        imbalance,
+        sis,
+        coupling,
+        exon_intron,
+        assembly,
+        splicing_instability,
+    ) = make_metrics(1);
     let dir = tempdir().unwrap();
     let path = dir.path().join("spliceqc.tsv");
     tsv::write_tsv(
@@ -136,6 +230,7 @@ fn tsv_header_order() {
         &missplicing,
         &imbalance,
         &sis,
+        &splicing_instability,
         &coupling,
         &exon_intron,
         &assembly,
@@ -149,7 +244,7 @@ fn tsv_header_order() {
 
 #[test]
 fn summary_formatting_snapshot() {
-    let (_cells, _isoform, _missplicing, _imbalance, sis, _coupling, _exon_intron, _assembly) =
+    let (_cells, _isoform, _missplicing, _imbalance, sis, _coupling, _exon_intron, _assembly, _) =
         make_metrics(3);
     let text = summary::format_summary(&sis, None, None, None);
     let expected = "kira-spliceqc summary\n---------------------\nCells analyzed: 3\n\nIntegrity classes:\n  Intact:       0 (0.0%)\n  Stressed:     3 (100.0%)\n  Impaired:     0 (0.0%)\n  Broken:       0 (0.0%)\n\nMedian SIS: 0.75\nFailure fraction (Impaired+Broken): 0.0%\n\nCryptic splicing risk > 0.7: N/A\nSpliceosome collapse: N/A\nCell-cycle confounded: N/A\n";
@@ -158,8 +253,17 @@ fn summary_formatting_snapshot() {
 
 #[test]
 fn json_deterministic_bytes() {
-    let (cells, isoform, missplicing, imbalance, sis, coupling, exon_intron, assembly) =
-        make_metrics(2);
+    let (
+        cells,
+        isoform,
+        missplicing,
+        imbalance,
+        sis,
+        coupling,
+        exon_intron,
+        assembly,
+        splicing_instability,
+    ) = make_metrics(2);
     let dir = tempdir().unwrap();
     let path1 = dir.path().join("spliceqc1.json");
     let path2 = dir.path().join("spliceqc2.json");
@@ -178,6 +282,7 @@ fn json_deterministic_bytes() {
         None,
         None,
         None,
+        &splicing_instability,
     )
     .unwrap();
     json::write_json(
@@ -194,6 +299,7 @@ fn json_deterministic_bytes() {
         None,
         None,
         None,
+        &splicing_instability,
     )
     .unwrap();
 
@@ -204,8 +310,17 @@ fn json_deterministic_bytes() {
 
 #[test]
 fn run_stage7_outputs() {
-    let (cells, isoform, missplicing, imbalance, sis, coupling, exon_intron, assembly) =
-        make_metrics(1);
+    let (
+        cells,
+        isoform,
+        missplicing,
+        imbalance,
+        sis,
+        coupling,
+        exon_intron,
+        assembly,
+        splicing_instability,
+    ) = make_metrics(1);
     let dir = tempdir().unwrap();
     let summary = run_stage7(
         dir.path(),
@@ -221,6 +336,7 @@ fn run_stage7_outputs() {
         None,
         None,
         None,
+        &splicing_instability,
         OutputOptions {
             json: false,
             tsv: false,

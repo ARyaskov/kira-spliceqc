@@ -14,6 +14,9 @@ Install from crates.io:
 cargo install kira-spliceqc
 ```
 
+Default geneset catalog is embedded at compile time and used automatically when
+`resources/genesets/splicing_genesets.tsv` is unavailable at runtime.
+
 ## Usage examples
 
 Standalone run (cell mode, default):
@@ -91,6 +94,16 @@ Pipeline mode (`--run-mode pipeline`), output directory: `<OUT>/kira-spliceqc`:
 - `panels_report.tsv` (panel coverage/sum quantiles)
 - `pipeline_step.json` (pipeline ingestion manifest)
 - `spliceqc.json` (stage-7 JSON output, depending on `--json`/`--tsv` flags)
+
+## Splicing instability proxies
+
+`kira-spliceqc` now emits additive, single-sample-compatible transcriptional proxies for genome/nuclear instability interpretation:
+
+- `SOS` (Spliceosome Overload Score)
+- `RLR` (R-loop Risk Proxy)
+- `SII` (Splicing Instability Index)
+
+These are deterministic expression-only metrics (no timepoints, no ML). Per-cell values and flags are appended to stage-7 TSV/JSON outputs, and pipeline `summary.json` includes a `splicing_instability` block with thresholds, robust z-score references, quantiles, and missingness.
 
 ## Shared cache specification
 

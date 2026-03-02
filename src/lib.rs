@@ -3,6 +3,7 @@ pub mod expression;
 pub mod genesets;
 pub mod input;
 pub mod io;
+pub mod metrics;
 pub mod model;
 pub mod output;
 pub mod pipeline;

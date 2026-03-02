@@ -23,6 +23,7 @@ use crate::pipeline::stage10_assembly_phase::compute as compute_assembly;
 use crate::pipeline::stage11_splicing_noise::compute as compute_splicing_noise;
 use crate::pipeline::stage12_cryptic_risk::compute as compute_cryptic_risk;
 use crate::pipeline::stage13_collapse::compute as compute_collapse;
+use crate::pipeline::stage15_splicing_instability::compute as compute_splicing_instability;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SpliceQcError {
@@ -70,6 +71,7 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
     let stage4 = run_logged(4, || compute_missplicing(&stage2))?;
     let stage5 = run_logged(5, || compute_imbalance(&stage2))?;
     let stage6 = run_logged(6, || run_stage6(&stage3, &stage4, &stage5))?;
+    let stage15 = run_logged(15, || Ok(compute_splicing_instability(&stage1)))?;
 
     let (stage8, stage9, stage10, stage11, stage12, stage13, stage14) = if config.extended {
         let stage8 = run_logged(8, || compute_coupling(&stage2))?;
@@ -110,6 +112,7 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
         stage12,
         stage13,
         stage14,
+        stage15,
     };
 
     if config.extended && context.stage14.is_none() {
@@ -131,6 +134,7 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
             context.stage12.as_ref(),
             context.stage13.as_ref(),
             context.stage14.as_ref(),
+            &context.stage15,
             OutputOptions {
                 json: config.output_json,
                 tsv: config.output_tsv,
@@ -153,6 +157,7 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
             &context.stage5,
             &context.stage6,
             context.stage8.as_ref(),
+            &context.stage15,
             &catalog,
         )?;
         info!(

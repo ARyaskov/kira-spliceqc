@@ -42,6 +42,7 @@ Runtime order in `run_pipeline`:
 - Stage 4: missplicing metrics
 - Stage 5: spliceosome imbalance metrics
 - Stage 6: SIS (splice integrity score)
+- Stage 15: splicing instability proxies (SOS/RLR/SII, expression-only mode)
 - Stages 8-13: only when `--extended`
   - 8 coupling stress
   - 9 exon/intron bias
@@ -62,6 +63,10 @@ Runtime order in `run_pipeline`:
 Outputs from stage 7:
 - `spliceqc.json` (if `--json` or no explicit format flags)
 - `spliceqc.tsv` (if `--tsv` or no explicit format flags)
+- `spliceqc.tsv` includes additive per-cell columns for:
+  - panel cores: `splice_core`, `rbp_core`, `rloop_resolve_core`, `conflict_risk_core`, `nmd_core`
+  - scores: `SOS`, `RLR`, `SII`
+  - flags: `splice_overload_high`, `rloop_risk_high`, `splicing_instability_high`, `genome_instability_splicing_flag`
 
 ### Pipeline mode
 
@@ -73,8 +78,9 @@ Outputs:
 - pipeline contract outputs:
   - `spliceqc.tsv` (contract-formatted table for pipeline integration)
   - `panels_report.tsv`
-  - `summary.json`
-  - `pipeline_step.json`
+- `summary.json`
+  - includes additive `splicing_instability` block: `panel_version`, `thresholds`, `global_stats`, `cluster_stats`, `missingness`
+- `pipeline_step.json`
 
 Note: in pipeline mode, contract `spliceqc.tsv` is always written and overwrites any stage-7 TSV with the same name.
 

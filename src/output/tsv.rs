@@ -1,4 +1,4 @@
-﻿use std::path::Path;
+use std::path::Path;
 
 use crate::input::error::InputError;
 use crate::model::assembly_phase::AssemblyPhaseImbalanceMetrics;
@@ -8,8 +8,9 @@ use crate::model::imbalance::SpliceosomeImbalanceMetrics;
 use crate::model::isoform_dispersion::IsoformDispersionMetrics;
 use crate::model::missplicing::MissplicingMetrics;
 use crate::model::sis::{SpliceIntegrityClass, SpliceIntegrityMetrics};
+use crate::model::splicing_instability::SplicingInstabilityMetrics;
 
-const HEADER: &str = "cell_id\tcell_name\tsis\tclass\tp_missplicing\tp_imbalance\tp_entropy_z\tp_entropy_abs\tiso_entropy\tiso_dispersion\tmissplicing_burden\timbalance\tcoupling_stress\texon_definition_bias\tea_imbalance\tb_imbalance\tcat_imbalance";
+const HEADER: &str = "cell_id\tcell_name\tsis\tclass\tp_missplicing\tp_imbalance\tp_entropy_z\tp_entropy_abs\tiso_entropy\tiso_dispersion\tmissplicing_burden\timbalance\tcoupling_stress\texon_definition_bias\tea_imbalance\tb_imbalance\tcat_imbalance\tsplice_core\trbp_core\trloop_resolve_core\tconflict_risk_core\tnmd_core\tSOS\tRLR\tSII\tsplice_overload_high\trloop_risk_high\tsplicing_instability_high\tgenome_instability_splicing_flag";
 
 pub fn write_tsv(
     path: &Path,
@@ -18,6 +19,7 @@ pub fn write_tsv(
     missplicing: &MissplicingMetrics,
     imbalance: &SpliceosomeImbalanceMetrics,
     sis: &SpliceIntegrityMetrics,
+    splicing_instability: &SplicingInstabilityMetrics,
     coupling: &CouplingStressMetrics,
     exon_intron: &ExonIntronDefinitionMetrics,
     assembly: &AssemblyPhaseImbalanceMetrics,
@@ -29,7 +31,7 @@ pub fn write_tsv(
 
     for cell_id in 0..n_cells {
         let row = format!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
             cell_id,
             cell_names[cell_id],
             fmt_f32(sis.sis[cell_id]),
@@ -46,7 +48,19 @@ pub fn write_tsv(
             fmt_f32(exon_intron.exon_definition_bias[cell_id]),
             fmt_f32(assembly.ea_imbalance[cell_id]),
             fmt_f32(assembly.b_imbalance[cell_id]),
-            fmt_f32(assembly.cat_imbalance[cell_id])
+            fmt_f32(assembly.cat_imbalance[cell_id]),
+            fmt_f32(splicing_instability.splice_core[cell_id]),
+            fmt_f32(splicing_instability.rbp_core[cell_id]),
+            fmt_f32(splicing_instability.rloop_resolve_core[cell_id]),
+            fmt_f32(splicing_instability.conflict_risk_core[cell_id]),
+            fmt_f32(splicing_instability.nmd_core[cell_id]),
+            fmt_f32(splicing_instability.sos[cell_id]),
+            fmt_f32(splicing_instability.rlr[cell_id]),
+            fmt_f32(splicing_instability.sii[cell_id]),
+            fmt_bool(splicing_instability.splice_overload_high[cell_id]),
+            fmt_bool(splicing_instability.rloop_risk_high[cell_id]),
+            fmt_bool(splicing_instability.splicing_instability_high[cell_id]),
+            fmt_bool(splicing_instability.genome_instability_splicing_flag[cell_id]),
         );
         out.push_str(&row);
     }
@@ -74,4 +88,8 @@ fn class_str(class: SpliceIntegrityClass) -> &'static str {
         SpliceIntegrityClass::Impaired => "Impaired",
         SpliceIntegrityClass::Broken => "Broken",
     }
+}
+
+fn fmt_bool(value: bool) -> &'static str {
+    if value { "true" } else { "false" }
 }

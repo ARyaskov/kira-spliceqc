@@ -13,6 +13,10 @@ use crate::model::coupling::CouplingStressMetrics;
 use crate::model::imbalance::SpliceosomeImbalanceMetrics;
 use crate::model::missplicing::MissplicingMetrics;
 use crate::model::sis::SpliceIntegrityMetrics;
+use crate::model::splicing_instability::{
+    RLOOP_RISK_HIGH_THRESHOLD, SPLICE_OVERLOAD_HIGH_THRESHOLD, SPLICING_INSTABILITY_HIGH_THRESHOLD,
+    SplicingInstabilityMetrics,
+};
 
 const PIPELINE_DIR: &str = "kira-spliceqc";
 
@@ -54,6 +58,7 @@ struct SummaryJson {
     distributions: DistributionsJson,
     regimes: RegimesJson,
     qc: QcJson,
+    splicing_instability: SplicingInstabilitySummaryJson,
 }
 
 #[derive(Serialize)]
@@ -92,6 +97,97 @@ struct RegimesJson {
 struct QcJson {
     low_confidence_fraction: f64,
     high_splice_noise_fraction: f64,
+}
+
+#[derive(Serialize)]
+struct SplicingInstabilityThresholdsJson {
+    splice_overload_high: f32,
+    rloop_risk_high: f32,
+    splicing_instability_high: f32,
+}
+
+#[derive(Serialize)]
+struct SplicingInstabilityRobustRefJson {
+    median: Option<f32>,
+    mad: Option<f32>,
+}
+
+#[derive(Serialize)]
+struct SplicingInstabilityZRefJson {
+    splice_core: SplicingInstabilityRobustRefJson,
+    rbp_core: SplicingInstabilityRobustRefJson,
+    rloop_resolve_core: SplicingInstabilityRobustRefJson,
+    conflict_risk_core: Option<SplicingInstabilityRobustRefJson>,
+    nmd_core: Option<SplicingInstabilityRobustRefJson>,
+}
+
+#[derive(Serialize)]
+struct SplicingInstabilityGlobalStatsJson {
+    sos_p50: Option<f32>,
+    sos_p90: Option<f32>,
+    rlr_p50: Option<f32>,
+    rlr_p90: Option<f32>,
+    sii_p50: Option<f32>,
+    sii_p90: Option<f32>,
+}
+
+#[derive(Serialize)]
+struct SplicingInstabilityClusterStatsJson {
+    cluster_id: String,
+    n_cells: usize,
+    sos_median: Option<f32>,
+    sos_p10: Option<f32>,
+    sos_p90: Option<f32>,
+    rlr_median: Option<f32>,
+    rlr_p10: Option<f32>,
+    rlr_p90: Option<f32>,
+    sii_median: Option<f32>,
+    sii_p10: Option<f32>,
+    sii_p90: Option<f32>,
+    splice_overload_high_fraction: f32,
+    rloop_risk_high_fraction: f32,
+    splicing_instability_high_fraction: f32,
+    genome_instability_splicing_flag_fraction: f32,
+}
+
+#[derive(Serialize)]
+struct SplicingInstabilityTopClusterJson {
+    by_sii_median: Vec<String>,
+    by_genome_instability_splicing_flag_fraction: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct SplicingInstabilityPanelCoverageJson {
+    panel_name: &'static str,
+    genes_defined: usize,
+    genes_mapped: usize,
+}
+
+#[derive(Serialize)]
+struct SplicingInstabilityMissingnessJson {
+    splice_core_nan_cells: usize,
+    rbp_core_nan_cells: usize,
+    rloop_resolve_core_nan_cells: usize,
+    conflict_risk_core_nan_cells: usize,
+    nmd_core_nan_cells: usize,
+    sos_nan_cells: usize,
+    rlr_nan_cells: usize,
+    sii_nan_cells: usize,
+    panel_coverage: Vec<SplicingInstabilityPanelCoverageJson>,
+}
+
+#[derive(Serialize)]
+struct SplicingInstabilitySummaryJson {
+    panel_version: &'static str,
+    min_genes_per_panel_cell: usize,
+    conflict_panel_enabled: bool,
+    nmd_panel_enabled: bool,
+    thresholds: SplicingInstabilityThresholdsJson,
+    global_stats: SplicingInstabilityGlobalStatsJson,
+    z_reference: SplicingInstabilityZRefJson,
+    cluster_stats: Vec<SplicingInstabilityClusterStatsJson>,
+    top_clusters: SplicingInstabilityTopClusterJson,
+    missingness: SplicingInstabilityMissingnessJson,
 }
 
 #[derive(Serialize)]
@@ -137,6 +233,7 @@ pub fn write_pipeline_contract(
     imbalance: &SpliceosomeImbalanceMetrics,
     sis: &SpliceIntegrityMetrics,
     coupling: Option<&CouplingStressMetrics>,
+    splicing_instability: &SplicingInstabilityMetrics,
     catalog: &GenesetCatalog,
 ) -> Result<(), InputError> {
     info!("pipeline contract: building rows");
@@ -146,7 +243,12 @@ pub fn write_pipeline_contract(
     info!("pipeline contract: writing panels_report.tsv");
     write_panels_report_tsv(&out_dir.join("panels_report.tsv"), matrix, catalog)?;
     info!("pipeline contract: writing summary.json");
-    write_summary_json(&out_dir.join("summary.json"), input, &rows)?;
+    write_summary_json(
+        &out_dir.join("summary.json"),
+        input,
+        &rows,
+        splicing_instability,
+    )?;
     info!("pipeline contract: writing pipeline_step.json");
     write_pipeline_step_json(&out_dir.join("pipeline_step.json"))?;
     Ok(())
@@ -347,6 +449,7 @@ fn write_summary_json(
     path: &Path,
     input: &InputDescriptor,
     rows: &[PipelineCellRow],
+    splicing_instability: &SplicingInstabilityMetrics,
 ) -> Result<(), InputError> {
     let mut fidelity = rows
         .iter()
@@ -412,11 +515,136 @@ fn write_summary_json(
             low_confidence_fraction: low_conf,
             high_splice_noise_fraction: high_noise,
         },
+        splicing_instability: build_splicing_instability_summary(splicing_instability),
     };
 
     let data =
         serde_json::to_vec(&summary).map_err(|e| InputError::OutputSerialization(e.to_string()))?;
     std::fs::write(path, data).map_err(|e| InputError::io(path, e))
+}
+
+fn build_splicing_instability_summary(
+    metrics: &SplicingInstabilityMetrics,
+) -> SplicingInstabilitySummaryJson {
+    let mut by_sii = metrics
+        .cluster_stats
+        .iter()
+        .filter(|c| c.sii_median.is_finite())
+        .collect::<Vec<_>>();
+    by_sii.sort_by(|a, b| {
+        b.sii_median
+            .partial_cmp(&a.sii_median)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.cluster_id.cmp(&b.cluster_id))
+    });
+
+    let mut by_flag = metrics.cluster_stats.iter().collect::<Vec<_>>();
+    by_flag.sort_by(|a, b| {
+        b.genome_instability_splicing_flag_fraction
+            .partial_cmp(&a.genome_instability_splicing_flag_fraction)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.cluster_id.cmp(&b.cluster_id))
+    });
+
+    SplicingInstabilitySummaryJson {
+        panel_version: metrics.panel_version,
+        min_genes_per_panel_cell: metrics.min_genes,
+        conflict_panel_enabled: metrics.conflict_panel_enabled,
+        nmd_panel_enabled: metrics.nmd_panel_enabled,
+        thresholds: SplicingInstabilityThresholdsJson {
+            splice_overload_high: SPLICE_OVERLOAD_HIGH_THRESHOLD,
+            rloop_risk_high: RLOOP_RISK_HIGH_THRESHOLD,
+            splicing_instability_high: SPLICING_INSTABILITY_HIGH_THRESHOLD,
+        },
+        global_stats: SplicingInstabilityGlobalStatsJson {
+            sos_p50: opt_f32(metrics.global_stats.sos_p50),
+            sos_p90: opt_f32(metrics.global_stats.sos_p90),
+            rlr_p50: opt_f32(metrics.global_stats.rlr_p50),
+            rlr_p90: opt_f32(metrics.global_stats.rlr_p90),
+            sii_p50: opt_f32(metrics.global_stats.sii_p50),
+            sii_p90: opt_f32(metrics.global_stats.sii_p90),
+        },
+        z_reference: SplicingInstabilityZRefJson {
+            splice_core: SplicingInstabilityRobustRefJson {
+                median: opt_f32(metrics.z_reference.splice_core.median),
+                mad: opt_f32(metrics.z_reference.splice_core.mad),
+            },
+            rbp_core: SplicingInstabilityRobustRefJson {
+                median: opt_f32(metrics.z_reference.rbp_core.median),
+                mad: opt_f32(metrics.z_reference.rbp_core.mad),
+            },
+            rloop_resolve_core: SplicingInstabilityRobustRefJson {
+                median: opt_f32(metrics.z_reference.rloop_resolve_core.median),
+                mad: opt_f32(metrics.z_reference.rloop_resolve_core.mad),
+            },
+            conflict_risk_core: metrics.z_reference.conflict_risk_core.as_ref().map(|r| {
+                SplicingInstabilityRobustRefJson {
+                    median: opt_f32(r.median),
+                    mad: opt_f32(r.mad),
+                }
+            }),
+            nmd_core: metrics.z_reference.nmd_core.as_ref().map(|r| {
+                SplicingInstabilityRobustRefJson {
+                    median: opt_f32(r.median),
+                    mad: opt_f32(r.mad),
+                }
+            }),
+        },
+        cluster_stats: metrics
+            .cluster_stats
+            .iter()
+            .map(|cluster| SplicingInstabilityClusterStatsJson {
+                cluster_id: cluster.cluster_id.clone(),
+                n_cells: cluster.n_cells,
+                sos_median: opt_f32(cluster.sos_median),
+                sos_p10: opt_f32(cluster.sos_p10),
+                sos_p90: opt_f32(cluster.sos_p90),
+                rlr_median: opt_f32(cluster.rlr_median),
+                rlr_p10: opt_f32(cluster.rlr_p10),
+                rlr_p90: opt_f32(cluster.rlr_p90),
+                sii_median: opt_f32(cluster.sii_median),
+                sii_p10: opt_f32(cluster.sii_p10),
+                sii_p90: opt_f32(cluster.sii_p90),
+                splice_overload_high_fraction: cluster.splice_overload_high_fraction,
+                rloop_risk_high_fraction: cluster.rloop_risk_high_fraction,
+                splicing_instability_high_fraction: cluster.splicing_instability_high_fraction,
+                genome_instability_splicing_flag_fraction: cluster
+                    .genome_instability_splicing_flag_fraction,
+            })
+            .collect(),
+        top_clusters: SplicingInstabilityTopClusterJson {
+            by_sii_median: by_sii
+                .into_iter()
+                .take(5)
+                .map(|cluster| cluster.cluster_id.clone())
+                .collect(),
+            by_genome_instability_splicing_flag_fraction: by_flag
+                .into_iter()
+                .take(5)
+                .map(|cluster| cluster.cluster_id.clone())
+                .collect(),
+        },
+        missingness: SplicingInstabilityMissingnessJson {
+            splice_core_nan_cells: metrics.missingness.splice_core_nan_cells,
+            rbp_core_nan_cells: metrics.missingness.rbp_core_nan_cells,
+            rloop_resolve_core_nan_cells: metrics.missingness.rloop_resolve_core_nan_cells,
+            conflict_risk_core_nan_cells: metrics.missingness.conflict_risk_core_nan_cells,
+            nmd_core_nan_cells: metrics.missingness.nmd_core_nan_cells,
+            sos_nan_cells: metrics.missingness.sos_nan_cells,
+            rlr_nan_cells: metrics.missingness.rlr_nan_cells,
+            sii_nan_cells: metrics.missingness.sii_nan_cells,
+            panel_coverage: metrics
+                .missingness
+                .panel_coverage
+                .iter()
+                .map(|panel| SplicingInstabilityPanelCoverageJson {
+                    panel_name: panel.panel_name,
+                    genes_defined: panel.genes_defined,
+                    genes_mapped: panel.genes_mapped,
+                })
+                .collect(),
+        },
+    }
 }
 
 fn write_pipeline_step_json(path: &Path) -> Result<(), InputError> {
@@ -512,4 +740,8 @@ fn quantile_sorted(sorted: &[f64], q: f64) -> f64 {
     let max_idx = sorted.len() - 1;
     let pos = ((max_idx as f64) * q).round() as usize;
     sorted[pos.min(max_idx)]
+}
+
+fn opt_f32(value: f32) -> Option<f32> {
+    if value.is_finite() { Some(value) } else { None }
 }
