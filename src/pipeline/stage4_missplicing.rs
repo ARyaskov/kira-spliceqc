@@ -1,14 +1,13 @@
-use std::collections::HashMap;
 use std::time::Instant;
 
+use ahash::AHashMap;
+use rayon::prelude::*;
 use tracing::{debug, info, warn};
 
 use crate::input::error::InputError;
 use crate::model::geneset_activity::GenesetActivityMatrix;
 use crate::model::missplicing::MissplicingMetrics;
-use crate::stats::robust::{mad, median};
-
-const EPS: f32 = 1e-6;
+use crate::stats::robust::{extract_geneset_slice, robust_z};
 
 const REQUIRED_GENESETS: &[&str] = &[
     "U1_CORE",
@@ -25,34 +24,28 @@ pub fn run_stage4(activity: &GenesetActivityMatrix) -> Result<MissplicingMetrics
 }
 
 pub fn compute(activity: &GenesetActivityMatrix) -> Result<MissplicingMetrics, InputError> {
-    info!(genesets = ?activity.genesets, "geneset ids detected");
+    debug!(genesets = ?activity.genesets, "geneset ids detected");
 
     let n_cells = activity.n_cells;
-    let mut id_to_idx = HashMap::new();
-    for (idx, id) in activity.genesets.iter().enumerate() {
-        id_to_idx.insert(id.as_str(), idx);
-    }
+    let id_to_idx = build_id_index(activity);
 
-    let mut z_scores: HashMap<&'static str, Vec<f32>> = HashMap::new();
+    let mut z_scores: AHashMap<&'static str, Vec<f32>> = AHashMap::with_capacity(REQUIRED_GENESETS.len());
     let mut present_core = 0usize;
 
     for &id in REQUIRED_GENESETS {
         if let Some(&idx) = id_to_idx.get(id) {
-            let values = extract_geneset(activity, idx);
-            let z = robust_z(&values);
+            let slice = extract_geneset_slice(&activity.values, idx, n_cells);
+            let (z, _) = robust_z(slice);
             let has_finite = z.iter().any(|v| v.is_finite());
             if !has_finite {
                 warn!(geneset_id = id, "geneset has no resolved genes (all NaN)");
             }
-            if matches!(id, "U1_CORE" | "U2_CORE" | "SF3B_AXIS") && has_finite {
+            if has_finite && matches!(id, "U1_CORE" | "U2_CORE" | "SF3B_AXIS") {
                 present_core += 1;
             }
             z_scores.insert(id, z);
         } else {
             warn!(geneset_id = id, "missing geneset");
-            if matches!(id, "U1_CORE" | "U2_CORE" | "SF3B_AXIS") {
-                // no increment
-            }
         }
     }
 
@@ -62,13 +55,6 @@ pub fn compute(activity: &GenesetActivityMatrix) -> Result<MissplicingMetrics, I
 
     let start = Instant::now();
 
-    let mut b_core = vec![f32::NAN; n_cells];
-    let mut b_u12 = vec![f32::NAN; n_cells];
-    let mut b_nmd = vec![f32::NAN; n_cells];
-    let mut b_srhn = vec![f32::NAN; n_cells];
-    let mut burden = vec![f32::NAN; n_cells];
-    let mut burden_star = vec![f32::NAN; n_cells];
-
     let z_u1 = z_scores.get("U1_CORE");
     let z_u2 = z_scores.get("U2_CORE");
     let z_sf3b = z_scores.get("SF3B_AXIS");
@@ -77,39 +63,58 @@ pub fn compute(activity: &GenesetActivityMatrix) -> Result<MissplicingMetrics, I
     let z_u12 = z_scores.get("MINOR_U12");
     let z_nmd = z_scores.get("NMD_SURVEILLANCE");
 
-    for cell in 0..n_cells {
-        let core_mean = mean3(z_u1, z_u2, z_sf3b, cell);
-        b_core[cell] = relu(-core_mean);
+    // Per-cell computations are independent; parallel map preserves order.
+    let combined: Vec<(f32, f32, f32, f32, f32, f32)> = (0..n_cells)
+        .into_par_iter()
+        .map(|cell| {
+            let core_mean = mean3_opt(z_u1, z_u2, z_sf3b, cell);
+            let b_core = relu(-core_mean);
 
-        let u12_val = value_at(z_u12, cell);
-        let major_mean = mean2(z_u1, z_u2, cell);
-        b_u12[cell] = relu(u12_val - major_mean);
+            let u12_val = value_at_opt(z_u12, cell);
+            let major_mean = mean2_opt(z_u1, z_u2, cell);
+            let b_u12 = relu(u12_val - major_mean);
 
-        b_nmd[cell] = relu(value_at(z_nmd, cell));
+            let b_nmd = relu(value_at_opt(z_nmd, cell));
 
-        let srsf_val = value_at(z_srsf, cell);
-        let hnrnp_val = value_at(z_hnrnp, cell);
-        b_srhn[cell] = if srsf_val.is_finite() && hnrnp_val.is_finite() {
-            (srsf_val - hnrnp_val).abs()
-        } else {
-            f32::NAN
-        };
+            let srsf_val = value_at_opt(z_srsf, cell);
+            let hnrnp_val = value_at_opt(z_hnrnp, cell);
+            let b_srhn = if srsf_val.is_finite() && hnrnp_val.is_finite() {
+                (srsf_val - hnrnp_val).abs()
+            } else {
+                f32::NAN
+            };
 
-        let components = [b_core[cell], b_u12[cell], b_nmd[cell], b_srhn[cell]];
-        if components.iter().all(|v| v.is_finite()) {
-            let mb = 0.35 * components[0]
-                + 0.25 * components[1]
-                + 0.25 * components[2]
-                + 0.15 * components[3];
-            burden[cell] = mb;
-            burden_star[cell] = 1.0 - (-mb).exp();
-        } else {
-            burden[cell] = f32::NAN;
-            burden_star[cell] = f32::NAN;
-        }
+            let components = [b_core, b_u12, b_nmd, b_srhn];
+            let (burden, burden_star) = if components.iter().all(|v| v.is_finite()) {
+                let mb = 0.35 * components[0]
+                    + 0.25 * components[1]
+                    + 0.25 * components[2]
+                    + 0.15 * components[3];
+                (mb, 1.0 - (-mb).exp())
+            } else {
+                (f32::NAN, f32::NAN)
+            };
+
+            (b_core, b_u12, b_nmd, b_srhn, burden, burden_star)
+        })
+        .collect();
+
+    let mut b_core = Vec::with_capacity(n_cells);
+    let mut b_u12 = Vec::with_capacity(n_cells);
+    let mut b_nmd = Vec::with_capacity(n_cells);
+    let mut b_srhn = Vec::with_capacity(n_cells);
+    let mut burden = Vec::with_capacity(n_cells);
+    let mut burden_star = Vec::with_capacity(n_cells);
+    for (c, u, n, s, b, bs) in combined {
+        b_core.push(c);
+        b_u12.push(u);
+        b_nmd.push(n);
+        b_srhn.push(s);
+        burden.push(b);
+        burden_star.push(bs);
     }
 
-    debug!(
+    info!(
         elapsed_ms = start.elapsed().as_millis(),
         "missplicing metrics computed"
     );
@@ -124,40 +129,26 @@ pub fn compute(activity: &GenesetActivityMatrix) -> Result<MissplicingMetrics, I
     })
 }
 
-fn extract_geneset(activity: &GenesetActivityMatrix, idx: usize) -> Vec<f32> {
-    let n_cells = activity.n_cells;
-    let mut values = Vec::with_capacity(n_cells);
-    let start = idx * n_cells;
-    let end = start + n_cells;
-    values.extend_from_slice(&activity.values[start..end]);
-    values
+pub(crate) fn build_id_index(activity: &GenesetActivityMatrix) -> AHashMap<&str, usize> {
+    let mut map = AHashMap::with_capacity(activity.genesets.len());
+    for (idx, id) in activity.genesets.iter().enumerate() {
+        map.insert(id.as_str(), idx);
+    }
+    map
 }
 
-fn robust_z(values: &[f32]) -> Vec<f32> {
-    let med = median(values);
-    let mad_val = mad(values, med) * 1.4826 + EPS;
-    values
-        .iter()
-        .map(|&v| {
-            if v.is_finite() && med.is_finite() && mad_val.is_finite() {
-                (v - med) / mad_val
-            } else {
-                f32::NAN
-            }
-        })
-        .collect()
-}
-
-fn value_at(values: Option<&Vec<f32>>, cell: usize) -> f32 {
+#[inline]
+fn value_at_opt(values: Option<&Vec<f32>>, cell: usize) -> f32 {
     match values {
         Some(v) => v[cell],
         None => f32::NAN,
     }
 }
 
-fn mean2(a: Option<&Vec<f32>>, b: Option<&Vec<f32>>, cell: usize) -> f32 {
-    let va = value_at(a, cell);
-    let vb = value_at(b, cell);
+#[inline]
+fn mean2_opt(a: Option<&Vec<f32>>, b: Option<&Vec<f32>>, cell: usize) -> f32 {
+    let va = value_at_opt(a, cell);
+    let vb = value_at_opt(b, cell);
     if va.is_finite() && vb.is_finite() {
         (va + vb) * 0.5
     } else {
@@ -165,10 +156,11 @@ fn mean2(a: Option<&Vec<f32>>, b: Option<&Vec<f32>>, cell: usize) -> f32 {
     }
 }
 
-fn mean3(a: Option<&Vec<f32>>, b: Option<&Vec<f32>>, c: Option<&Vec<f32>>, cell: usize) -> f32 {
-    let va = value_at(a, cell);
-    let vb = value_at(b, cell);
-    let vc = value_at(c, cell);
+#[inline]
+fn mean3_opt(a: Option<&Vec<f32>>, b: Option<&Vec<f32>>, c: Option<&Vec<f32>>, cell: usize) -> f32 {
+    let va = value_at_opt(a, cell);
+    let vb = value_at_opt(b, cell);
+    let vc = value_at_opt(c, cell);
     if va.is_finite() && vb.is_finite() && vc.is_finite() {
         (va + vb + vc) / 3.0
     } else {
@@ -176,6 +168,7 @@ fn mean3(a: Option<&Vec<f32>>, b: Option<&Vec<f32>>, c: Option<&Vec<f32>>, cell:
     }
 }
 
+#[inline]
 fn relu(value: f32) -> f32 {
     if !value.is_finite() {
         f32::NAN

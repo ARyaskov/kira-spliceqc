@@ -1,4 +1,5 @@
-use std::collections::HashMap;
+use ahash::AHashMap;
+use rayon::prelude::*;
 
 use crate::expression::ExpressionMatrix;
 use crate::model::splicing_instability::{
@@ -24,12 +25,15 @@ pub mod scores;
 struct ResolvedPanel {
     name: &'static str,
     genes_defined: usize,
+    /// Sorted ascending — required for sparse-merge gather.
     gene_indices: Vec<u32>,
 }
 
 pub fn compute(matrix: &dyn ExpressionMatrix) -> SplicingInstabilityMetrics {
     let n_cells = matrix.n_cells();
-    let mut symbol_to_idx: HashMap<String, u32> = HashMap::with_capacity(matrix.n_genes());
+
+    // Case-insensitive index, first occurrence wins. Matches loader behavior.
+    let mut symbol_to_idx: AHashMap<String, u32> = AHashMap::with_capacity(matrix.n_genes());
     for gene_idx in 0..matrix.n_genes() {
         let symbol = matrix.gene_symbol(gene_idx).to_ascii_uppercase();
         symbol_to_idx.entry(symbol).or_insert(gene_idx as u32);
@@ -48,56 +52,71 @@ pub fn compute(matrix: &dyn ExpressionMatrix) -> SplicingInstabilityMetrics {
     let conflict_panel_enabled = conflict_panel.gene_indices.len() >= MIN_GENES_PER_PANEL_CELL;
     let nmd_panel_enabled = nmd_panel.gene_indices.len() >= MIN_GENES_PER_PANEL_CELL;
 
-    let mut splice_core = vec![f32::NAN; n_cells];
-    let mut rbp_core = vec![f32::NAN; n_cells];
-    let mut rloop_resolve_core = vec![f32::NAN; n_cells];
-    let mut conflict_risk_core = vec![f32::NAN; n_cells];
-    let mut nmd_core = vec![f32::NAN; n_cells];
+    // One parallel per-cell pass over all enabled panels (each gets its own scratch buf).
+    let panel_rows: Vec<[f32; 5]> = (0..n_cells)
+        .into_par_iter()
+        .map_init(
+            || Vec::<f32>::with_capacity(64),
+            |scratch, cell| {
+                let splice = panel_trimmed_mean(
+                    matrix,
+                    &splice_panel.gene_indices,
+                    cell,
+                    MIN_GENES_PER_PANEL_CELL,
+                    scratch,
+                );
+                let rbp = panel_trimmed_mean(
+                    matrix,
+                    &rbp_panel.gene_indices,
+                    cell,
+                    MIN_GENES_PER_PANEL_CELL,
+                    scratch,
+                );
+                let rloop = panel_trimmed_mean(
+                    matrix,
+                    &rloop_panel.gene_indices,
+                    cell,
+                    MIN_GENES_PER_PANEL_CELL,
+                    scratch,
+                );
+                let conflict = if conflict_panel_enabled {
+                    panel_trimmed_mean(
+                        matrix,
+                        &conflict_panel.gene_indices,
+                        cell,
+                        MIN_GENES_PER_PANEL_CELL,
+                        scratch,
+                    )
+                } else {
+                    f32::NAN
+                };
+                let nmd = if nmd_panel_enabled {
+                    panel_trimmed_mean(
+                        matrix,
+                        &nmd_panel.gene_indices,
+                        cell,
+                        MIN_GENES_PER_PANEL_CELL,
+                        scratch,
+                    )
+                } else {
+                    f32::NAN
+                };
+                [splice, rbp, rloop, conflict, nmd]
+            },
+        )
+        .collect();
 
-    let mut scratch = Vec::with_capacity(64);
-
-    for cell in 0..n_cells {
-        splice_core[cell] = panel_trimmed_mean(
-            matrix,
-            &splice_panel.gene_indices,
-            cell,
-            MIN_GENES_PER_PANEL_CELL,
-            &mut scratch,
-        );
-        rbp_core[cell] = panel_trimmed_mean(
-            matrix,
-            &rbp_panel.gene_indices,
-            cell,
-            MIN_GENES_PER_PANEL_CELL,
-            &mut scratch,
-        );
-        rloop_resolve_core[cell] = panel_trimmed_mean(
-            matrix,
-            &rloop_panel.gene_indices,
-            cell,
-            MIN_GENES_PER_PANEL_CELL,
-            &mut scratch,
-        );
-
-        if conflict_panel_enabled {
-            conflict_risk_core[cell] = panel_trimmed_mean(
-                matrix,
-                &conflict_panel.gene_indices,
-                cell,
-                MIN_GENES_PER_PANEL_CELL,
-                &mut scratch,
-            );
-        }
-
-        if nmd_panel_enabled {
-            nmd_core[cell] = panel_trimmed_mean(
-                matrix,
-                &nmd_panel.gene_indices,
-                cell,
-                MIN_GENES_PER_PANEL_CELL,
-                &mut scratch,
-            );
-        }
+    let mut splice_core = Vec::with_capacity(n_cells);
+    let mut rbp_core = Vec::with_capacity(n_cells);
+    let mut rloop_resolve_core = Vec::with_capacity(n_cells);
+    let mut conflict_risk_core = Vec::with_capacity(n_cells);
+    let mut nmd_core = Vec::with_capacity(n_cells);
+    for row in panel_rows {
+        splice_core.push(row[0]);
+        rbp_core.push(row[1]);
+        rloop_resolve_core.push(row[2]);
+        conflict_risk_core.push(row[3]);
+        nmd_core.push(row[4]);
     }
 
     let (z_splice, ref_splice) = robust_z(&splice_core);
@@ -116,56 +135,69 @@ pub fn compute(matrix: &dyn ExpressionMatrix) -> SplicingInstabilityMetrics {
         (vec![0.0; n_cells], None)
     };
 
-    let mut sos = vec![f32::NAN; n_cells];
-    let mut rlr = vec![f32::NAN; n_cells];
-    let mut sii = vec![f32::NAN; n_cells];
-
-    let mut splice_overload_high = vec![false; n_cells];
-    let mut rloop_risk_high = vec![false; n_cells];
-    let mut splicing_instability_high = vec![false; n_cells];
-    let mut genome_instability_splicing_flag = vec![false; n_cells];
-
-    for cell in 0..n_cells {
-        let zs = z_splice[cell];
-        let zr = z_rbp[cell];
-        if zs.is_finite() && zr.is_finite() {
-            sos[cell] = 0.65 * zs + 0.35 * zr;
-        }
-
-        let zres = z_rloop[cell];
-        rlr[cell] = if !zres.is_finite() {
-            f32::NAN
-        } else if conflict_panel_enabled {
-            let zrisk = z_conflict[cell];
-            if zrisk.is_finite() {
-                0.7 * relu(-zres) + 0.3 * relu(zrisk)
+    // Composite scores — independent per cell.
+    let composite: Vec<(f32, f32, f32, bool, bool, bool, bool)> = (0..n_cells)
+        .into_par_iter()
+        .map(|cell| {
+            let zs = z_splice[cell];
+            let zr = z_rbp[cell];
+            let sos = if zs.is_finite() && zr.is_finite() {
+                0.65 * zs + 0.35 * zr
             } else {
                 f32::NAN
-            }
-        } else {
-            relu(-zres)
-        };
+            };
 
-        sii[cell] = if !sos[cell].is_finite() {
-            f32::NAN
-        } else if nmd_panel_enabled {
-            let znmd = z_nmd[cell];
-            if znmd.is_finite() {
-                0.6 * relu(sos[cell]) + 0.4 * relu(-znmd)
-            } else {
+            let zres = z_rloop[cell];
+            let rlr = if !zres.is_finite() {
                 f32::NAN
-            }
-        } else {
-            relu(sos[cell])
-        };
+            } else if conflict_panel_enabled {
+                let zrisk = z_conflict[cell];
+                if zrisk.is_finite() {
+                    0.7 * relu(-zres) + 0.3 * relu(zrisk)
+                } else {
+                    f32::NAN
+                }
+            } else {
+                relu(-zres)
+            };
 
-        splice_overload_high[cell] =
-            sos[cell].is_finite() && sos[cell] >= SPLICE_OVERLOAD_HIGH_THRESHOLD;
-        rloop_risk_high[cell] = rlr[cell].is_finite() && rlr[cell] >= RLOOP_RISK_HIGH_THRESHOLD;
-        splicing_instability_high[cell] =
-            sii[cell].is_finite() && sii[cell] >= SPLICING_INSTABILITY_HIGH_THRESHOLD;
-        genome_instability_splicing_flag[cell] =
-            splice_overload_high[cell] && rloop_risk_high[cell];
+            let sii = if !sos.is_finite() {
+                f32::NAN
+            } else if nmd_panel_enabled {
+                let znmd = z_nmd[cell];
+                if znmd.is_finite() {
+                    0.6 * relu(sos) + 0.4 * relu(-znmd)
+                } else {
+                    f32::NAN
+                }
+            } else {
+                relu(sos)
+            };
+
+            let so_high = sos.is_finite() && sos >= SPLICE_OVERLOAD_HIGH_THRESHOLD;
+            let rl_high = rlr.is_finite() && rlr >= RLOOP_RISK_HIGH_THRESHOLD;
+            let si_high = sii.is_finite() && sii >= SPLICING_INSTABILITY_HIGH_THRESHOLD;
+            let gi_flag = so_high && rl_high;
+
+            (sos, rlr, sii, so_high, rl_high, si_high, gi_flag)
+        })
+        .collect();
+
+    let mut sos = Vec::with_capacity(n_cells);
+    let mut rlr = Vec::with_capacity(n_cells);
+    let mut sii = Vec::with_capacity(n_cells);
+    let mut splice_overload_high = Vec::with_capacity(n_cells);
+    let mut rloop_risk_high = Vec::with_capacity(n_cells);
+    let mut splicing_instability_high = Vec::with_capacity(n_cells);
+    let mut genome_instability_splicing_flag = Vec::with_capacity(n_cells);
+    for (s, r, i, so_h, rl_h, si_h, gi) in composite {
+        sos.push(s);
+        rlr.push(r);
+        sii.push(i);
+        splice_overload_high.push(so_h);
+        rloop_risk_high.push(rl_h);
+        splicing_instability_high.push(si_h);
+        genome_instability_splicing_flag.push(gi);
     }
 
     let global_stats = SplicingInstabilityGlobalStats {
@@ -276,7 +308,7 @@ pub fn compute(matrix: &dyn ExpressionMatrix) -> SplicingInstabilityMetrics {
 fn resolve_panel(
     name: &'static str,
     genes: &[&str],
-    symbol_to_idx: &HashMap<String, u32>,
+    symbol_to_idx: &AHashMap<String, u32>,
 ) -> ResolvedPanel {
     let mut gene_indices = Vec::with_capacity(genes.len());
     for symbol in genes {
@@ -284,6 +316,9 @@ fn resolve_panel(
             gene_indices.push(*gene_idx);
         }
     }
+    // Sort for sparse-merge gather. Dedup defensive (panel literals shouldn't repeat).
+    gene_indices.sort_unstable();
+    gene_indices.dedup();
     ResolvedPanel {
         name,
         genes_defined: genes.len(),
@@ -291,6 +326,7 @@ fn resolve_panel(
     }
 }
 
+#[inline]
 fn relu(value: f32) -> f32 {
     if value > 0.0 { value } else { 0.0 }
 }

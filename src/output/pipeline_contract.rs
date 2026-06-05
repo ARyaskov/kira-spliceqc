@@ -1,4 +1,6 @@
 use std::collections::BTreeMap;
+use std::fs::File;
+use std::io::{BufWriter, Write};
 use std::path::Path;
 
 use rayon::prelude::*;
@@ -17,6 +19,7 @@ use crate::model::splicing_instability::{
     RLOOP_RISK_HIGH_THRESHOLD, SPLICE_OVERLOAD_HIGH_THRESHOLD, SPLICING_INSTABILITY_HIGH_THRESHOLD,
     SplicingInstabilityMetrics,
 };
+use crate::stats::robust::quantile_f64;
 
 const PIPELINE_DIR: &str = "kira-spliceqc";
 
@@ -339,15 +342,19 @@ fn build_rows(
 }
 
 fn write_spliceqc_tsv(path: &Path, rows: &[PipelineCellRow]) -> Result<(), InputError> {
-    let mut rows = rows.to_vec();
-    rows.sort_by(|a, b| a.barcode.cmp(&b.barcode));
+    // Sort indices instead of cloning the whole row vec (was n_cells × PipelineCellRow copy).
+    let mut order: Vec<usize> = (0..rows.len()).collect();
+    order.sort_by(|&a, &b| rows[a].barcode.cmp(&rows[b].barcode));
 
-    let mut out = String::new();
-    out.push_str(SPLICEQC_HEADER);
-    out.push('\n');
-    for row in &rows {
-        out.push_str(&format!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+    let file = File::create(path).map_err(|e| InputError::io(path, e))?;
+    let mut w = BufWriter::with_capacity(1 << 16, file);
+    writeln!(w, "{}", SPLICEQC_HEADER).map_err(|e| InputError::io(path, e))?;
+
+    for &i in &order {
+        let row = &rows[i];
+        writeln!(
+            w,
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:.6}\t{:.6}\t{:.6}\t{:.6}\t{:.6}\t{:.6}\t{}\t{}\t{:.6}",
             row.barcode,
             row.sample,
             row.condition,
@@ -355,18 +362,20 @@ fn write_spliceqc_tsv(path: &Path, rows: &[PipelineCellRow]) -> Result<(), Input
             row.libsize,
             row.nnz,
             row.expressed_genes,
-            fmt6(row.splice_fidelity_index),
-            fmt6(row.intron_retention_rate),
-            fmt6(row.exon_skipping_rate),
-            fmt6(row.alt_splice_burden),
-            fmt6(row.splice_junction_noise),
-            fmt6(row.stress_splicing_index),
+            row.splice_fidelity_index,
+            row.intron_retention_rate,
+            row.exon_skipping_rate,
+            row.alt_splice_burden,
+            row.splice_junction_noise,
+            row.stress_splicing_index,
             row.regime,
             row.flags,
-            fmt6(row.confidence)
-        ));
+            row.confidence
+        )
+        .map_err(|e| InputError::io(path, e))?;
     }
-    std::fs::write(path, out).map_err(|e| InputError::io(path, e))
+    w.flush().map_err(|e| InputError::io(path, e))?;
+    Ok(())
 }
 
 fn write_panels_report_tsv(
@@ -388,60 +397,56 @@ fn write_panels_report_tsv(
                 missing.join(",")
             };
             format!(
-                "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+                "{}\t{}\t{}\t{}\t{}\t{}\t{:.6}\t{:.6}\t{:.6}\t{:.6}\t{:.6}\n",
                 geneset.id,
                 geneset.id,
                 geneset.axis,
                 geneset.gene_ids.len() + geneset.missing.len(),
                 geneset.gene_ids.len(),
                 missing,
-                fmt6(coverage_median),
-                fmt6(coverage_p10),
-                fmt6(sum_median),
-                fmt6(sum_p90),
-                fmt6(sum_p99)
+                coverage_median,
+                coverage_p10,
+                sum_median,
+                sum_p90,
+                sum_p99,
             )
         })
         .collect::<Vec<_>>();
 
-    let mut out = String::new();
-    out.push_str("panel_id\tpanel_name\tpanel_group\tpanel_size_defined\tpanel_size_mappable\tmissing_genes\tcoverage_median\tcoverage_p10\tsum_median\tsum_p90\tsum_p99\n");
+    let file = File::create(path).map_err(|e| InputError::io(path, e))?;
+    let mut w = BufWriter::with_capacity(1 << 16, file);
+    w.write_all(b"panel_id\tpanel_name\tpanel_group\tpanel_size_defined\tpanel_size_mappable\tmissing_genes\tcoverage_median\tcoverage_p10\tsum_median\tsum_p90\tsum_p99\n")
+        .map_err(|e| InputError::io(path, e))?;
     for row in rows {
-        out.push_str(&row);
+        w.write_all(row.as_bytes()).map_err(|e| InputError::io(path, e))?;
     }
-    std::fs::write(path, out).map_err(|e| InputError::io(path, e))
+    w.flush().map_err(|e| InputError::io(path, e))?;
+    Ok(())
 }
 
 fn panel_quantiles(matrix: &dyn ExpressionMatrix, geneset: &Geneset) -> (f64, f64, f64, f64, f64) {
-    if geneset.gene_ids.is_empty() {
+    let panel_len = geneset.gene_ids.len();
+    if panel_len == 0 {
         return (0.0, 0.0, 0.0, 0.0, 0.0);
     }
 
-    let mut coverage = Vec::with_capacity(matrix.n_cells());
-    let mut sums = Vec::with_capacity(matrix.n_cells());
-    for cell in 0..matrix.n_cells() {
-        let mut detected = 0usize;
-        let mut sum = 0u64;
-        for &gid in &geneset.gene_ids {
-            let count = matrix.count(gid as usize, cell);
-            if count > 0 {
-                detected += 1;
-            }
-            sum += count as u64;
-        }
-        coverage.push(detected as f64 / geneset.gene_ids.len() as f64);
+    let n_cells = matrix.n_cells();
+    let mut coverage = Vec::with_capacity(n_cells);
+    let mut sums = Vec::with_capacity(n_cells);
+    let panel_len_f = panel_len as f64;
+    for cell in 0..n_cells {
+        // Sparse merge: O(panel + nnz_cell) instead of panel × log(nnz) bin searches.
+        let (sum, detected) = matrix.panel_count_sum_and_detected(&geneset.gene_ids, cell);
+        coverage.push(detected as f64 / panel_len_f);
         sums.push(sum as f64);
     }
 
-    coverage.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    sums.sort_by(|a, b| a.partial_cmp(b).unwrap());
-
     (
-        quantile_sorted(&coverage, 0.5),
-        quantile_sorted(&coverage, 0.1),
-        quantile_sorted(&sums, 0.5),
-        quantile_sorted(&sums, 0.9),
-        quantile_sorted(&sums, 0.99),
+        quantile_f64(&mut coverage, 0.5),
+        quantile_f64(&mut coverage, 0.1),
+        quantile_f64(&mut sums, 0.5),
+        quantile_f64(&mut sums, 0.9),
+        quantile_f64(&mut sums, 0.99),
     )
 }
 
@@ -461,8 +466,6 @@ fn write_summary_json(
         .map(|r| r.stress_splicing_index)
         .filter(|v| v.is_finite())
         .collect::<Vec<_>>();
-    fidelity.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    stress.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
     let mut counts: BTreeMap<&'static str, u64> = BTreeMap::new();
     for regime in REGIMES {
@@ -500,14 +503,14 @@ fn write_summary_json(
         },
         distributions: DistributionsJson {
             splice_fidelity_index: DistributionJson {
-                median: quantile_sorted(&fidelity, 0.5),
-                p90: quantile_sorted(&fidelity, 0.9),
-                p99: quantile_sorted(&fidelity, 0.99),
+                median: quantile_f64(&mut fidelity, 0.5),
+                p90: quantile_f64(&mut fidelity, 0.9),
+                p99: quantile_f64(&mut fidelity, 0.99),
             },
             stress_splicing_index: DistributionJson {
-                median: quantile_sorted(&stress, 0.5),
-                p90: quantile_sorted(&stress, 0.9),
-                p99: quantile_sorted(&stress, 0.99),
+                median: quantile_f64(&mut stress, 0.5),
+                p90: quantile_f64(&mut stress, 0.9),
+                p99: quantile_f64(&mut stress, 0.99),
             },
         },
         regimes: RegimesJson { counts, fractions },
@@ -518,9 +521,12 @@ fn write_summary_json(
         splicing_instability: build_splicing_instability_summary(splicing_instability),
     };
 
-    let data =
-        serde_json::to_vec(&summary).map_err(|e| InputError::OutputSerialization(e.to_string()))?;
-    std::fs::write(path, data).map_err(|e| InputError::io(path, e))
+    let file = File::create(path).map_err(|e| InputError::io(path, e))?;
+    let mut w = BufWriter::with_capacity(1 << 16, file);
+    serde_json::to_writer(&mut w, &summary)
+        .map_err(|e| InputError::OutputSerialization(e.to_string()))?;
+    w.flush().map_err(|e| InputError::io(path, e))?;
+    Ok(())
 }
 
 fn build_splicing_instability_summary(
@@ -668,17 +674,16 @@ fn write_pipeline_step_json(path: &Path) -> Result<(), InputError> {
         },
         regimes: REGIMES,
     };
-    let data =
-        serde_json::to_vec(&step).map_err(|e| InputError::OutputSerialization(e.to_string()))?;
-    std::fs::write(path, data).map_err(|e| InputError::io(path, e))
+    let file = File::create(path).map_err(|e| InputError::io(path, e))?;
+    let mut w = BufWriter::with_capacity(1 << 16, file);
+    serde_json::to_writer(&mut w, &step)
+        .map_err(|e| InputError::OutputSerialization(e.to_string()))?;
+    w.flush().map_err(|e| InputError::io(path, e))?;
+    Ok(())
 }
 
 pub fn spliceqc_header() -> &'static str {
     SPLICEQC_HEADER
-}
-
-fn fmt6(v: f64) -> String {
-    format!("{v:.6}")
 }
 
 fn normalize01(value: f32) -> f64 {
@@ -731,15 +736,6 @@ fn build_flags(confidence: f64, nnz: u64) -> String {
         flags.push("LOW_SPLICE_SIGNAL");
     }
     flags.join(",")
-}
-
-fn quantile_sorted(sorted: &[f64], q: f64) -> f64 {
-    if sorted.is_empty() {
-        return 0.0;
-    }
-    let max_idx = sorted.len() - 1;
-    let pos = ((max_idx as f64) * q).round() as usize;
-    sorted[pos.min(max_idx)]
 }
 
 fn opt_f32(value: f32) -> Option<f32> {

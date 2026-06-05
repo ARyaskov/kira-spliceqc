@@ -1,3 +1,4 @@
+use rayon::prelude::*;
 use tracing::{debug, info};
 
 use crate::input::error::InputError;
@@ -16,50 +17,58 @@ pub fn run_stage6(
     validate_lengths(isoform, missplicing, imbalance)?;
 
     let n_cells = isoform.entropy.len();
-    let mut sis = vec![f32::NAN; n_cells];
-    let mut class = vec![SpliceIntegrityClass::Broken; n_cells];
-    let mut p_missplicing = vec![f32::NAN; n_cells];
-    let mut p_imbalance = vec![f32::NAN; n_cells];
-    let mut p_entropy_z = vec![f32::NAN; n_cells];
-    let mut p_entropy_abs = vec![f32::NAN; n_cells];
 
-    for cell in 0..n_cells {
-        let mb_star = missplicing.burden_star[cell];
-        let i_val = imbalance.imbalance[cell];
-        let z_ent = isoform.z_entropy[cell];
-        let ent = isoform.entropy[cell];
+    let rows: Vec<(f32, SpliceIntegrityClass, f32, f32, f32, f32)> = (0..n_cells)
+        .into_par_iter()
+        .map(|cell| {
+            let mb_star = missplicing.burden_star[cell];
+            let i_val = imbalance.imbalance[cell];
+            let z_ent = isoform.z_entropy[cell];
+            let ent = isoform.entropy[cell];
 
-        let p1 = mb_star;
-        let p2 = clamp01((i_val - 0.8) / 1.2);
-        let p3 = clamp01((z_ent - 1.5) / 2.0);
-        let p4 = clamp01((ent - 0.85) / 0.15);
+            let p1 = mb_star;
+            let p2 = clamp01((i_val - 0.8) / 1.2);
+            let p3 = clamp01((z_ent - 1.5) / 2.0);
+            let p4 = clamp01((ent - 0.85) / 0.15);
 
-        p_missplicing[cell] = p1;
-        p_imbalance[cell] = p2;
-        p_entropy_z[cell] = p3;
-        p_entropy_abs[cell] = p4;
+            if [p1, p2, p3, p4].iter().all(|v| v.is_finite()) {
+                let raw = 1.0 - (0.35 * p1 + 0.25 * p2 + 0.25 * p3 + 0.15 * p4);
+                let score = clamp01(raw);
+                (score, classify(score), p1, p2, p3, p4)
+            } else {
+                (f32::NAN, SpliceIntegrityClass::Broken, p1, p2, p3, p4)
+            }
+        })
+        .collect();
 
-        if [p1, p2, p3, p4].iter().all(|v| v.is_finite()) {
-            let raw = 1.0 - (0.35 * p1 + 0.25 * p2 + 0.25 * p3 + 0.15 * p4);
-            let score = clamp01(raw);
-            sis[cell] = score;
-            class[cell] = classify(score);
-        } else {
-            sis[cell] = f32::NAN;
-            class[cell] = SpliceIntegrityClass::Broken;
-        }
+    let mut sis = Vec::with_capacity(n_cells);
+    let mut class = Vec::with_capacity(n_cells);
+    let mut p_missplicing = Vec::with_capacity(n_cells);
+    let mut p_imbalance = Vec::with_capacity(n_cells);
+    let mut p_entropy_z = Vec::with_capacity(n_cells);
+    let mut p_entropy_abs = Vec::with_capacity(n_cells);
+
+    for (s, c, p1, p2, p3, p4) in rows {
+        sis.push(s);
+        class.push(c);
+        p_missplicing.push(p1);
+        p_imbalance.push(p2);
+        p_entropy_z.push(p3);
+        p_entropy_abs.push(p4);
     }
 
-    let min = sis
-        .iter()
-        .copied()
-        .filter(|v| v.is_finite())
-        .fold(f32::INFINITY, f32::min);
-    let max = sis
-        .iter()
-        .copied()
-        .filter(|v| v.is_finite())
-        .fold(f32::NEG_INFINITY, f32::max);
+    let mut min = f32::INFINITY;
+    let mut max = f32::NEG_INFINITY;
+    for &v in &sis {
+        if v.is_finite() {
+            if v < min {
+                min = v;
+            }
+            if v > max {
+                max = v;
+            }
+        }
+    }
     let med = median(&sis);
     debug!(min = min, median = med, max = max, "SIS summary");
 
@@ -97,18 +106,16 @@ fn validate_lengths(
     Ok(())
 }
 
+#[inline]
 fn clamp01(value: f32) -> f32 {
     if !value.is_finite() {
         f32::NAN
-    } else if value < 0.0 {
-        0.0
-    } else if value > 1.0 {
-        1.0
     } else {
-        value
+        value.clamp(0.0, 1.0)
     }
 }
 
+#[inline]
 fn classify(score: f32) -> SpliceIntegrityClass {
     if score >= 0.80 {
         SpliceIntegrityClass::Intact

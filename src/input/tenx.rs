@@ -17,6 +17,7 @@ pub struct TenXValidation {
 }
 
 pub fn validate(paths: TenXPaths) -> Result<TenXValidation, InputError> {
+    // Metadata-only probe — stage 1 will do the full read once.
     let reader = Reader::with_options(
         &paths.root,
         ReaderOptions {
@@ -24,33 +25,32 @@ pub fn validate(paths: TenXPaths) -> Result<TenXValidation, InputError> {
             strict: true,
         },
     );
-    let canonical = reader
-        .read_all()
+    let metadata = reader
+        .read_metadata()
         .map_err(|e| InputError::UnsupportedInput(e.message))?;
 
-    let n_rows = canonical.matrix.n_genes;
-    let n_cols = canonical.matrix.n_cells;
-    let n_features = canonical.metadata.gene_symbols.len();
-    let n_barcodes = canonical.metadata.barcodes.len();
+    let n_genes = metadata.n_genes;
+    let n_cells = metadata.n_cells;
+    let n_features = metadata.gene_symbols.len();
+    let n_barcodes = metadata.barcodes.len();
 
-    if n_rows == 0 || n_cols == 0 || n_features == 0 || n_barcodes == 0 {
+    if n_genes == 0 || n_cells == 0 || n_features == 0 || n_barcodes == 0 {
         return Err(InputError::InvalidMatrixDimensions);
     }
-
-    if n_rows != n_features {
+    if n_genes != n_features {
         return Err(InputError::DimensionMismatch {
             expected: format!("matrix rows = {n_features}"),
-            found: format!("{n_rows}"),
+            found: format!("{n_genes}"),
         });
     }
-    if n_cols != n_barcodes {
+    if n_cells != n_barcodes {
         return Err(InputError::DimensionMismatch {
             expected: format!("matrix cols = {n_barcodes}"),
-            found: format!("{n_cols}"),
+            found: format!("{n_cells}"),
         });
     }
 
-    check_dims(n_rows, n_cols)?;
+    check_dims(n_genes, n_cells)?;
 
     let has_multiple_samples = detect_multiple_samples(&paths.root)?;
     let has_metadata =
@@ -64,8 +64,8 @@ pub fn validate(paths: TenXPaths) -> Result<TenXValidation, InputError> {
             barcodes_path: paths.barcodes_path,
             compressed: paths.compressed,
         },
-        n_genes: n_rows,
-        n_cells: n_cols,
+        n_genes,
+        n_cells,
         has_multiple_samples,
         has_metadata,
     })

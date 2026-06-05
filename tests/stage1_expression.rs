@@ -51,13 +51,13 @@ fn write_h5ad_csr(path: &Path) {
         .unwrap()
         .write(&[0_i64, 1, 2])
         .unwrap();
-    x_group
-        .new_dataset::<i64>()
+    // kira-scio expects /X to carry the `shape` HDF5 *attribute* (not a sub-dataset).
+    let shape_attr = x_group
+        .new_attr::<u64>()
         .shape(2)
         .create("shape")
-        .unwrap()
-        .write(&[2_i64, 2])
         .unwrap();
+    shape_attr.write(&[2_u64, 2]).unwrap();
 
     let var_group = file.create_group("var").unwrap();
     let gene_symbols = vec![
@@ -98,7 +98,7 @@ fn tiny_mtx_counts_and_norm() {
     let temp = tempdir().unwrap();
     write_tenx(temp.path());
 
-    let descriptor = run_stage0(temp.path(), RunMode::Standalone).unwrap();
+    let descriptor = run_stage0(temp.path(), RunMode::Standalone, None).unwrap();
     let matrix = run_stage1(&descriptor, temp.path()).unwrap();
 
     assert_eq!(matrix.n_genes(), 3);
@@ -132,7 +132,7 @@ fn deterministic_expr_bin() {
     let temp = tempdir().unwrap();
     write_tenx(temp.path());
 
-    let descriptor = run_stage0(temp.path(), RunMode::Standalone).unwrap();
+    let descriptor = run_stage0(temp.path(), RunMode::Standalone, None).unwrap();
 
     let out1 = temp.path().join("out1");
     let out2 = temp.path().join("out2");

@@ -1,40 +1,59 @@
 use std::fs::File;
 use std::path::Path;
 
+use kira_shared_sc_cache::{SharedCacheMmap, mmap_shared_cache};
 use memmap2::Mmap;
 
 use crate::expression::ExpressionMatrix;
 use crate::input::error::InputError;
-use crate::input::shared_cache::{SharedCacheValidation, validate_and_open};
 
 const EXPR_MAGIC: &[u8; 8] = b"KIRAEXP1";
 const EXPR_VERSION: u32 = 1;
 const EXPR_HEADER_SIZE: usize = 52;
 
-#[derive(Debug)]
-enum MmapBackend {
-    ExprBin {
-        row_offsets: Vec<u64>,
-        row_nnz: Vec<u32>,
-    },
-    SharedCache {
-        col_ptr: Vec<u64>,
-        row_idx: Vec<u32>,
-        values_u32: Vec<u32>,
-        nnz: usize,
-    },
+/// CSR layout — one row per gene, `(cell, count)` pairs sorted by cell.
+struct ExprBinBackend {
+    mmap: Mmap,
+    row_offsets: Vec<u64>,
+    row_nnz: Vec<u32>,
 }
 
-#[derive(Debug)]
+/// CSC layout — borrows the validated `kira-organelle.bin` shared cache,
+/// zero-copy slices for `col_ptr`/`row_idx`/`values_u32`.
+struct SharedCacheBackend {
+    cache: SharedCacheMmap,
+}
+
+enum Backend {
+    ExprBin(ExprBinBackend),
+    SharedCache(SharedCacheBackend),
+}
+
 pub struct MmapExpressionMatrix {
-    mmap: Mmap,
     n_genes: usize,
     n_cells: usize,
     gene_symbols: Vec<String>,
     cell_names: Vec<String>,
     libsizes: Vec<u64>,
-    cell_nnz: Vec<u64>,
-    backend: MmapBackend,
+    /// Pre-computed for ExprBin; for SharedCache we derive O(1) from col_ptr.
+    cell_nnz: Option<Vec<u64>>,
+    backend: Backend,
+}
+
+impl std::fmt::Debug for MmapExpressionMatrix {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MmapExpressionMatrix")
+            .field("n_genes", &self.n_genes)
+            .field("n_cells", &self.n_cells)
+            .field(
+                "backend",
+                &match self.backend {
+                    Backend::ExprBin(_) => "ExprBin",
+                    Backend::SharedCache(_) => "SharedCache",
+                },
+            )
+            .finish()
+    }
 }
 
 impl MmapExpressionMatrix {
@@ -44,7 +63,6 @@ impl MmapExpressionMatrix {
         if mmap.len() < EXPR_HEADER_SIZE {
             return Err(InputError::InvalidSparseMatrix);
         }
-
         if &mmap[0..8] != EXPR_MAGIC {
             return Err(InputError::InvalidSparseMatrix);
         }
@@ -76,58 +94,54 @@ impl MmapExpressionMatrix {
         let gene_symbols =
             parse_expr_strings(&mmap, gene_index_offset, cell_index_offset, n_genes)?;
         let cell_names = parse_expr_strings(&mmap, cell_index_offset, file_len, n_cells)?;
-
         let cell_nnz = compute_cell_nnz_expr(&mmap, n_cells, &row_offsets, &row_nnz)?;
 
         Ok(Self {
-            mmap,
             n_genes,
             n_cells,
             gene_symbols,
             cell_names,
             libsizes,
-            cell_nnz,
-            backend: MmapBackend::ExprBin {
+            cell_nnz: Some(cell_nnz),
+            backend: Backend::ExprBin(ExprBinBackend {
+                mmap,
                 row_offsets,
                 row_nnz,
-            },
+            }),
         })
     }
 
     pub fn open_shared_cache(path: &Path) -> Result<Self, InputError> {
-        let file = File::open(path).map_err(|e| InputError::io(path, e))?;
-        let mmap = unsafe { Mmap::map(&file).map_err(|e| InputError::io(path, e))? };
-        let SharedCacheValidation {
-            n_genes,
-            n_cells,
-            nnz,
-            genes,
-            barcodes,
-            col_ptr,
-            row_idx,
-            values_u32,
-            libsizes,
-        } = validate_and_open(path)?;
+        let cache = mmap_shared_cache(path)
+            .map_err(|e| InputError::InvalidSharedCache(e.to_string()))?;
 
-        let cell_nnz = col_ptr
-            .windows(2)
-            .map(|w| w[1].saturating_sub(w[0]))
-            .collect::<Vec<_>>();
+        let n_genes = cache.n_genes;
+        let n_cells = cache.n_cells;
+        let gene_symbols = cache.genes.clone();
+        let cell_names = cache.barcodes.clone();
+
+        // Compute libsizes once from zero-copy values slice.
+        let col_ptr = cache.col_ptr();
+        let values = cache.values_u32();
+        let mut libsizes = vec![0u64; n_cells];
+        for cell in 0..n_cells {
+            let s = col_ptr[cell] as usize;
+            let e = col_ptr[cell + 1] as usize;
+            let mut sum = 0u64;
+            for &v in &values[s..e] {
+                sum += v as u64;
+            }
+            libsizes[cell] = sum;
+        }
 
         Ok(Self {
-            mmap,
             n_genes,
             n_cells,
-            gene_symbols: genes,
-            cell_names: barcodes,
+            gene_symbols,
+            cell_names,
             libsizes,
-            cell_nnz,
-            backend: MmapBackend::SharedCache {
-                col_ptr,
-                row_idx,
-                values_u32,
-                nnz,
-            },
+            cell_nnz: None, // computed O(1) via col_ptr deltas.
+            backend: Backend::SharedCache(SharedCacheBackend { cache }),
         })
     }
 }
@@ -136,83 +150,226 @@ impl ExpressionMatrix for MmapExpressionMatrix {
     fn n_genes(&self) -> usize {
         self.n_genes
     }
-
     fn n_cells(&self) -> usize {
         self.n_cells
     }
-
     fn gene_symbol(&self, gene_id: usize) -> &str {
         &self.gene_symbols[gene_id]
     }
-
     fn cell_name(&self, cell_id: usize) -> &str {
         &self.cell_names[cell_id]
     }
-
     fn libsize(&self, cell_id: usize) -> u64 {
         self.libsizes[cell_id]
     }
 
     fn nnz_cell(&self, cell_id: usize) -> u64 {
-        self.cell_nnz[cell_id]
+        match (&self.backend, &self.cell_nnz) {
+            (_, Some(v)) => v[cell_id],
+            (Backend::SharedCache(b), None) => {
+                let cp = b.cache.col_ptr();
+                cp[cell_id + 1] - cp[cell_id]
+            }
+            // Unreachable: SharedCache always has col_ptr; ExprBin always pre-computes cell_nnz.
+            _ => 0,
+        }
     }
 
     fn count(&self, gene_id: usize, cell_id: usize) -> u32 {
         match &self.backend {
-            MmapBackend::ExprBin {
-                row_offsets,
-                row_nnz,
-            } => {
-                let nnz = row_nnz[gene_id] as usize;
-                if nnz == 0 {
-                    return 0;
-                }
-                let start = row_offsets[gene_id] as usize;
-                let mut low = 0usize;
-                let mut high = nnz;
-                while low < high {
-                    let mid = (low + high) / 2;
-                    let offset = start + mid * 8;
-                    let cell = read_u32_unchecked(&self.mmap, offset);
-                    if cell == cell_id as u32 {
-                        return read_u32_unchecked(&self.mmap, offset + 4);
+            Backend::ExprBin(b) => exprbin_count(b, gene_id, cell_id),
+            Backend::SharedCache(b) => sharedcache_count(b, gene_id, cell_id),
+        }
+    }
+
+    fn gather_panel_log_cp10k(
+        &self,
+        panel_sorted: &[u32],
+        cell: usize,
+        out: &mut Vec<f32>,
+    ) {
+        debug_assert!(is_sorted_unique(panel_sorted));
+        out.reserve(panel_sorted.len());
+        let scale = 1e4_f32 / self.libsizes[cell].max(1) as f32;
+
+        match &self.backend {
+            Backend::SharedCache(b) => {
+                let cp = b.cache.col_ptr();
+                let rows = b.cache.row_idx();
+                let vals = b.cache.values_u32();
+                let s = cp[cell] as usize;
+                let e = cp[cell + 1] as usize;
+                let col_rows = &rows[s..e];
+                let col_vals = &vals[s..e];
+                // Inline sparse merge; missing genes contribute log(1+0)=0.
+                let mut pi = 0usize;
+                let mut ri = 0usize;
+                while pi < panel_sorted.len() {
+                    if ri >= col_rows.len() {
+                        out.push(0.0);
+                        pi += 1;
+                        continue;
                     }
-                    if cell < cell_id as u32 {
-                        low = mid + 1;
+                    let pg = panel_sorted[pi];
+                    let rg = col_rows[ri];
+                    if pg == rg {
+                        let x = col_vals[ri] as f32;
+                        out.push((1.0 + scale * x).ln());
+                        pi += 1;
+                        ri += 1;
+                    } else if pg < rg {
+                        out.push(0.0);
+                        pi += 1;
                     } else {
-                        high = mid;
+                        ri += 1;
                     }
                 }
-                0
             }
-            MmapBackend::SharedCache {
-                col_ptr,
-                row_idx,
-                values_u32,
-                nnz,
-            } => {
-                let start = col_ptr[cell_id] as usize;
-                let end = col_ptr[cell_id + 1] as usize;
-                if end > *nnz || start >= end {
-                    return 0;
+            Backend::ExprBin(b) => {
+                for &g in panel_sorted {
+                    let c = exprbin_count(b, g as usize, cell) as f32;
+                    out.push((1.0 + scale * c).ln());
                 }
-                let mut low = start;
-                let mut high = end;
-                while low < high {
-                    let mid = (low + high) / 2;
-                    let row = row_idx[mid];
-                    if row == gene_id as u32 {
-                        return values_u32[mid];
-                    }
-                    if row < gene_id as u32 {
-                        low = mid + 1;
-                    } else {
-                        high = mid;
-                    }
-                }
-                0
             }
         }
+    }
+
+    fn panel_ln1p_scaled_sum(&self, panel_sorted: &[u32], cell: usize, scale: f32) -> f32 {
+        debug_assert!(is_sorted_unique(panel_sorted));
+        let mut sum = 0.0_f32;
+        match &self.backend {
+            Backend::SharedCache(b) => {
+                let cp = b.cache.col_ptr();
+                let rows = b.cache.row_idx();
+                let vals = b.cache.values_u32();
+                let s = cp[cell] as usize;
+                let e = cp[cell + 1] as usize;
+                // Only matched genes contribute; zeros add ln(1)=0.
+                let col_rows = &rows[s..e];
+                let col_vals = &vals[s..e];
+                let mut pi = 0usize;
+                let mut ri = 0usize;
+                while pi < panel_sorted.len() && ri < col_rows.len() {
+                    let pg = panel_sorted[pi];
+                    let rg = col_rows[ri];
+                    if pg == rg {
+                        let v = col_vals[ri] as f32;
+                        sum += (1.0 + scale * v).ln();
+                        pi += 1;
+                        ri += 1;
+                    } else if pg < rg {
+                        pi += 1;
+                    } else {
+                        ri += 1;
+                    }
+                }
+            }
+            Backend::ExprBin(b) => {
+                for &g in panel_sorted {
+                    let c = exprbin_count(b, g as usize, cell) as f32;
+                    if c > 0.0 {
+                        sum += (1.0 + scale * c).ln();
+                    }
+                }
+            }
+        }
+        sum
+    }
+
+    fn panel_count_sum_and_detected(
+        &self,
+        panel_sorted: &[u32],
+        cell: usize,
+    ) -> (u64, usize) {
+        debug_assert!(is_sorted_unique(panel_sorted));
+        let mut sum = 0u64;
+        let mut detected = 0usize;
+        match &self.backend {
+            Backend::SharedCache(b) => {
+                let cp = b.cache.col_ptr();
+                let rows = b.cache.row_idx();
+                let vals = b.cache.values_u32();
+                let s = cp[cell] as usize;
+                let e = cp[cell + 1] as usize;
+                let col_rows = &rows[s..e];
+                let col_vals = &vals[s..e];
+                let mut pi = 0usize;
+                let mut ri = 0usize;
+                while pi < panel_sorted.len() && ri < col_rows.len() {
+                    let pg = panel_sorted[pi];
+                    let rg = col_rows[ri];
+                    if pg == rg {
+                        let v = col_vals[ri];
+                        if v > 0 {
+                            detected += 1;
+                            sum += v as u64;
+                        }
+                        pi += 1;
+                        ri += 1;
+                    } else if pg < rg {
+                        pi += 1;
+                    } else {
+                        ri += 1;
+                    }
+                }
+            }
+            Backend::ExprBin(b) => {
+                for &g in panel_sorted {
+                    let c = exprbin_count(b, g as usize, cell);
+                    if c > 0 {
+                        detected += 1;
+                        sum += c as u64;
+                    }
+                }
+            }
+        }
+        (sum, detected)
+    }
+}
+
+#[inline]
+fn is_sorted_unique(panel: &[u32]) -> bool {
+    panel.windows(2).all(|w| w[0] < w[1])
+}
+
+fn exprbin_count(b: &ExprBinBackend, gene_id: usize, cell_id: usize) -> u32 {
+    let nnz = b.row_nnz[gene_id] as usize;
+    if nnz == 0 {
+        return 0;
+    }
+    let start = b.row_offsets[gene_id] as usize;
+    let target = cell_id as u32;
+    let mut low = 0usize;
+    let mut high = nnz;
+    while low < high {
+        let mid = (low + high) / 2;
+        let offset = start + mid * 8;
+        let cell = read_u32_unchecked(&b.mmap, offset);
+        if cell == target {
+            return read_u32_unchecked(&b.mmap, offset + 4);
+        }
+        if cell < target {
+            low = mid + 1;
+        } else {
+            high = mid;
+        }
+    }
+    0
+}
+
+fn sharedcache_count(b: &SharedCacheBackend, gene_id: usize, cell_id: usize) -> u32 {
+    let cp = b.cache.col_ptr();
+    let start = cp[cell_id] as usize;
+    let end = cp[cell_id + 1] as usize;
+    if start >= end {
+        return 0;
+    }
+    let rows = &b.cache.row_idx()[start..end];
+    let vals = &b.cache.values_u32()[start..end];
+    let target = gene_id as u32;
+    match rows.binary_search(&target) {
+        Ok(idx) => vals[idx],
+        Err(_) => 0,
     }
 }
 

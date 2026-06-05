@@ -1,3 +1,4 @@
+use rayon::prelude::*;
 use tracing::{debug, info};
 
 use crate::input::error::InputError;
@@ -23,51 +24,56 @@ pub fn compute(
         return Err(InputError::MissingCollapseSignals);
     }
 
-    let mut collapse_status = vec![SpliceosomeCollapseStatus::NoCollapse; n_cells];
-    let mut core_suppression = vec![false; n_cells];
-    let mut high_imbalance = vec![false; n_cells];
-    let mut low_sis = vec![false; n_cells];
+    let rows: Vec<(SpliceosomeCollapseStatus, bool, bool, bool)> = (0..n_cells)
+        .into_par_iter()
+        .map(|cell| {
+            let z_u1 = imbalance.z_u1[cell];
+            let z_u2 = imbalance.z_u2[cell];
+            let z_sf3b = imbalance.z_sf3b[cell];
+            let i_val = imbalance.imbalance[cell];
+            let sis_val = sis.sis[cell];
 
-    for cell in 0..n_cells {
-        let z_u1 = imbalance.z_u1[cell];
-        let z_u2 = imbalance.z_u2[cell];
-        let z_sf3b = imbalance.z_sf3b[cell];
-        let i_val = imbalance.imbalance[cell];
-        let sis_val = sis.sis[cell];
+            let core_missing = !z_u1.is_finite() || !z_u2.is_finite() || !z_sf3b.is_finite();
+            let high_imbalance = i_val.is_finite() && i_val > 1.8;
+            let low_sis = sis_val.is_finite() && sis_val < 0.4;
 
-        let core_missing = !z_u1.is_finite() || !z_u2.is_finite() || !z_sf3b.is_finite();
-        if core_missing {
-            collapse_status[cell] = SpliceosomeCollapseStatus::Inconclusive;
-            core_suppression[cell] = false;
-            high_imbalance[cell] = i_val.is_finite() && i_val > 1.8;
-            low_sis[cell] = sis_val.is_finite() && sis_val < 0.4;
-            continue;
-        }
+            if core_missing {
+                return (
+                    SpliceosomeCollapseStatus::Inconclusive,
+                    false,
+                    high_imbalance,
+                    low_sis,
+                );
+            }
 
-        let cond_core = z_u1 < -1.5 && z_u2 < -1.5 && z_sf3b < -1.5;
-        let cond_imbalance = i_val.is_finite() && i_val > 1.8;
-        let cond_sis = sis_val.is_finite() && sis_val < 0.4;
+            let core_suppression = z_u1 < -1.5 && z_u2 < -1.5 && z_sf3b < -1.5;
+            let status = if core_suppression && high_imbalance && low_sis {
+                SpliceosomeCollapseStatus::Collapse
+            } else {
+                SpliceosomeCollapseStatus::NoCollapse
+            };
+            (status, core_suppression, high_imbalance, low_sis)
+        })
+        .collect();
 
-        core_suppression[cell] = cond_core;
-        high_imbalance[cell] = cond_imbalance;
-        low_sis[cell] = cond_sis;
-
-        if cond_core && cond_imbalance && cond_sis {
-            collapse_status[cell] = SpliceosomeCollapseStatus::Collapse;
-        } else {
-            collapse_status[cell] = SpliceosomeCollapseStatus::NoCollapse;
-        }
-    }
+    let mut collapse_status = Vec::with_capacity(n_cells);
+    let mut core_suppression = Vec::with_capacity(n_cells);
+    let mut high_imbalance = Vec::with_capacity(n_cells);
+    let mut low_sis = Vec::with_capacity(n_cells);
 
     let mut count_collapse = 0usize;
     let mut count_no = 0usize;
     let mut count_inconclusive = 0usize;
-    for status in &collapse_status {
-        match status {
+    for (s, c, h, l) in rows {
+        match s {
             SpliceosomeCollapseStatus::Collapse => count_collapse += 1,
             SpliceosomeCollapseStatus::NoCollapse => count_no += 1,
             SpliceosomeCollapseStatus::Inconclusive => count_inconclusive += 1,
         }
+        collapse_status.push(s);
+        core_suppression.push(c);
+        high_imbalance.push(h);
+        low_sis.push(l);
     }
 
     info!("collapse detection completed");

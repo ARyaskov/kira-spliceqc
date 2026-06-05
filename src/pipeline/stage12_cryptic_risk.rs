@@ -1,3 +1,4 @@
+use rayon::prelude::*;
 use tracing::{debug, info};
 
 use crate::input::error::InputError;
@@ -27,33 +28,34 @@ pub fn compute(
         return Err(InputError::MissingCrypticRiskSignals);
     }
 
-    let mut cryptic_risk = vec![f32::NAN; n_cells];
-    let mut x_sr_hnrnp = vec![f32::NAN; n_cells];
-    let mut x_entropy = vec![f32::NAN; n_cells];
-    let mut x_nmd = vec![f32::NAN; n_cells];
+    let rows: Vec<(f32, f32, f32, f32)> = (0..n_cells)
+        .into_par_iter()
+        .map(|cell| {
+            let axis = imbalance.axis_sr_hnrnp[cell];
+            let z_ent = isoform.z_entropy[cell];
+            let z_nmd = imbalance.z_nmd[cell];
 
-    for cell in 0..n_cells {
-        let axis = imbalance.axis_sr_hnrnp[cell];
-        let z_ent = isoform.z_entropy[cell];
-        let z_nmd = imbalance.z_nmd[cell];
+            if axis.is_finite() && z_ent.is_finite() && z_nmd.is_finite() {
+                let x1 = clamp01_sat(axis.abs());
+                let x2 = clamp01_sat(z_ent);
+                let x3 = clamp01_sat(z_nmd);
+                let raw = x1 + x2 + x3;
+                (sigmoid(raw - 1.5), x1, x2, x3)
+            } else {
+                (f32::NAN, f32::NAN, f32::NAN, f32::NAN)
+            }
+        })
+        .collect();
 
-        if axis.is_finite() && z_ent.is_finite() && z_nmd.is_finite() {
-            let x1 = clamp01(axis.abs());
-            let x2 = clamp01(z_ent);
-            let x3 = clamp01(z_nmd);
-
-            x_sr_hnrnp[cell] = x1;
-            x_entropy[cell] = x2;
-            x_nmd[cell] = x3;
-
-            let raw = x1 + x2 + x3;
-            cryptic_risk[cell] = sigmoid(raw - 1.5);
-        } else {
-            cryptic_risk[cell] = f32::NAN;
-            x_sr_hnrnp[cell] = f32::NAN;
-            x_entropy[cell] = f32::NAN;
-            x_nmd[cell] = f32::NAN;
-        }
+    let mut cryptic_risk = Vec::with_capacity(n_cells);
+    let mut x_sr_hnrnp = Vec::with_capacity(n_cells);
+    let mut x_entropy = Vec::with_capacity(n_cells);
+    let mut x_nmd = Vec::with_capacity(n_cells);
+    for (r, a, b, c) in rows {
+        cryptic_risk.push(r);
+        x_sr_hnrnp.push(a);
+        x_entropy.push(b);
+        x_nmd.push(c);
     }
 
     let (min, max) = finite_min_max(&cryptic_risk);
@@ -91,7 +93,8 @@ fn validate_lengths(
     Ok(())
 }
 
-fn clamp01(value: f32) -> f32 {
+#[inline]
+fn clamp01_sat(value: f32) -> f32 {
     if !value.is_finite() {
         f32::NAN
     } else if value <= 0.0 {
@@ -103,6 +106,7 @@ fn clamp01(value: f32) -> f32 {
     }
 }
 
+#[inline]
 fn sigmoid(value: f32) -> f32 {
     1.0 / (1.0 + (-value).exp())
 }
@@ -122,9 +126,5 @@ fn finite_min_max(values: &[f32]) -> (f32, f32) {
             }
         }
     }
-    if found {
-        (min, max)
-    } else {
-        (f32::NAN, f32::NAN)
-    }
+    if found { (min, max) } else { (f32::NAN, f32::NAN) }
 }

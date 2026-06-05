@@ -71,8 +71,6 @@ pub enum InputError {
         path: PathBuf,
         source: std::io::Error,
     },
-    #[error("hdf5 error: {0}")]
-    Hdf5(#[from] hdf5::Error),
 }
 
 impl InputError {

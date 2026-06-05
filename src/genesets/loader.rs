@@ -3,7 +3,8 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
-use tracing::{info, warn};
+use ahash::AHashMap;
+use tracing::{debug, info, warn};
 
 use crate::expression::ExpressionMatrix;
 use crate::genesets::{Geneset, GenesetCatalog};
@@ -31,24 +32,32 @@ pub fn load_catalog(
         )?,
     }
 
-    let mut symbol_to_id = std::collections::HashMap::new();
+    // Case-insensitive index: matrix gene symbols may be mixed-case (mouse "Snrpb").
+    // First occurrence wins (matches stage15 splicing_instability behavior).
+    let mut symbol_to_id: AHashMap<String, u32> = AHashMap::with_capacity(matrix.n_genes());
     for gene_id in 0..matrix.n_genes() {
-        symbol_to_id.insert(matrix.gene_symbol(gene_id).to_string(), gene_id as u32);
+        let key = matrix.gene_symbol(gene_id).to_ascii_uppercase();
+        symbol_to_id.entry(key).or_insert(gene_id as u32);
     }
 
     let mut genesets = Vec::with_capacity(entries.len());
     for (id, (axis, mut symbols)) in entries {
         symbols.sort();
-        let mut gene_ids = Vec::new();
+        symbols.dedup();
+        let mut gene_ids = Vec::with_capacity(symbols.len());
         let mut missing = Vec::new();
         for symbol in symbols {
-            if let Some(&gid) = symbol_to_id.get(&symbol) {
+            let key = symbol.to_ascii_uppercase();
+            if let Some(&gid) = symbol_to_id.get(&key) {
                 gene_ids.push(gid);
             } else {
                 missing.push(symbol);
             }
         }
-        info!(
+        // Sorted by gene index → enables sparse merge in panel_log1p_sum.
+        gene_ids.sort_unstable();
+        gene_ids.dedup();
+        debug!(
             geneset_id = id.as_str(),
             resolved = gene_ids.len(),
             "geneset resolved"

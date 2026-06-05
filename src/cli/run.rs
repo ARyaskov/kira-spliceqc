@@ -11,8 +11,8 @@ use crate::input::error::InputError;
 use crate::output::pipeline_contract;
 use crate::pipeline::stage0_input::run_stage0;
 use crate::pipeline::stage1_expression::run_stage1;
-use crate::pipeline::stage2_genesets::run_stage2;
-use crate::pipeline::stage3_isoform::run_stage3;
+use crate::pipeline::stage2_genesets::aggregate as run_stage2;
+use crate::pipeline::stage3_isoform::compute as run_stage3;
 use crate::pipeline::stage4_missplicing::compute as compute_missplicing;
 use crate::pipeline::stage5_imbalance::compute as compute_imbalance;
 use crate::pipeline::stage6_sis::run_stage6;
@@ -66,8 +66,14 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
         run_stage0(&config.input, config.run_mode, config.cache_path.as_deref())
     })?;
     let stage1 = run_logged(1, || run_stage1(&stage0, &effective_out_dir))?;
-    let stage2 = run_logged(2, || run_stage2(&stage1))?;
-    let stage3 = run_logged(3, || run_stage3(&stage1))?;
+
+    // Load catalog ONCE and pass &GenesetCatalog to all downstream consumers
+    // (previously stages 2, 3 and pipeline contract each reloaded it).
+    let catalog_path = default_catalog_path();
+    let catalog = load_catalog(&catalog_path, &stage1)?;
+
+    let stage2 = run_logged(2, || run_stage2(&stage1, &catalog))?;
+    let stage3 = run_logged(3, || run_stage3(&stage1, &catalog))?;
     let stage4 = run_logged(4, || compute_missplicing(&stage2))?;
     let stage5 = run_logged(5, || compute_imbalance(&stage2))?;
     let stage6 = run_logged(6, || run_stage6(&stage3, &stage4, &stage5))?;
@@ -147,8 +153,6 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
             target: "kira_spliceqc::cli::run",
             "starting pipeline contract artifact generation"
         );
-        let catalog_path = default_catalog_path();
-        let catalog = load_catalog(&catalog_path, &context.stage1)?;
         pipeline_contract::write_pipeline_contract(
             &effective_out_dir,
             &context.stage0,

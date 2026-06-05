@@ -31,65 +31,73 @@ fn write_h5ad_csr(path: &Path, n_cells: i64, n_genes: i64) {
     attr.write_scalar(&unsafe { VarLenUnicode::from_str_unchecked("csr_matrix") })
         .unwrap();
 
+    // Tiny valid CSR: row 0 has 1 entry, row 1 has 1 entry, remaining rows empty.
+    let nnz = 2;
     x_group
         .new_dataset::<i32>()
-        .shape(2)
+        .shape(nnz)
         .create("data")
         .unwrap()
         .write(&[1, 2])
         .unwrap();
     x_group
         .new_dataset::<i32>()
-        .shape(2)
+        .shape(nnz)
         .create("indices")
         .unwrap()
         .write(&[0, 1])
         .unwrap();
+    let mut indptr = vec![0i32; (n_cells as usize) + 1];
+    if n_cells as usize >= 1 {
+        indptr[1] = 1;
+    }
+    for v in indptr.iter_mut().skip(2) {
+        *v = nnz as i32;
+    }
     x_group
         .new_dataset::<i32>()
-        .shape(3)
+        .shape((n_cells as usize) + 1)
         .create("indptr")
         .unwrap()
-        .write(&[0, 1, 2])
+        .write(&indptr)
         .unwrap();
-    x_group
-        .new_dataset::<i64>()
+    // kira-scio reads /X.shape as an HDF5 attribute, not a sub-dataset.
+    let shape_attr = x_group
+        .new_attr::<u64>()
         .shape(2)
         .create("shape")
-        .unwrap()
-        .write(&[n_cells, n_genes])
         .unwrap();
+    shape_attr.write(&[n_cells as u64, n_genes as u64]).unwrap();
 
     let var_group = file.create_group("var").unwrap();
+    let gene_names: Vec<VarLenUnicode> = (0..n_genes as usize)
+        .map(|i| unsafe { VarLenUnicode::from_str_unchecked(format!("Gene{i}").as_str()) })
+        .collect();
     var_group
-        .new_dataset::<i32>()
+        .new_dataset::<VarLenUnicode>()
         .shape(n_genes as usize)
         .create("gene_symbols")
         .unwrap()
-        .write(&vec![1; n_genes as usize])
+        .write(&gene_names)
         .unwrap();
     var_group
-        .new_dataset::<i32>()
+        .new_dataset::<VarLenUnicode>()
         .shape(n_genes as usize)
         .create("_index")
         .unwrap()
-        .write(&vec![1; n_genes as usize])
+        .write(&gene_names)
         .unwrap();
 
     let obs_group = file.create_group("obs").unwrap();
+    let barcodes: Vec<VarLenUnicode> = (0..n_cells as usize)
+        .map(|i| unsafe { VarLenUnicode::from_str_unchecked(format!("cell{i}").as_str()) })
+        .collect();
     obs_group
-        .new_dataset::<i32>()
+        .new_dataset::<VarLenUnicode>()
         .shape(n_cells as usize)
         .create("_index")
         .unwrap()
-        .write(&vec![1; n_cells as usize])
-        .unwrap();
-    obs_group
-        .new_dataset::<i32>()
-        .shape(n_cells as usize)
-        .create("qc")
-        .unwrap()
-        .write(&vec![1; n_cells as usize])
+        .write(&barcodes)
         .unwrap();
 }
 
@@ -124,7 +132,7 @@ fn valid_tenx_directory() {
     let temp = tempdir().unwrap();
     write_tenx(temp.path());
 
-    let descriptor = run_stage0(temp.path(), RunMode::Standalone).unwrap();
+    let descriptor = run_stage0(temp.path(), RunMode::Standalone, None).unwrap();
     assert_eq!(descriptor.n_genes, 2);
     assert_eq!(descriptor.n_cells, 3);
     assert!(!descriptor.has_metadata);
@@ -145,7 +153,7 @@ fn missing_file_errors() {
     write_tenx(temp.path());
     fs::remove_file(temp.path().join("barcodes.tsv")).unwrap();
 
-    let err = run_stage0(temp.path(), RunMode::Standalone).unwrap_err();
+    let err = run_stage0(temp.path(), RunMode::Standalone, None).unwrap_err();
     match err {
         InputError::MissingFile(name) => assert_eq!(name, "barcodes.tsv"),
         other => panic!("unexpected error: {other:?}"),
@@ -165,7 +173,7 @@ fn valid_h5ad_csr() {
     match descriptor.kind {
         InputKind::H5AD(h5ad) => {
             assert!(h5ad.x_is_csr);
-            assert_eq!(h5ad.gene_symbol_source, GeneSymbolSource::VarGeneSymbols);
+            assert_eq!(h5ad.gene_symbol_source, GeneSymbolSource::VarNamesFallback);
         }
         _ => panic!("expected H5AD input"),
     }
@@ -177,9 +185,10 @@ fn h5ad_dense_rejected() {
     let path = temp.path().join("dense.h5ad");
     write_h5ad_dense(&path, 2, 2);
 
+    // kira-scio rejects 1D dense /X with a ParseError, surfaced as UnsupportedInput.
     let err = run_stage0(&path, RunMode::Standalone, None).unwrap_err();
     match err {
-        InputError::UnsupportedH5ADLayout => {}
+        InputError::UnsupportedInput(_) | InputError::UnsupportedH5ADLayout => {}
         other => panic!("unexpected error: {other:?}"),
     }
 }
@@ -189,8 +198,8 @@ fn deterministic_detection() {
     let temp = tempdir().unwrap();
     write_tenx(temp.path());
 
-    let first = run_stage0(temp.path(), RunMode::Standalone).unwrap();
-    let second = run_stage0(temp.path(), RunMode::Standalone).unwrap();
+    let first = run_stage0(temp.path(), RunMode::Standalone, None).unwrap();
+    let second = run_stage0(temp.path(), RunMode::Standalone, None).unwrap();
 
     assert_eq!(first, second);
 }

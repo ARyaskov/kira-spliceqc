@@ -1,3 +1,5 @@
+use std::fs::File;
+use std::io::{BufWriter, Write};
 use std::path::Path;
 
 use crate::input::error::InputError;
@@ -24,48 +26,60 @@ pub fn write_tsv(
     exon_intron: &ExonIntronDefinitionMetrics,
     assembly: &AssemblyPhaseImbalanceMetrics,
 ) -> Result<(), InputError> {
-    let n_cells = cell_names.len();
-    let mut out = String::new();
-    out.push_str(HEADER);
-    out.push('\n');
+    let file = File::create(path).map_err(|e| InputError::io(path, e))?;
+    let mut w = BufWriter::with_capacity(1 << 16, file);
 
+    writeln!(w, "{}", HEADER).map_err(|e| InputError::io(path, e))?;
+
+    let n_cells = cell_names.len();
+    let mut buf = ryu_buf();
     for cell_id in 0..n_cells {
-        let row = format!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
-            cell_id,
-            cell_names[cell_id],
-            fmt_f32(sis.sis[cell_id]),
-            class_str(sis.class[cell_id]),
-            fmt_f32(sis.p_missplicing[cell_id]),
-            fmt_f32(sis.p_imbalance[cell_id]),
-            fmt_f32(sis.p_entropy_z[cell_id]),
-            fmt_f32(sis.p_entropy_abs[cell_id]),
-            fmt_f32(isoform.entropy[cell_id]),
-            fmt_f32(isoform.dispersion[cell_id]),
-            fmt_f32(missplicing.burden[cell_id]),
-            fmt_f32(imbalance.imbalance[cell_id]),
-            fmt_f32(coupling.coupling_stress[cell_id]),
-            fmt_f32(exon_intron.exon_definition_bias[cell_id]),
-            fmt_f32(assembly.ea_imbalance[cell_id]),
-            fmt_f32(assembly.b_imbalance[cell_id]),
-            fmt_f32(assembly.cat_imbalance[cell_id]),
-            fmt_f32(splicing_instability.splice_core[cell_id]),
-            fmt_f32(splicing_instability.rbp_core[cell_id]),
-            fmt_f32(splicing_instability.rloop_resolve_core[cell_id]),
-            fmt_f32(splicing_instability.conflict_risk_core[cell_id]),
-            fmt_f32(splicing_instability.nmd_core[cell_id]),
-            fmt_f32(splicing_instability.sos[cell_id]),
-            fmt_f32(splicing_instability.rlr[cell_id]),
-            fmt_f32(splicing_instability.sii[cell_id]),
-            fmt_bool(splicing_instability.splice_overload_high[cell_id]),
-            fmt_bool(splicing_instability.rloop_risk_high[cell_id]),
-            fmt_bool(splicing_instability.splicing_instability_high[cell_id]),
-            fmt_bool(splicing_instability.genome_instability_splicing_flag[cell_id]),
-        );
-        out.push_str(&row);
+        write!(w, "{}\t{}\t", cell_id, cell_names[cell_id])
+            .map_err(|e| InputError::io(path, e))?;
+        write_f32(&mut w, sis.sis[cell_id], &mut buf, path)?;
+        w.write_all(b"\t").map_err(|e| InputError::io(path, e))?;
+        write!(w, "{}", class_str(sis.class[cell_id]))
+            .map_err(|e| InputError::io(path, e))?;
+        for v in [
+            sis.p_missplicing[cell_id],
+            sis.p_imbalance[cell_id],
+            sis.p_entropy_z[cell_id],
+            sis.p_entropy_abs[cell_id],
+            isoform.entropy[cell_id],
+            isoform.dispersion[cell_id],
+            missplicing.burden[cell_id],
+            imbalance.imbalance[cell_id],
+            coupling.coupling_stress[cell_id],
+            exon_intron.exon_definition_bias[cell_id],
+            assembly.ea_imbalance[cell_id],
+            assembly.b_imbalance[cell_id],
+            assembly.cat_imbalance[cell_id],
+            splicing_instability.splice_core[cell_id],
+            splicing_instability.rbp_core[cell_id],
+            splicing_instability.rloop_resolve_core[cell_id],
+            splicing_instability.conflict_risk_core[cell_id],
+            splicing_instability.nmd_core[cell_id],
+            splicing_instability.sos[cell_id],
+            splicing_instability.rlr[cell_id],
+            splicing_instability.sii[cell_id],
+        ] {
+            w.write_all(b"\t").map_err(|e| InputError::io(path, e))?;
+            write_f32(&mut w, v, &mut buf, path)?;
+        }
+        for v in [
+            splicing_instability.splice_overload_high[cell_id],
+            splicing_instability.rloop_risk_high[cell_id],
+            splicing_instability.splicing_instability_high[cell_id],
+            splicing_instability.genome_instability_splicing_flag[cell_id],
+        ] {
+            w.write_all(b"\t").map_err(|e| InputError::io(path, e))?;
+            w.write_all(if v { b"true" } else { b"false" })
+                .map_err(|e| InputError::io(path, e))?;
+        }
+        w.write_all(b"\n").map_err(|e| InputError::io(path, e))?;
     }
 
-    std::fs::write(path, out).map_err(|e| InputError::io(path, e))?;
+    w.flush().map_err(|e| InputError::io(path, e))?;
     Ok(())
 }
 
@@ -73,14 +87,7 @@ pub fn header() -> &'static str {
     HEADER
 }
 
-fn fmt_f32(value: f32) -> String {
-    if value.is_finite() {
-        value.to_string()
-    } else {
-        String::new()
-    }
-}
-
+#[inline]
 fn class_str(class: SpliceIntegrityClass) -> &'static str {
     match class {
         SpliceIntegrityClass::Intact => "Intact",
@@ -90,6 +97,27 @@ fn class_str(class: SpliceIntegrityClass) -> &'static str {
     }
 }
 
-fn fmt_bool(value: bool) -> &'static str {
-    if value { "true" } else { "false" }
+/// Scratch buffer for float→ascii formatting. Reused across the row loop to
+/// avoid per-field String allocations (was ~29 × n_cells `format!()` calls).
+#[inline]
+fn ryu_buf() -> String {
+    String::with_capacity(32)
+}
+
+#[inline]
+fn write_f32<W: Write>(
+    w: &mut W,
+    value: f32,
+    buf: &mut String,
+    path: &Path,
+) -> Result<(), InputError> {
+    use std::fmt::Write as _;
+    buf.clear();
+    if value.is_finite() {
+        // Preserves f32 round-trip; matches `value.to_string()` from previous impl
+        // to keep the deterministic_output_hash test stable.
+        let _ = write!(buf, "{}", value);
+    }
+    w.write_all(buf.as_bytes()).map_err(|e| InputError::io(path, e))?;
+    Ok(())
 }

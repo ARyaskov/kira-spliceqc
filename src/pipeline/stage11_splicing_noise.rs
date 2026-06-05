@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::time::Instant;
 
 use tracing::{debug, info, warn};
@@ -6,7 +5,7 @@ use tracing::{debug, info, warn};
 use crate::input::error::InputError;
 use crate::model::geneset_activity::GenesetActivityMatrix;
 use crate::model::splicing_noise::SplicingNoiseMetrics;
-use crate::stats::robust::{mad, median};
+use crate::stats::robust::{extract_geneset_slice, mad, median};
 
 const EPS: f32 = 1e-6;
 
@@ -24,14 +23,11 @@ pub fn run_stage11(activity: &GenesetActivityMatrix) -> Result<SplicingNoiseMetr
 }
 
 pub fn compute(activity: &GenesetActivityMatrix) -> Result<SplicingNoiseMetrics, InputError> {
-    info!(genesets = ?activity.genesets, "splicing noise genesets resolved");
+    debug!(genesets = ?activity.genesets, "splicing noise genesets resolved");
 
     let start = Instant::now();
 
-    let mut id_to_idx = HashMap::new();
-    for (idx, id) in activity.genesets.iter().enumerate() {
-        id_to_idx.insert(id.as_str(), idx);
-    }
+    let id_to_idx = super::stage4_missplicing::build_id_index(activity);
 
     let mut present = 0usize;
     let mut used = 0usize;
@@ -41,8 +37,8 @@ pub fn compute(activity: &GenesetActivityMatrix) -> Result<SplicingNoiseMetrics,
     for &id in CORE {
         if let Some(&idx) = id_to_idx.get(id) {
             present += 1;
-            let values = extract_geneset(activity, idx);
-            let noise = compute_noise(id, &values);
+            let values = extract_geneset_slice(&activity.values, idx, activity.n_cells);
+            let noise = compute_noise(id, values);
             if noise.is_finite() {
                 sum += noise;
                 used += 1;
@@ -57,17 +53,12 @@ pub fn compute(activity: &GenesetActivityMatrix) -> Result<SplicingNoiseMetrics,
         return Err(InputError::InsufficientSplicingNoiseGenesets);
     }
 
-    let noise_index = if used > 0 {
-        sum / used as f32
-    } else {
-        f32::NAN
-    };
-
+    let noise_index = if used > 0 { sum / used as f32 } else { f32::NAN };
     per_geneset_noise.sort_by(|a, b| a.0.cmp(&b.0));
 
-    info!(genesets_used = used, "splicing noise index computed");
-    debug!(
+    info!(
         elapsed_ms = start.elapsed().as_millis(),
+        genesets_used = used,
         "splicing noise computed"
     );
 
@@ -75,15 +66,6 @@ pub fn compute(activity: &GenesetActivityMatrix) -> Result<SplicingNoiseMetrics,
         noise_index,
         per_geneset_noise,
     })
-}
-
-fn extract_geneset(activity: &GenesetActivityMatrix, idx: usize) -> Vec<f32> {
-    let n_cells = activity.n_cells;
-    let mut values = Vec::with_capacity(n_cells);
-    let start = idx * n_cells;
-    let end = start + n_cells;
-    values.extend_from_slice(&activity.values[start..end]);
-    values
 }
 
 fn compute_noise(geneset_id: &str, values: &[f32]) -> f32 {

@@ -607,9 +607,12 @@ pub fn write_json(
         cell_cycle_guardrail: None,
     };
 
-    let data =
-        serde_json::to_vec(&output).map_err(|e| InputError::OutputSerialization(e.to_string()))?;
-    std::fs::write(path, data).map_err(|e| InputError::io(path, e))?;
+    let file = std::fs::File::create(path).map_err(|e| InputError::io(path, e))?;
+    let mut w = std::io::BufWriter::with_capacity(1 << 16, file);
+    serde_json::to_writer(&mut w, &output)
+        .map_err(|e| InputError::OutputSerialization(e.to_string()))?;
+    use std::io::Write;
+    w.flush().map_err(|e| InputError::io(path, e))?;
     Ok(())
 }
 

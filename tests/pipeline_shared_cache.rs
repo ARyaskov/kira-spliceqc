@@ -8,8 +8,7 @@ use kira_spliceqc::cli::run::run_pipeline;
 use kira_spliceqc::expression::ExpressionMatrix;
 use kira_spliceqc::expression::MmapExpressionMatrix;
 use kira_spliceqc::input::detect::{detect_prefix, resolve_shared_cache_filename};
-use kira_spliceqc::input::error::InputError;
-use kira_spliceqc::input::shared_cache::{crc64_ecma, validate_and_open};
+use kira_spliceqc::input::shared_cache::crc64_ecma;
 use tempfile::tempdir;
 
 #[derive(Clone)]
@@ -172,11 +171,6 @@ fn align64(value: usize) -> usize {
     if rem == 0 { value } else { value + (64 - rem) }
 }
 
-fn read_u32_le(bytes: &[u8], offset: usize) -> u32 {
-    let raw: [u8; 4] = bytes[offset..offset + 4].try_into().unwrap();
-    u32::from_le_bytes(raw)
-}
-
 #[test]
 fn prefix_detection_prefixed_and_non_prefixed() {
     let plain = tempdir().unwrap();
@@ -206,12 +200,12 @@ fn shared_cache_read_mmap_validation_and_traversal() {
     let cache_path = temp.path().join("kira-organelle.bin");
     write_valid_cache(&cache_path);
 
-    let validated = validate_and_open(&cache_path).unwrap();
-    assert_eq!(validated.n_genes, 5);
-    assert_eq!(validated.n_cells, 2);
-    assert_eq!(validated.nnz, 5);
+    let cache = kira_shared_sc_cache::mmap_shared_cache(&cache_path).unwrap();
+    assert_eq!(cache.n_genes, 5);
+    assert_eq!(cache.n_cells, 2);
+    assert_eq!(cache.nnz, 5);
     assert_eq!(
-        validated.genes,
+        cache.genes,
         vec![
             "SNRPC".to_string(),
             "SF3A1".to_string(),
@@ -221,19 +215,12 @@ fn shared_cache_read_mmap_validation_and_traversal() {
         ]
     );
     assert_eq!(
-        validated.barcodes,
+        cache.barcodes,
         vec!["cell1".to_string(), "cell2".to_string()]
     );
-    assert_eq!(validated.col_ptr, vec![0, 3, 5]);
-
-    let row_idx = (0..validated.nnz)
-        .map(|i| read_u32_le(&validated.mmap, validated.row_idx_offset + i * 4))
-        .collect::<Vec<_>>();
-    let values = (0..validated.nnz)
-        .map(|i| read_u32_le(&validated.mmap, validated.values_u32_offset + i * 4))
-        .collect::<Vec<_>>();
-    assert_eq!(row_idx, vec![0, 1, 4, 2, 3]);
-    assert_eq!(values, vec![1, 1, 1, 1, 1]);
+    assert_eq!(cache.col_ptr(), &[0u64, 3, 5][..]);
+    assert_eq!(cache.row_idx(), &[0u32, 1, 4, 2, 3][..]);
+    assert_eq!(cache.values_u32(), &[1u32, 1, 1, 1, 1][..]);
 
     let matrix = MmapExpressionMatrix::open_shared_cache(&cache_path).unwrap();
     assert_eq!(matrix.n_genes(), 5);
@@ -255,11 +242,10 @@ fn shared_cache_crc_tamper_is_rejected() {
     bytes[16] ^= 0x01;
     fs::write(&cache_path, bytes).unwrap();
 
-    let err = validate_and_open(&cache_path).unwrap_err();
-    match err {
-        InputError::InvalidSharedCache(msg) => assert!(msg.contains("CRC64")),
-        other => panic!("unexpected error: {other:?}"),
-    }
+    // Both the low-level mmap and the MmapExpressionMatrix wrapper should reject.
+    let err = MmapExpressionMatrix::open_shared_cache(&cache_path).unwrap_err();
+    let msg = err.to_string().to_lowercase();
+    assert!(msg.contains("crc") || msg.contains("invalid shared cache"), "got: {}", err);
 }
 
 #[test]

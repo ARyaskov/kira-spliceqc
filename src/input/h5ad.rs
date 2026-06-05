@@ -16,6 +16,7 @@ pub struct H5ADValidation {
 }
 
 pub fn validate(path: &Path) -> Result<H5ADValidation, InputError> {
+    // Cheap metadata-only probe; stage 1 will do the full read once.
     let reader = Reader::with_options(
         path,
         ReaderOptions {
@@ -23,12 +24,12 @@ pub fn validate(path: &Path) -> Result<H5ADValidation, InputError> {
             strict: true,
         },
     );
-    let canonical = reader
-        .read_all()
+    let metadata = reader
+        .read_metadata()
         .map_err(|e| InputError::UnsupportedInput(e.message))?;
 
-    let n_cells = canonical.matrix.n_cells;
-    let n_genes = canonical.matrix.n_genes;
+    let n_genes = metadata.n_genes;
+    let n_cells = metadata.n_cells;
     check_dims(n_genes, n_cells)?;
 
     Ok(H5ADValidation {

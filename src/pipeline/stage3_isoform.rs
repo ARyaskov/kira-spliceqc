@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::time::Instant;
 
+use rayon::prelude::*;
 use tracing::{debug, info, warn};
 
 use crate::expression::ExpressionMatrix;
@@ -13,12 +14,7 @@ use crate::stats::robust::{mad, median};
 const EPS: f32 = 1e-12;
 
 const REGULATOR_SET_IDS: &[&str] = &[
-    "SRSF_SR",
-    "HNRNP",
-    "U1_CORE",
-    "U2_CORE",
-    "SF3B_AXIS",
-    "MINOR_U12",
+    "SRSF_SR", "HNRNP", "U1_CORE", "U2_CORE", "SF3B_AXIS", "MINOR_U12",
 ];
 
 pub fn run_stage3(matrix: &dyn ExpressionMatrix) -> Result<IsoformDispersionMetrics, InputError> {
@@ -36,55 +32,72 @@ pub fn compute(
     info!(regulators = n_reg, "regulator union size");
 
     let n_cells = matrix.n_cells();
+    let ln_r = (n_reg as f32).ln();
+
+    let start = Instant::now();
+
+    // One sparse pass per cell collects cp10k(reg, cell) values, then computes
+    // sum / entropy / dispersion in the same pass. Was: two passes × bin-search.
     let mut entropy = vec![f32::NAN; n_cells];
     let mut dispersion = vec![f32::NAN; n_cells];
 
-    let start = Instant::now();
-    let ln_r = (n_reg as f32).ln();
-    let mut zero_count = 0usize;
+    entropy
+        .par_iter_mut()
+        .zip(dispersion.par_iter_mut())
+        .enumerate()
+        .for_each_init(
+            || Vec::<f32>::with_capacity(n_reg),
+            |scratch, (cell, (ent_out, disp_out))| {
+                scratch.clear();
+                // cp10k = log_cp10k.exp() - 1 — but we want cp10k itself. Use the
+                // matrix's gather (log_cp10k) and back-transform with expm1 to
+                // recover cp10k without a second binary search.
+                matrix.gather_panel_log_cp10k(&regulator_genes, cell, scratch);
 
-    for cell in 0..n_cells {
-        let mut sum = 0.0f32;
-        for &gene_id in &regulator_genes {
-            sum += matrix.cp10k(gene_id as usize, cell);
-        }
-        if sum <= 0.0 {
-            zero_count += 1;
-            entropy[cell] = f32::NAN;
-            dispersion[cell] = f32::NAN;
-            continue;
-        }
+                let mut sum = 0.0_f32;
+                for v in scratch.iter() {
+                    sum += v.exp() - 1.0;
+                }
+                if sum <= 0.0 {
+                    *ent_out = f32::NAN;
+                    *disp_out = f32::NAN;
+                    return;
+                }
 
-        let mut h = 0.0f32;
-        let mut q = 0.0f32;
-        for &gene_id in &regulator_genes {
-            let y = matrix.cp10k(gene_id as usize, cell);
-            let p = y / (sum + EPS);
-            h -= p * (p + EPS).ln();
-            q += p * p;
-        }
-        entropy[cell] = if ln_r > 0.0 { h / ln_r } else { f32::NAN };
-        dispersion[cell] = (1.0 / (q + EPS)) / n_reg as f32;
-    }
+                let mut h = 0.0_f32;
+                let mut q = 0.0_f32;
+                let inv_sum_eps = 1.0 / (sum + EPS);
+                for v in scratch.iter() {
+                    let y = v.exp() - 1.0;
+                    let p = y * inv_sum_eps;
+                    h -= p * (p + EPS).ln();
+                    q += p * p;
+                }
+                *ent_out = if ln_r > 0.0 { h / ln_r } else { f32::NAN };
+                *disp_out = (1.0 / (q + EPS)) / n_reg as f32;
+            },
+        );
 
+    let zero_count = entropy.iter().filter(|v| v.is_nan()).count();
     if zero_count > 0 {
         warn!(
             zero_cells = zero_count,
-            "cells with zero regulator expression"
+            "cells with zero regulator expression or undefined entropy"
         );
     }
 
     let med = median(&entropy);
     let mad_val = mad(&entropy, med) * 1.4826 + EPS;
-    let mut z_entropy = vec![f32::NAN; n_cells];
-    for cell in 0..n_cells {
-        let value = entropy[cell];
-        if value.is_finite() && med.is_finite() && mad_val.is_finite() {
-            z_entropy[cell] = (value - med) / mad_val;
-        } else {
-            z_entropy[cell] = f32::NAN;
-        }
-    }
+    let z_entropy: Vec<f32> = entropy
+        .iter()
+        .map(|&value| {
+            if value.is_finite() && med.is_finite() && mad_val.is_finite() {
+                (value - med) / mad_val
+            } else {
+                f32::NAN
+            }
+        })
+        .collect();
 
     debug!(
         elapsed_ms = start.elapsed().as_millis(),
@@ -111,6 +124,6 @@ fn build_regulator_union(catalog: &GenesetCatalog) -> Result<Vec<u32>, InputErro
         return Err(InputError::EmptyRegulatorSet);
     }
     let mut ids_vec: Vec<u32> = ids.into_iter().collect();
-    ids_vec.sort();
+    ids_vec.sort_unstable();
     Ok(ids_vec)
 }
