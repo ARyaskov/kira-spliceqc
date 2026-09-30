@@ -21,6 +21,7 @@ use crate::model::splicing_noise::SplicingNoiseMetrics;
 use crate::model::timecourse::{SplicingTrajectoryClass, TimecourseSplicingMetrics};
 use crate::model::intron_retention::IntronRetentionMetrics;
 use crate::model::unspliced::UnsplicedMetrics;
+use crate::output::provenance::Provenance;
 use crate::reference::{MIN_STRATUM_CELLS, Strata};
 
 /// Bumped to 2.0 in v0.3: expression-signature keys carry the `_expr`
@@ -64,6 +65,7 @@ struct JsonOutput<'a> {
     intron_retention: Option<JsonIntronRetentionStage>,
     /// Reference strata used for `_dev` metrics and outlier flags.
     reference: JsonReference,
+    provenance: &'a Provenance,
 }
 
 #[derive(Serialize)]
@@ -487,6 +489,7 @@ pub fn write_json(
     intron_retention: Option<&IntronRetentionMetrics>,
     cell_cycle: &CellCycleMetrics,
     strata: &Strata,
+    provenance: &Provenance,
     experimental: bool,
 ) -> Result<(), InputError> {
     let n_cells = cell_names.len();
@@ -910,6 +913,7 @@ pub fn write_json(
                 .collect(),
             labels: strata.labels.clone(),
         },
+        provenance,
     };
 
     let file = std::fs::File::create(path).map_err(|e| InputError::io(path, e))?;

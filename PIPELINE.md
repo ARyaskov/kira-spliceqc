@@ -92,6 +92,16 @@ Runtime order in `run_pipeline`:
 - Stage 7: final output serialization
 - Pipeline contract generation (`summary.json`, `pipeline_step.json`, `panels_report.tsv`, contract `spliceqc.tsv`) only in `--run-mode pipeline`
 
+## Provenance
+
+`summary.json.provenance` and `cells.json.provenance` carry the tool version
+and SIMD backend, the command (input, run mode, flags, paths), the geneset
+catalog source and CRC-64/ECMA, the stage-15 panel version, the reference file
+hash when one was used, the input levels, the reference mode/column/strata,
+every model constant (control genes per panel gene, minimum stratum size,
+depth bins, deviation threshold, FDR, Tier A thresholds and prior) and the
+number of cells with undefined values per metric.
+
 ## Output directories and artifacts
 
 ### Standalone mode

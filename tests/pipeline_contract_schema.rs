@@ -88,6 +88,21 @@ fn summary_json_schema() {
             || v["splicing_instability"]["global_stats"]["sos_p50"].is_null()
     );
     assert!(v["splicing_instability"]["missingness"]["panel_coverage"].is_array());
+
+    // Provenance: tool, command, catalog hash, parameters, undefined counts.
+    let p = &v["provenance"];
+    assert_eq!(p["tool"]["name"], "kira-spliceqc");
+    assert_eq!(p["command"]["run_mode"], "pipeline");
+    assert_eq!(p["command"]["experimental_signatures"], true);
+    assert!(p["geneset_catalog"]["crc64"].as_str().unwrap().len() == 16);
+    assert!(p["geneset_catalog"]["source"].is_string());
+    assert_eq!(p["input_levels"], serde_json::json!(["L0"]));
+    assert_eq!(p["reference"]["mode"], "global");
+    assert_eq!(p["parameters"]["controls_per_gene"], 50);
+    assert_eq!(p["parameters"]["min_stratum_cells"], 50);
+    assert!(p["undefined_cells"]["sis"].is_number());
+    assert!(p["undefined_cells"]["unspliced_fraction"].is_null());
+    assert!(p.get("reference_file").is_none());
 }
 
 #[test]

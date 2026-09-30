@@ -11,7 +11,9 @@ use crate::expression::ExpressionMatrix;
 use crate::genesets::{Geneset, GenesetCatalog};
 use crate::input::error::InputError;
 
-const EMBEDDED_SPLICE_GENESETS: &str = include_str!(concat!(
+/// The catalog compiled into the binary, used when no file is found at the
+/// catalog path. Exposed so provenance can hash whichever source was used.
+pub const EMBEDDED_SPLICE_GENESETS: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/resources/genesets/splicing_genesets.tsv"
 ));

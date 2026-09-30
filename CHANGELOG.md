@@ -36,6 +36,9 @@ Phase 1 of the scientific roadmap (Tier A, direct splicing measurements).
   13 and 15. Null-model library-size correlations of the expression
   signatures drop from 0.4-0.7 to below 0.1; a zero MAD in a bin now gives
   undefined z-scores instead of silent zeros.
+- Provenance block in `summary.json` and `cells.json`: tool version,
+  command line, catalog and reference-file CRC-64, input levels, reference
+  mode, every model constant and per-metric undefined-cell counts.
 - External reference: `kira-spliceqc reference build --input CONTROL --out
   ref.json` stores per-stratum Tier A norms (logit median and
   overdispersion of the unspliced fraction, median and overdispersion of

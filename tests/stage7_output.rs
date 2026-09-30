@@ -1,6 +1,10 @@
 use std::fs;
 
+use std::path::PathBuf;
+
+use kira_spliceqc::cli::config::{AnalysisMode, RunConfig, RunMode};
 use kira_spliceqc::model::assembly_phase::AssemblyPhaseImbalanceMetrics;
+use kira_spliceqc::output::provenance::{self, FileInfo, Provenance};
 use kira_spliceqc::model::cell_cycle::{CellCycleMetrics, CellCyclePhase};
 use kira_spliceqc::model::coupling::CouplingStressMetrics;
 use kira_spliceqc::model::exon_intron_bias::ExonIntronDefinitionMetrics;
@@ -16,6 +20,26 @@ use kira_spliceqc::output::{json, summary, tsv};
 use kira_spliceqc::pipeline::stage7_output::{OutputOptions, run_stage7};
 use kira_spliceqc::reference::Strata;
 use tempfile::tempdir;
+
+fn make_provenance(strata: &Strata, sis: &SpliceIntegrityMetrics, si: &SplicingInstabilityMetrics, cc: &CellCycleMetrics) -> Provenance {
+    let config = RunConfig {
+        input: PathBuf::from("test"),
+        out_dir: PathBuf::from("out"),
+        cache_path: None,
+        layers: None,
+        metadata: None,
+        stratify_by: None,
+        reference: None,
+        mode: AnalysisMode::Cell,
+        run_mode: RunMode::Standalone,
+        output_json: true,
+        output_tsv: true,
+        extended: false,
+        threads: None,
+        experimental_signatures: true,
+    };
+    provenance::build(&config, FileInfo::of_bytes("test", b"catalog"), None, false, strata, sis, si, None, None, cc)
+}
 
 fn make_cell_cycle(n: usize) -> CellCycleMetrics {
     CellCycleMetrics {
@@ -205,6 +229,7 @@ fn json_schema_sanity() {
         None,
         &make_cell_cycle(2),
         &Strata::global(2),
+        &make_provenance(&Strata::global(2), &sis, &splicing_instability, &make_cell_cycle(2)),
         true,
     )
     .unwrap();
@@ -322,6 +347,7 @@ fn json_deterministic_bytes() {
         None,
         &make_cell_cycle(2),
         &Strata::global(2),
+        &make_provenance(&Strata::global(2), &sis, &splicing_instability, &make_cell_cycle(2)),
         false,
     )
     .unwrap();
@@ -344,6 +370,7 @@ fn json_deterministic_bytes() {
         None,
         &make_cell_cycle(2),
         &Strata::global(2),
+        &make_provenance(&Strata::global(2), &sis, &splicing_instability, &make_cell_cycle(2)),
         false,
     )
     .unwrap();
@@ -386,6 +413,7 @@ fn run_stage7_outputs() {
         None,
         &make_cell_cycle(1),
         &Strata::global(1),
+        &make_provenance(&Strata::global(1), &sis, &splicing_instability, &make_cell_cycle(1)),
         OutputOptions {
             json: false,
             tsv: false,

@@ -11,6 +11,8 @@ use crate::genesets::controls::ControlPool;
 use crate::genesets::load_catalog;
 use crate::metrics::splicing_instability::panel_gene_ids as instability_panel_gene_ids;
 use crate::input::error::InputError;
+use crate::genesets::loader::EMBEDDED_SPLICE_GENESETS;
+use crate::output::provenance::{self, FileInfo};
 use crate::output::pipeline_contract;
 use crate::pipeline::stage0_input::run_stage0_with_layers;
 use crate::pipeline::stage1_expression::{Stage1Output, run_stage1_full};
@@ -130,6 +132,15 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
     // (previously stages 2, 3 and pipeline contract each reloaded it).
     let catalog_path = default_catalog_path();
     let catalog = load_catalog(&catalog_path, &stage1)?;
+    let catalog_info = FileInfo::of_path(&catalog_path).unwrap_or_else(|| {
+        FileInfo::of_bytes("embedded://splicing_genesets.tsv", EMBEDDED_SPLICE_GENESETS.as_bytes())
+    });
+    info!(
+        target: "kira_spliceqc::cli::run",
+        source = catalog_info.source.as_str(),
+        crc64 = catalog_info.crc64.as_str(),
+        "geneset catalog"
+    );
 
     // Control-gene pool for depth correction: every gene of any splicing panel
     // is excluded from the pool (see genesets::controls).
@@ -219,6 +230,19 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
         info!(target: "kira_spliceqc::cli::run", "skipping Stage 14 (no timecourse metadata)");
     }
 
+    let provenance = provenance::build(
+        &config,
+        catalog_info,
+        config.reference.as_deref().and_then(FileInfo::of_path),
+        context.stage1_layers.is_some(),
+        &strata,
+        &context.stage6,
+        &context.stage15,
+        context.stage16.as_ref(),
+        context.stage17.as_ref(),
+        &context.stage18,
+    );
+
     let summary = run_logged(7, || {
         run_stage7(
             &effective_out_dir,
@@ -239,6 +263,7 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
             context.stage17.as_ref(),
             &context.stage18,
             &strata,
+            &provenance,
             OutputOptions {
                 json: config.output_json,
                 tsv: config.output_tsv,
@@ -265,7 +290,7 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
             context.stage17.as_ref(),
             &context.stage18,
             &strata,
-            config.reference.as_deref(),
+            &provenance,
             &catalog,
         )?;
         info!(

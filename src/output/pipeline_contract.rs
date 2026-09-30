@@ -19,6 +19,7 @@ use crate::model::missplicing::MissplicingMetrics;
 use crate::model::sis::SpliceIntegrityMetrics;
 use crate::model::intron_retention::IntronRetentionMetrics;
 use crate::model::unspliced::UnsplicedMetrics;
+use crate::output::provenance::Provenance;
 use crate::reference::{MIN_STRATUM_CELLS, Strata};
 use crate::model::splicing_instability::{
     RLOOP_RISK_HIGH_THRESHOLD, SPLICE_OVERLOAD_HIGH_THRESHOLD, SPLICING_INSTABILITY_HIGH_THRESHOLD,
@@ -63,7 +64,7 @@ pub struct PipelineCellRow {
 }
 
 #[derive(Serialize)]
-struct SummaryJson {
+struct SummaryJson<'a> {
     tool: ToolJson,
     input: InputJson,
     distributions: DistributionsJson,
@@ -78,6 +79,7 @@ struct SummaryJson {
     reference: ReferenceJson,
     /// Cell-cycle confounder summary.
     cell_cycle: CellCycleSummaryJson,
+    provenance: &'a Provenance,
 }
 
 #[derive(Serialize)]
@@ -337,7 +339,7 @@ pub fn write_pipeline_contract(
     intron_retention: Option<&IntronRetentionMetrics>,
     cell_cycle: &CellCycleMetrics,
     strata: &Strata,
-    reference_file: Option<&Path>,
+    provenance: &Provenance,
     catalog: &GenesetCatalog,
 ) -> Result<(), InputError> {
     info!("pipeline contract: building rows");
@@ -356,7 +358,7 @@ pub fn write_pipeline_contract(
         intron_retention,
         cell_cycle,
         strata,
-        reference_file,
+        provenance,
         detect_species(matrix),
     )?;
     info!("pipeline contract: writing pipeline_step.json");
@@ -588,9 +590,10 @@ fn write_summary_json(
     intron_retention: Option<&IntronRetentionMetrics>,
     cell_cycle: &CellCycleMetrics,
     strata: &Strata,
-    reference_file: Option<&Path>,
+    provenance: &Provenance,
     species: &'static str,
 ) -> Result<(), InputError> {
+    let reference_file = provenance.command.reference.as_deref();
     let mut fidelity = rows
         .iter()
         .map(|r| r.splice_fidelity_index)
@@ -722,7 +725,7 @@ fn write_summary_json(
         reference: ReferenceJson {
             mode: strata.mode.as_str(),
             column: strata.column.clone(),
-            external_file: reference_file.map(|p| p.display().to_string()),
+            external_file: reference_file.map(str::to_string),
             external_metrics: if reference_file.is_some() {
                 vec!["unspliced_fraction", "intron_retention_index"]
             } else {
@@ -756,6 +759,7 @@ fn write_summary_json(
                 },
             }
         },
+        provenance,
     };
 
     let file = File::create(path).map_err(|e| InputError::io(path, e))?;

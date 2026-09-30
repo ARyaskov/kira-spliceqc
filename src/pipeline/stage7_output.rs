@@ -20,6 +20,7 @@ use crate::model::timecourse::TimecourseSplicingMetrics;
 use crate::model::intron_retention::IntronRetentionMetrics;
 use crate::model::unspliced::UnsplicedMetrics;
 use crate::reference::Strata;
+use crate::output::provenance::Provenance;
 use crate::output::{json, summary, tsv};
 
 pub struct OutputOptions {
@@ -49,6 +50,7 @@ pub fn run_stage7(
     intron_retention: Option<&IntronRetentionMetrics>,
     cell_cycle: &CellCycleMetrics,
     strata: &Strata,
+    provenance: &Provenance,
     options: OutputOptions,
 ) -> Result<String, InputError> {
     if cell_cycle.phase.len() != cell_names.len() {
@@ -111,6 +113,7 @@ pub fn run_stage7(
             intron_retention,
             cell_cycle,
             strata,
+            provenance,
             options.experimental,
         )?;
         info!("wrote {}", path.display());
