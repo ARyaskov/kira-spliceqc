@@ -18,6 +18,7 @@ use rayon::prelude::*;
 use tracing::{info, warn};
 
 use crate::expression::ExpressionMatrix;
+use crate::genesets::aliases::{resolve_symbol, symbol_index};
 use crate::genesets::controls::ControlPool;
 use crate::model::cell_cycle::{CellCycleMetrics, CellCyclePhase};
 
@@ -40,14 +41,6 @@ pub const G2M_GENES: &[&str] = &[
     "GAS2L3", "CBX5", "CENPA",
 ];
 
-/// Legacy symbols of the same genes (older annotations).
-pub const CELL_CYCLE_ALIASES: &[(&str, &str)] = &[
-    ("MLF1IP", "CENPU"),
-    ("RPA2", "POLR1B"),
-    ("FAM64A", "PIMREG"),
-    ("HN1", "JPT1"),
-];
-
 /// Minimum mapped genes per list for the scores to be defined.
 pub const MIN_GENES_PER_LIST: usize = 10;
 
@@ -58,23 +51,12 @@ pub fn cell_cycle_gene_ids(matrix: &dyn ExpressionMatrix) -> Vec<u32> {
 }
 
 fn resolve(matrix: &dyn ExpressionMatrix) -> (Vec<u32>, Vec<u32>) {
-    let mut index: ahash::AHashMap<String, u32> = ahash::AHashMap::with_capacity(matrix.n_genes());
-    for g in 0..matrix.n_genes() {
-        index
-            .entry(matrix.gene_symbol(g).to_ascii_uppercase())
-            .or_insert(g as u32);
-    }
+    // Legacy symbols (MLF1IP, RPA2, FAM64A, HN1) resolve through the shared alias table.
+    let index = symbol_index(matrix);
     let lookup = |symbols: &[&str]| -> Vec<u32> {
         let mut ids: Vec<u32> = symbols
             .iter()
-            .filter_map(|s| {
-                index.get(*s).copied().or_else(|| {
-                    CELL_CYCLE_ALIASES
-                        .iter()
-                        .find(|(_, current)| current == s)
-                        .and_then(|(legacy, _)| index.get(*legacy).copied())
-                })
-            })
+            .filter_map(|s| resolve_symbol(&index, s).map(|(id, _)| id))
             .collect();
         ids.sort_unstable();
         ids.dedup();

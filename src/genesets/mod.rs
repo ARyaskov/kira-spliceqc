@@ -16,6 +16,7 @@ pub struct GenesetCatalog {
     pub genesets: Vec<Geneset>,
 }
 
+pub mod aliases;
 pub mod catalog;
 pub mod controls;
 pub mod loader;

@@ -139,6 +139,15 @@ dependence).
 
 These are deterministic expression-only metrics (no timepoints, no ML). Per-cell values and flags are appended to stage-7 TSV/JSON outputs, and pipeline `summary.json` includes a `splicing_instability` block with thresholds, robust z-score references, quantiles, and missingness.
 
+## Gene symbols and species
+
+Panels are written with current HGNC symbols. Matching is case-insensitive
+(mouse `Srsf1` resolves) and falls back to a table of legacy aliases
+(`SFRS1` -> `SRSF1`, `ASCC3L1` -> `SNRNP200`, `U2AF65` -> `U2AF2`, ...), so
+datasets on older annotations do not silently lose panels. The species in
+`summary.json` is inferred from symbol casing (`human` / `mouse` / `unknown`).
+Ensembl-ID matching is not yet available.
+
 ## Depth correction and reference strata
 
 Panel scores subtract a control-gene background (50 genes of matching mean

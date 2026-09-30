@@ -2,6 +2,7 @@ use ahash::AHashMap;
 use rayon::prelude::*;
 
 use crate::expression::ExpressionMatrix;
+use crate::genesets::aliases::{resolve_symbol, symbol_index};
 use crate::genesets::controls::ControlPool;
 use crate::model::splicing_instability::{
     PanelCoverage, RLOOP_RISK_HIGH_THRESHOLD, SPLICE_OVERLOAD_HIGH_THRESHOLD,
@@ -41,12 +42,9 @@ pub fn compute(
 ) -> SplicingInstabilityMetrics {
     let n_cells = matrix.n_cells();
 
-    // Case-insensitive index, first occurrence wins. Matches loader behavior.
-    let mut symbol_to_idx: AHashMap<String, u32> = AHashMap::with_capacity(matrix.n_genes());
-    for gene_idx in 0..matrix.n_genes() {
-        let symbol = matrix.gene_symbol(gene_idx).to_ascii_uppercase();
-        symbol_to_idx.entry(symbol).or_insert(gene_idx as u32);
-    }
+    // Case-insensitive index with legacy aliases, first occurrence wins
+    // (same resolution as the geneset loader).
+    let symbol_to_idx = symbol_index(matrix);
 
     let splice_panel = resolve_panel("spliceosome_panel", SPLICEOSOME_PANEL, &symbol_to_idx);
     let rbp_panel = resolve_panel("splicing_rbp_panel", SPLICING_RBP_PANEL, &symbol_to_idx);
@@ -341,11 +339,7 @@ pub fn compute(
 
 /// Gene ids (in `matrix`) of every stage-15 panel gene, for control-pool exclusion.
 pub fn panel_gene_ids(matrix: &dyn ExpressionMatrix) -> Vec<u32> {
-    let mut symbol_to_idx: AHashMap<String, u32> = AHashMap::with_capacity(matrix.n_genes());
-    for gene_idx in 0..matrix.n_genes() {
-        let symbol = matrix.gene_symbol(gene_idx).to_ascii_uppercase();
-        symbol_to_idx.entry(symbol).or_insert(gene_idx as u32);
-    }
+    let symbol_to_idx = symbol_index(matrix);
     let mut ids = Vec::new();
     for panel in [SPLICEOSOME_PANEL, SPLICING_RBP_PANEL, RLOOP_RESOLUTION_PANEL, CONFLICT_RISK_PANEL, NMD_PANEL] {
         ids.extend(resolve_panel("", panel, &symbol_to_idx).gene_indices);
@@ -360,8 +354,8 @@ fn resolve_panel(
 ) -> ResolvedPanel {
     let mut gene_indices = Vec::with_capacity(genes.len());
     for symbol in genes {
-        if let Some(gene_idx) = symbol_to_idx.get(*symbol) {
-            gene_indices.push(*gene_idx);
+        if let Some((gene_idx, _)) = resolve_symbol(symbol_to_idx, symbol) {
+            gene_indices.push(gene_idx);
         }
     }
     // Sort for sparse-merge gather. Dedup defensive (panel literals shouldn't repeat).

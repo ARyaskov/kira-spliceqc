@@ -36,6 +36,11 @@ Phase 1 of the scientific roadmap (Tier A, direct splicing measurements).
   13 and 15. Null-model library-size correlations of the expression
   signatures drop from 0.4-0.7 to below 0.1; a zero MAD in a bin now gives
   undefined z-scores instead of silent zeros.
+- Legacy HGNC alias table for panel symbol resolution (SR proteins,
+  hnRNPs, snRNP/SF3 subunits, U2AF, NMD factors, cell-cycle genes) shared
+  by the geneset loader, the stage-15 panels and the cell-cycle scores;
+  `summary.json.input.species` and the contract `species` column are
+  inferred from symbol casing instead of always `unknown`.
 - Stage 18 cell-cycle annotation: Tirosh et al. 2016 S / G2M scores
   (control-gene corrected), Seurat-rule `cell_cycle_phase`, `cycling`
   flag and the `CYCLING` contract flag; `summary.json.cell_cycle` and

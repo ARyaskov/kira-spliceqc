@@ -3,8 +3,9 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
-use ahash::AHashMap;
 use tracing::{debug, info, warn};
+
+use crate::genesets::aliases::{resolve_symbol, symbol_index};
 
 use crate::expression::ExpressionMatrix;
 use crate::genesets::{Geneset, GenesetCatalog};
@@ -32,26 +33,27 @@ pub fn load_catalog(
         )?,
     }
 
-    // Case-insensitive index: matrix gene symbols may be mixed-case (mouse "Snrpb").
-    // First occurrence wins (matches stage15 splicing_instability behavior).
-    let mut symbol_to_id: AHashMap<String, u32> = AHashMap::with_capacity(matrix.n_genes());
-    for gene_id in 0..matrix.n_genes() {
-        let key = matrix.gene_symbol(gene_id).to_ascii_uppercase();
-        symbol_to_id.entry(key).or_insert(gene_id as u32);
-    }
+    // Case-insensitive index (mouse "Snrpb" resolves) with legacy HGNC
+    // aliases (older annotations: "SFRS1" for SRSF1). First occurrence wins.
+    let symbol_to_id = symbol_index(matrix);
 
     let mut genesets = Vec::with_capacity(entries.len());
+    let mut aliased_total = 0usize;
     for (id, (axis, mut symbols)) in entries {
         symbols.sort();
         symbols.dedup();
         let mut gene_ids = Vec::with_capacity(symbols.len());
         let mut missing = Vec::new();
         for symbol in symbols {
-            let key = symbol.to_ascii_uppercase();
-            if let Some(&gid) = symbol_to_id.get(&key) {
-                gene_ids.push(gid);
-            } else {
-                missing.push(symbol);
+            match resolve_symbol(&symbol_to_id, &symbol) {
+                Some((gid, via_alias)) => {
+                    if via_alias {
+                        aliased_total += 1;
+                        debug!(geneset_id = id.as_str(), symbol = symbol.as_str(), "resolved through a legacy alias");
+                    }
+                    gene_ids.push(gid);
+                }
+                None => missing.push(symbol),
             }
         }
         // Sorted by gene index → enables sparse merge in panel_log1p_sum.
@@ -74,6 +76,9 @@ pub fn load_catalog(
         });
     }
 
+    if aliased_total > 0 {
+        info!(aliased = aliased_total, "panel genes resolved through legacy symbol aliases");
+    }
     info!(genesets = genesets.len(), "geneset catalog loaded");
 
     Ok(GenesetCatalog { genesets })

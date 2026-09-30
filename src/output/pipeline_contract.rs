@@ -8,6 +8,7 @@ use serde::Serialize;
 use tracing::info;
 
 use crate::expression::ExpressionMatrix;
+use crate::genesets::aliases::detect_species;
 use crate::genesets::{Geneset, GenesetCatalog};
 use crate::input::InputDescriptor;
 use crate::input::error::InputError;
@@ -350,6 +351,7 @@ pub fn write_pipeline_contract(
         intron_retention,
         cell_cycle,
         strata,
+        detect_species(matrix),
     )?;
     info!("pipeline contract: writing pipeline_step.json");
     write_pipeline_step_json(&out_dir.join("pipeline_step.json"))?;
@@ -365,6 +367,7 @@ fn build_rows(
     cell_cycle: &CellCycleMetrics,
 ) -> Result<Vec<PipelineCellRow>, InputError> {
     let n_cells = matrix.n_cells();
+    let species = detect_species(matrix);
     if cell_cycle.cycling.len() != n_cells {
         return Err(InputError::LengthMismatch(
             "pipeline contract cell-cycle length mismatch".to_string(),
@@ -441,7 +444,7 @@ fn build_rows(
                 barcode,
                 sample: "unknown".to_string(),
                 condition: "unknown".to_string(),
-                species: "unknown".to_string(),
+                species: species.to_string(),
                 libsize,
                 nnz,
                 expressed_genes: nnz,
@@ -579,6 +582,7 @@ fn write_summary_json(
     intron_retention: Option<&IntronRetentionMetrics>,
     cell_cycle: &CellCycleMetrics,
     strata: &Strata,
+    species: &'static str,
 ) -> Result<(), InputError> {
     let mut fidelity = rows
         .iter()
@@ -624,7 +628,7 @@ fn write_summary_json(
         },
         input: InputJson {
             n_cells: input.n_cells,
-            species: "unknown",
+            species,
             levels: if unspliced.is_some() { vec!["L0", "L1"] } else { vec!["L0"] },
         },
         distributions: DistributionsJson {

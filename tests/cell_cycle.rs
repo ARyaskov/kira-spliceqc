@@ -127,3 +127,17 @@ fn top2a_is_no_longer_a_conflict_risk_gene() {
     assert!(!CONFLICT_RISK_PANEL.contains(&"TOP2A"));
     assert!(G2M_GENES.contains(&"TOP2A"));
 }
+
+#[test]
+fn species_is_inferred_from_symbol_casing() {
+    use kira_spliceqc::genesets::aliases::detect_species;
+    let human = dataset(10);
+    assert_eq!(detect_species(&human), "human");
+    let mut mouse = dataset(10);
+    for g in mouse.genes.iter_mut() {
+        let lower = g.to_ascii_lowercase();
+        let mut chars = lower.chars();
+        *g = chars.next().unwrap().to_ascii_uppercase().to_string() + chars.as_str();
+    }
+    assert_eq!(detect_species(&mouse), "mouse");
+}
