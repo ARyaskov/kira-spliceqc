@@ -158,3 +158,27 @@ fn deterministic_outputs() {
     assert_eq!(first.burden, second.burden);
     assert_eq!(first.burden_star, second.burden_star);
 }
+
+#[test]
+fn core_mean_uses_available_panels_when_one_core_panel_is_missing() {
+    // Only U1 and U2 present (SF3B_AXIS absent): the stage gate accepts two
+    // core panels, so b_core must be the mean of the two available z-scores
+    // rather than NaN.
+    let activity = make_activity(
+        vec!["U1_CORE", "U2_CORE", "SRSF_SR", "HNRNP", "MINOR_U12", "NMD_SURVEILLANCE"],
+        vec![
+            vec![1.0, 2.0, 3.0, 4.0, 10.0],
+            vec![1.0, 2.0, 3.0, 4.0, 10.0],
+            vec![0.5, 1.0, 1.5, 2.0, 2.5],
+            vec![0.5, 1.0, 1.5, 2.0, 2.5],
+            vec![0.5, 1.0, 1.5, 2.0, 2.5],
+            vec![0.5, 1.0, 1.5, 2.0, 2.5],
+        ],
+    );
+    let metrics = compute(&activity).unwrap();
+    let z = robust_z(&[1.0, 2.0, 3.0, 4.0, 10.0]);
+    let expected = (-(z[0] + z[0]) / 2.0).max(0.0);
+    assert!(metrics.b_core[0].is_finite());
+    assert!((metrics.b_core[0] - expected).abs() < 1e-5);
+    assert!(metrics.burden[0].is_finite());
+}

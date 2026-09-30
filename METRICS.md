@@ -62,7 +62,7 @@ Required panel ids:
 - `U1_CORE`, `U2_CORE`, `SF3B_AXIS`, `SRSF_SR`, `HNRNP`, `MINOR_U12`, `NMD_SURVEILLANCE`
 
 Using per-panel robust z-scores:
-- `b_core = relu(-mean(z_u1, z_u2, z_sf3b))`
+- `b_core = relu(-mean(finite values among z_u1, z_u2, z_sf3b))`; NaN if fewer than 2 are finite (matches the stage gate of >= 2 resolved core panels)
 - `b_u12 = relu(z_u12 - mean(z_u1, z_u2))`
 - `b_nmd = relu(z_nmd)`
 - `b_srhn = |z_srsf - z_hnrnp|`

@@ -9,6 +9,10 @@ use crate::model::geneset_activity::GenesetActivityMatrix;
 use crate::model::missplicing::MissplicingMetrics;
 use crate::stats::robust::{extract_geneset_slice, robust_z};
 
+/// Minimum number of resolved core panels (U1_CORE, U2_CORE, SF3B_AXIS) both
+/// for the stage gate and for the per-cell core mean.
+const MIN_CORE_PANELS: usize = 2;
+
 const REQUIRED_GENESETS: &[&str] = &[
     "U1_CORE",
     "U2_CORE",
@@ -49,7 +53,7 @@ pub fn compute(activity: &GenesetActivityMatrix) -> Result<MissplicingMetrics, I
         }
     }
 
-    if present_core < 2 {
+    if present_core < MIN_CORE_PANELS {
         return Err(InputError::InsufficientCoreGenesets);
     }
 
@@ -67,7 +71,11 @@ pub fn compute(activity: &GenesetActivityMatrix) -> Result<MissplicingMetrics, I
     let combined: Vec<(f32, f32, f32, f32, f32, f32)> = (0..n_cells)
         .into_par_iter()
         .map(|cell| {
-            let core_mean = mean3_opt(z_u1, z_u2, z_sf3b, cell);
+            // Mean over the core panels that are finite for this cell. The
+            // stage gate requires at least two resolved core panels, so the
+            // per-cell mean uses the same minimum instead of silently turning
+            // the whole burden into NaN when one panel is absent.
+            let core_mean = mean_available(&[z_u1, z_u2, z_sf3b], cell, MIN_CORE_PANELS);
             let b_core = relu(-core_mean);
 
             let u12_val = value_at_opt(z_u12, cell);
@@ -156,16 +164,20 @@ fn mean2_opt(a: Option<&Vec<f32>>, b: Option<&Vec<f32>>, cell: usize) -> f32 {
     }
 }
 
+/// Mean of the finite values among `series` at `cell`; NaN when fewer than
+/// `min_finite` of them are finite.
 #[inline]
-fn mean3_opt(a: Option<&Vec<f32>>, b: Option<&Vec<f32>>, c: Option<&Vec<f32>>, cell: usize) -> f32 {
-    let va = value_at_opt(a, cell);
-    let vb = value_at_opt(b, cell);
-    let vc = value_at_opt(c, cell);
-    if va.is_finite() && vb.is_finite() && vc.is_finite() {
-        (va + vb + vc) / 3.0
-    } else {
-        f32::NAN
+fn mean_available(series: &[Option<&Vec<f32>>], cell: usize, min_finite: usize) -> f32 {
+    let mut sum = 0.0_f32;
+    let mut n = 0usize;
+    for s in series {
+        let v = value_at_opt(*s, cell);
+        if v.is_finite() {
+            sum += v;
+            n += 1;
+        }
     }
+    if n >= min_finite { sum / n as f32 } else { f32::NAN }
 }
 
 #[inline]
