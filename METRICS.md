@@ -455,6 +455,14 @@ Flags:
 - `LOW_CONFIDENCE` if `confidence` is finite and `< 0.5`
 - `LOW_SPLICE_SIGNAL` if `nnz < 50`
 - `MISSING_METRICS` if any row metric is non-finite
+- `CYCLING` if `cell_cycle_phase` is `S` or `G2M`
+- `LOW_DEPTH` if `libsize < min_counts` (default 500) or `nnz < min_genes` (default 200)
+- `DOUBLET` if a doublet metadata column (`predicted_doublet`, `doublet`, `is_doublet`,
+  `scDblFinder.class`, `doublet_class`, `DF.classifications`) is truthy (`true`, `1`, `yes`, `doublet`)
+
+`LOW_DEPTH` and `DOUBLET` cells are excluded from every reference norm and get
+undefined `_dev` values and flags (`cells.tsv` columns `low_depth`, `doublet`;
+`summary.json.qc.low_depth_fraction` / `doublet_fraction`).
 
 Summary metrics in `summary.json`:
 - Distribution stats for fidelity/stress: `median`, `p90`, `p99`

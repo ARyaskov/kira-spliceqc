@@ -93,6 +93,7 @@ kira-spliceqc run --input ./sample --out ./out/sample --reference ./ref.json
 - `--metadata PATH`: cell metadata table (`barcode` + columns); auto-detected as `metadata.tsv[.gz]` next to a 10x directory, `.h5ad` inputs use `obs`.
 - `--stratify-by COLUMN`: metadata column defining reference strata (default: `cell_type`-like, then `cluster`-like columns, else one global stratum). Strata under 50 cells fold into `global`.
 - `--reference ref.json`: external reference (see above); `summary.json.reference` records the file and the metrics that used it.
+- `--min-counts N` (default 500) and `--min-genes N` (default 200): cells below either are flagged `LOW_DEPTH`, keep their raw metrics but get no deviations and are excluded from reference norms. A boolean-like metadata column (`predicted_doublet`, `doublet`, `is_doublet`, `scDblFinder.class`, ...) flags `DOUBLET` the same way.
 - `--extended`: enables stages 8-13 (`coupling`, `exon/intron`, `assembly`, `noise`, `cryptic risk`, `collapse`).
 - `--experimental-signatures`: writes the experimental composite signatures (`sis`/`class`, `SOS`/`RLR`/`SII` and their flags, cryptic risk, collapse) to the per-cell outputs. Off by default; implied by `--run-mode pipeline` because the pipeline contract is built on them.
 

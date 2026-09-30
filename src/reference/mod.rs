@@ -57,6 +57,9 @@ pub struct Strata {
     pub names: Vec<String>,
     /// Cells folded into the global stratum because their own was too small.
     pub folded_cells: usize,
+    /// Cells left out of every norm computation (low depth, doublets). They
+    /// keep their label but get undefined deviations.
+    pub excluded: Vec<bool>,
 }
 
 impl Strata {
@@ -67,7 +70,18 @@ impl Strata {
             labels: vec![0; n_cells],
             names: vec![GLOBAL_STRATUM.to_string()],
             folded_cells: 0,
+            excluded: vec![false; n_cells],
         }
+    }
+
+    /// Marks cells to leave out of norm computation.
+    pub fn exclude(&mut self, excluded: Vec<bool>) {
+        debug_assert_eq!(excluded.len(), self.labels.len());
+        self.excluded = excluded;
+    }
+
+    pub fn n_excluded(&self) -> usize {
+        self.excluded.iter().filter(|e| **e).count()
     }
 
     pub fn n_strata(&self) -> usize {
@@ -82,7 +96,9 @@ impl Strata {
     pub fn members(&self) -> Vec<Vec<usize>> {
         let mut out = vec![Vec::new(); self.names.len()];
         for (cell, &label) in self.labels.iter().enumerate() {
-            out[label as usize].push(cell);
+            if !self.excluded[cell] {
+                out[label as usize].push(cell);
+            }
         }
         out
     }
@@ -162,6 +178,7 @@ impl Strata {
             labels,
             names,
             folded_cells: folded,
+            excluded: vec![false; n_cells],
         }
     }
 }

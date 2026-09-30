@@ -5,6 +5,7 @@ use serde::Serialize;
 use crate::input::error::InputError;
 use crate::model::assembly_phase::AssemblyPhaseImbalanceMetrics;
 use crate::model::cell_cycle::{CellCycleMetrics, CellCyclePhase};
+use crate::model::cell_qc::CellQc;
 use crate::model::collapse::{SpliceosomeCollapseMetrics, SpliceosomeCollapseStatus};
 use crate::model::coupling::CouplingStressMetrics;
 use crate::model::cryptic_risk::CrypticSplicingRiskMetrics;
@@ -65,7 +66,19 @@ struct JsonOutput<'a> {
     intron_retention: Option<JsonIntronRetentionStage>,
     /// Reference strata used for `_dev` metrics and outlier flags.
     reference: JsonReference,
+    cell_qc: JsonCellQc,
     provenance: &'a Provenance,
+}
+
+#[derive(Serialize)]
+struct JsonCellQc {
+    min_counts: u64,
+    min_genes: u64,
+    doublet_column: Option<String>,
+    n_low_depth: usize,
+    n_doublet: usize,
+    low_depth: Vec<bool>,
+    doublet: Vec<bool>,
 }
 
 #[derive(Serialize)]
@@ -153,6 +166,8 @@ struct JsonUnsplicedStage {
 struct JsonCell<'a> {
     cell_id: usize,
     cell_name: &'a str,
+    low_depth: bool,
+    doublet: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     sis: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -488,6 +503,7 @@ pub fn write_json(
     unspliced: Option<&UnsplicedMetrics>,
     intron_retention: Option<&IntronRetentionMetrics>,
     cell_cycle: &CellCycleMetrics,
+    cell_qc: &CellQc,
     strata: &Strata,
     provenance: &Provenance,
     experimental: bool,
@@ -559,6 +575,8 @@ pub fn write_json(
         cells.push(JsonCell {
             cell_id,
             cell_name,
+            low_depth: cell_qc.low_depth[cell_id],
+            doublet: cell_qc.doublet[cell_id],
             sis: sis_value,
             class,
             penalties,
@@ -912,6 +930,15 @@ pub fn write_json(
                 })
                 .collect(),
             labels: strata.labels.clone(),
+        },
+        cell_qc: JsonCellQc {
+            min_counts: cell_qc.min_counts,
+            min_genes: cell_qc.min_genes,
+            doublet_column: cell_qc.doublet_column.clone(),
+            n_low_depth: cell_qc.n_low_depth(),
+            n_doublet: cell_qc.n_doublet(),
+            low_depth: cell_qc.low_depth.clone(),
+            doublet: cell_qc.doublet.clone(),
         },
         provenance,
     };

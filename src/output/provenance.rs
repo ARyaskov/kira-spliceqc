@@ -13,6 +13,7 @@ use crate::metrics::intron_retention::{
 };
 use crate::metrics::unspliced::MIN_LAYER_UMIS;
 use crate::model::cell_cycle::CellCycleMetrics;
+use crate::model::cell_qc::CellQc;
 use crate::model::intron_retention::IntronRetentionMetrics;
 use crate::model::sis::SpliceIntegrityMetrics;
 use crate::model::splicing_instability::SplicingInstabilityMetrics;
@@ -68,10 +69,15 @@ pub struct ReferenceInfo {
     pub column: Option<String>,
     pub n_strata: usize,
     pub folded_cells: usize,
+    /// Cells excluded from norm computation (low depth or doublet).
+    pub excluded_cells: usize,
+    pub doublet_column: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Parameters {
+    pub min_counts: u64,
+    pub min_genes: u64,
     pub controls_per_gene: usize,
     pub min_stratum_cells: usize,
     pub max_depth_bins: usize,
@@ -117,6 +123,7 @@ pub fn build(
     reference_file: Option<FileInfo>,
     has_layers: bool,
     strata: &Strata,
+    cell_qc: &CellQc,
     sis: &SpliceIntegrityMetrics,
     instability: &SplicingInstabilityMetrics,
     unspliced: Option<&UnsplicedMetrics>,
@@ -154,8 +161,12 @@ pub fn build(
             column: strata.column.clone(),
             n_strata: strata.n_strata(),
             folded_cells: strata.folded_cells,
+            excluded_cells: strata.n_excluded(),
+            doublet_column: cell_qc.doublet_column.clone(),
         },
         parameters: Parameters {
+            min_counts: cell_qc.min_counts,
+            min_genes: cell_qc.min_genes,
             controls_per_gene: CONTROLS_PER_GENE,
             min_stratum_cells: MIN_STRATUM_CELLS,
             max_depth_bins: MAX_DEPTH_BINS,

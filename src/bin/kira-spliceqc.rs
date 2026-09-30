@@ -48,6 +48,10 @@ pub struct ReferenceBuildArgs {
     pub metadata: Option<PathBuf>,
     #[arg(long)]
     pub stratify_by: Option<String>,
+    #[arg(long, default_value_t = 500)]
+    pub min_counts: u64,
+    #[arg(long, default_value_t = 200)]
+    pub min_genes: u64,
     #[arg(long)]
     pub threads: Option<usize>,
 }
@@ -90,6 +94,13 @@ pub struct RunArgs {
     /// deviations and flags are then relative to the reference strata.
     #[arg(long)]
     pub reference: Option<PathBuf>,
+    /// Cells with fewer UMIs are flagged LOW_DEPTH and excluded from
+    /// reference norms (0 disables).
+    #[arg(long, default_value_t = 500)]
+    pub min_counts: u64,
+    /// Cells with fewer detected genes are flagged LOW_DEPTH (0 disables).
+    #[arg(long, default_value_t = 200)]
+    pub min_genes: u64,
     #[arg(long, value_enum, default_value = "cell")]
     pub mode: ModeArg,
     #[arg(long)]
@@ -157,6 +168,8 @@ fn execute_reference_build(args: ReferenceBuildArgs) -> Result<(), SpliceQcError
         metadata: args.metadata,
         stratify_by: args.stratify_by,
         reference: None,
+        min_counts: args.min_counts,
+        min_genes: args.min_genes,
         mode: AnalysisMode::Cell,
         run_mode: RunMode::Standalone,
         output_json: false,
@@ -184,6 +197,8 @@ fn execute_run(args: RunArgs) -> Result<(), SpliceQcError> {
         metadata: args.metadata,
         stratify_by: args.stratify_by,
         reference: args.reference,
+        min_counts: args.min_counts,
+        min_genes: args.min_genes,
         mode: match args.mode {
             ModeArg::Cell => AnalysisMode::Cell,
             ModeArg::Sample => AnalysisMode::Sample,

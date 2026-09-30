@@ -32,6 +32,25 @@ pub const CLUSTER_ALIASES: &[&str] =
     &["cluster", "clusters", "leiden", "louvain", "seurat_clusters", "cluster_id"];
 pub const SAMPLE_ALIASES: &[&str] = &["sample", "sample_id", "orig.ident", "batch", "library"];
 pub const CONDITION_ALIASES: &[&str] = &["condition", "group", "treatment", "disease"];
+/// Boolean-like doublet calls from upstream tools (Scrublet, scDblFinder,
+/// DoubletFinder); truthy values: `true`, `1`, `yes`, `doublet`.
+pub const DOUBLET_ALIASES: &[&str] = &[
+    "predicted_doublet",
+    "doublet",
+    "is_doublet",
+    "scDblFinder.class",
+    "scdblfinder_class",
+    "doublet_class",
+    "DF.classifications",
+];
+
+/// Truthy interpretation of a doublet-call cell value.
+pub fn is_doublet_value(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "true" | "1" | "yes" | "doublet"
+    )
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct CellMetadata {

@@ -50,6 +50,11 @@ main matrix's dimensions and order. Gene count mismatches are hard errors.
 
 ## Cell metadata and reference strata
 
+Cells below `--min-counts` / `--min-genes` (LOW_DEPTH) or marked as doublets
+by a metadata column (DOUBLET) are excluded from every reference norm and get
+undefined deviations; the flags are written to `cells.tsv`/`cells.json` and the
+contract `flags` column.
+
 Stage 1 also loads per-cell metadata: `--metadata PATH`, else `metadata.tsv[.gz]`
 next to a 10x directory or shared cache, else the `obs` columns of an AnnData
 input (string and categorical). Columns are aligned to the canonical cell

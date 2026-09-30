@@ -13,6 +13,7 @@ use crate::genesets::{Geneset, GenesetCatalog};
 use crate::input::InputDescriptor;
 use crate::input::error::InputError;
 use crate::model::cell_cycle::{CellCycleMetrics, CellCyclePhase};
+use crate::model::cell_qc::CellQc;
 use crate::model::coupling::CouplingStressMetrics;
 use crate::model::imbalance::SpliceosomeImbalanceMetrics;
 use crate::model::missplicing::MissplicingMetrics;
@@ -194,6 +195,11 @@ struct RegimesJson {
 struct QcJson {
     low_confidence_fraction: f64,
     high_splice_noise_fraction: f64,
+    low_depth_fraction: f64,
+    doublet_fraction: f64,
+    min_counts: u64,
+    min_genes: u64,
+    doublet_column: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -338,12 +344,13 @@ pub fn write_pipeline_contract(
     unspliced: Option<&UnsplicedMetrics>,
     intron_retention: Option<&IntronRetentionMetrics>,
     cell_cycle: &CellCycleMetrics,
+    cell_qc: &CellQc,
     strata: &Strata,
     provenance: &Provenance,
     catalog: &GenesetCatalog,
 ) -> Result<(), InputError> {
     info!("pipeline contract: building rows");
-    let rows = build_rows(matrix, missplicing, imbalance, sis, coupling, cell_cycle)?;
+    let rows = build_rows(matrix, missplicing, imbalance, sis, coupling, cell_cycle, cell_qc)?;
     info!("pipeline contract: writing spliceqc.tsv");
     write_spliceqc_tsv(&out_dir.join("spliceqc.tsv"), &rows)?;
     info!("pipeline contract: writing panels_report.tsv");
@@ -357,6 +364,7 @@ pub fn write_pipeline_contract(
         unspliced,
         intron_retention,
         cell_cycle,
+        cell_qc,
         strata,
         provenance,
         detect_species(matrix),
@@ -373,6 +381,7 @@ fn build_rows(
     sis: &SpliceIntegrityMetrics,
     coupling: Option<&CouplingStressMetrics>,
     cell_cycle: &CellCycleMetrics,
+    cell_qc: &CellQc,
 ) -> Result<Vec<PipelineCellRow>, InputError> {
     let n_cells = matrix.n_cells();
     let species = detect_species(matrix);
@@ -446,7 +455,14 @@ fn build_rows(
             .iter()
             .any(|v| !v.is_finite());
 
-            let flags = build_flags(confidence, nnz, missing_metrics, cell_cycle.cycling[cell]);
+            let flags = build_flags(
+                confidence,
+                nnz,
+                missing_metrics,
+                cell_cycle.cycling[cell],
+                cell_qc.low_depth[cell],
+                cell_qc.doublet[cell],
+            );
 
             PipelineCellRow {
                 barcode,
@@ -589,6 +605,7 @@ fn write_summary_json(
     unspliced: Option<&UnsplicedMetrics>,
     intron_retention: Option<&IntronRetentionMetrics>,
     cell_cycle: &CellCycleMetrics,
+    cell_qc: &CellQc,
     strata: &Strata,
     provenance: &Provenance,
     species: &'static str,
@@ -657,6 +674,11 @@ fn write_summary_json(
         qc: QcJson {
             low_confidence_fraction: low_conf,
             high_splice_noise_fraction: high_noise,
+            low_depth_fraction: cell_qc.n_low_depth() as f64 / n,
+            doublet_fraction: cell_qc.n_doublet() as f64 / n,
+            min_counts: cell_qc.min_counts,
+            min_genes: cell_qc.min_genes,
+            doublet_column: cell_qc.doublet_column.clone(),
         },
         splicing_instability: build_splicing_instability_summary(splicing_instability),
         unspliced: unspliced.map(|u| {
@@ -1021,8 +1043,21 @@ fn classify_regime(
     }
 }
 
-fn build_flags(confidence: f64, nnz: u64, missing_metrics: bool, cycling: bool) -> String {
+fn build_flags(
+    confidence: f64,
+    nnz: u64,
+    missing_metrics: bool,
+    cycling: bool,
+    low_depth: bool,
+    doublet: bool,
+) -> String {
     let mut flags = Vec::new();
+    if low_depth {
+        flags.push("LOW_DEPTH");
+    }
+    if doublet {
+        flags.push("DOUBLET");
+    }
     if confidence.is_finite() && confidence < 0.5 {
         flags.push("LOW_CONFIDENCE");
     }
@@ -1090,8 +1125,9 @@ mod tests {
 
     #[test]
     fn missing_metrics_flag_is_set_without_low_confidence() {
-        let flags = build_flags(f64::NAN, 1000, true, false);
+        let flags = build_flags(f64::NAN, 1000, true, false, false, false);
         assert_eq!(flags, "MISSING_METRICS");
-        assert_eq!(build_flags(0.9, 1000, false, true), "CYCLING");
+        assert_eq!(build_flags(0.9, 1000, false, true, false, false), "CYCLING");
+        assert_eq!(build_flags(0.9, 1000, false, false, true, true), "LOW_DEPTH,DOUBLET");
     }
 }

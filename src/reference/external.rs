@@ -136,6 +136,7 @@ impl ReferenceFile {
             labels,
             names,
             folded_cells: folded,
+            excluded: vec![false; n_cells],
         }
     }
 

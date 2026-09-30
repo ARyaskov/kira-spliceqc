@@ -18,6 +18,10 @@ pub struct RunConfig {
     /// External reference file (`ref.json` from `reference build`). Tier A
     /// deviations and flags are then relative to the reference's strata.
     pub reference: Option<PathBuf>,
+    /// Cells below either threshold get `LOW_DEPTH` and are left out of
+    /// reference norms (0 disables).
+    pub min_counts: u64,
+    pub min_genes: u64,
     pub mode: AnalysisMode,
     pub run_mode: RunMode,
     pub output_json: bool,

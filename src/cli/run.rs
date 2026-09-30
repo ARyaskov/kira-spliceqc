@@ -33,6 +33,8 @@ use crate::pipeline::stage16_unspliced::run_stage16;
 use crate::pipeline::stage17_intron_retention::run_stage17;
 use crate::pipeline::stage18_cell_cycle::run_stage18;
 use crate::metrics::cell_cycle::cell_cycle_gene_ids;
+use crate::input::metadata::{CellMetadata, DOUBLET_ALIASES, is_doublet_value};
+use crate::model::cell_qc::CellQc;
 use crate::reference::Strata;
 use crate::reference::external::{ReferenceFile, build_reference};
 
@@ -108,10 +110,19 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
         Some(path) => Some(ReferenceFile::read(path)?),
         None => None,
     };
-    let strata = match &external {
+    let cell_qc = cell_qc(&stage1, &stage1_metadata, config.min_counts, config.min_genes);
+    let mut strata = match &external {
         Some(file) => file.assign(&stage1_metadata, stage1.n_cells()),
         None => Strata::from_metadata(&stage1_metadata, stage1.n_cells(), config.stratify_by.as_deref()),
     };
+    strata.exclude(cell_qc.excluded());
+    info!(
+        target: "kira_spliceqc::cli::run",
+        low_depth = cell_qc.n_low_depth(),
+        doublets = cell_qc.n_doublet(),
+        doublet_column = cell_qc.doublet_column.as_deref().unwrap_or("-"),
+        "cell QC flags (excluded from reference norms)"
+    );
     info!(
         target: "kira_spliceqc::cli::run",
         reference = strata.mode.as_str(),
@@ -236,6 +247,7 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
         config.reference.as_deref().and_then(FileInfo::of_path),
         context.stage1_layers.is_some(),
         &strata,
+        &cell_qc,
         &context.stage6,
         &context.stage15,
         context.stage16.as_ref(),
@@ -262,6 +274,7 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
             context.stage16.as_ref(),
             context.stage17.as_ref(),
             &context.stage18,
+            &cell_qc,
             &strata,
             &provenance,
             OutputOptions {
@@ -289,6 +302,7 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
             context.stage16.as_ref(),
             context.stage17.as_ref(),
             &context.stage18,
+            &cell_qc,
             &strata,
             &provenance,
             &catalog,
@@ -340,7 +354,8 @@ pub fn build_reference_file(config: RunConfig, out: &Path) -> Result<(), SpliceQ
         metadata,
     } = run_logged(1, || run_stage1_full(&stage0, &scratch, config.metadata.as_deref()))?;
     let layers = layers.expect("layers detected in stage 0");
-    let strata = Strata::from_metadata(&metadata, matrix.n_cells(), config.stratify_by.as_deref());
+    let mut strata = Strata::from_metadata(&metadata, matrix.n_cells(), config.stratify_by.as_deref());
+    strata.exclude(cell_qc(&matrix, &metadata, config.min_counts, config.min_genes).excluded());
     let stage16 = run_logged(16, || Ok(run_stage16(&layers, &strata, None)))?;
     let stage17 = run_logged(17, || Ok(run_stage17(&matrix, &layers, &strata, None)))?;
     let symbols: Vec<String> = (0..matrix.n_genes()).map(|g| matrix.gene_symbol(g).to_string()).collect();
@@ -356,6 +371,28 @@ pub fn build_reference_file(config: RunConfig, out: &Path) -> Result<(), SpliceQ
     );
     println!("reference written: {} ({} strata)", out.display(), file.strata.len());
     Ok(())
+}
+
+/// Low-depth and doublet flags from the matrix and metadata.
+fn cell_qc(matrix: &dyn ExpressionMatrix, metadata: &CellMetadata, min_counts: u64, min_genes: u64) -> CellQc {
+    let n = matrix.n_cells();
+    let low_depth: Vec<bool> = (0..n)
+        .map(|c| matrix.libsize(c) < min_counts || matrix.nnz_cell(c) < min_genes)
+        .collect();
+    let (doublet, doublet_column) = match metadata.resolve(DOUBLET_ALIASES) {
+        Some((column, values)) if values.len() == n => (
+            values.iter().map(|v| is_doublet_value(v)).collect(),
+            Some(column.to_string()),
+        ),
+        _ => (vec![false; n], None),
+    };
+    CellQc {
+        min_counts,
+        min_genes,
+        low_depth,
+        doublet,
+        doublet_column,
+    }
 }
 
 fn run_logged<T, F>(stage: usize, f: F) -> Result<T, SpliceQcError>

@@ -1,4 +1,5 @@
 use crate::model::cell_cycle::{CellCycleMetrics, CellCyclePhase};
+use crate::model::cell_qc::CellQc;
 use crate::model::collapse::{SpliceosomeCollapseMetrics, SpliceosomeCollapseStatus};
 use crate::model::cryptic_risk::CrypticSplicingRiskMetrics;
 use crate::model::sis::{SpliceIntegrityClass, SpliceIntegrityMetrics};
@@ -13,6 +14,7 @@ pub fn format_summary(
     cryptic: Option<&CrypticSplicingRiskMetrics>,
     collapse: Option<&SpliceosomeCollapseMetrics>,
     cell_cycle: &CellCycleMetrics,
+    cell_qc: &CellQc,
     unspliced: Option<&UnsplicedMetrics>,
     intron_retention: Option<&IntronRetentionMetrics>,
     strata: &Strata,
@@ -32,15 +34,22 @@ pub fn format_summary(
             )
         }
     };
+    let qc_line = format!(
+        "Cell QC: {} low-depth (< {} UMIs or < {} genes), {} doublets; excluded from reference norms\n",
+        cell_qc.n_low_depth(),
+        cell_qc.min_counts,
+        cell_qc.min_genes,
+        cell_qc.n_doublet()
+    );
     let reference = match &strata.column {
         Some(col) => format!(
-            "Reference: {} by {} ({} strata, {} cells folded into global)\n",
+            "{qc_line}Reference: {} by {} ({} strata, {} cells folded into global)\n",
             strata.mode.as_str(),
             col,
             strata.n_strata() - 1,
             strata.folded_cells
         ),
-        None => format!("Reference: {} (no stratification column)\n", strata.mode.as_str()),
+        None => format!("{qc_line}Reference: {} (no stratification column)\n", strata.mode.as_str()),
     };
     let tier_a = match unspliced {
         Some(u) => {

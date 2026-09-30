@@ -5,6 +5,7 @@ use std::path::Path;
 use crate::input::error::InputError;
 use crate::model::assembly_phase::AssemblyPhaseImbalanceMetrics;
 use crate::model::cell_cycle::CellCycleMetrics;
+use crate::model::cell_qc::CellQc;
 use crate::model::coupling::CouplingStressMetrics;
 use crate::model::exon_intron_bias::ExonIntronDefinitionMetrics;
 use crate::model::imbalance::SpliceosomeImbalanceMetrics;
@@ -26,6 +27,8 @@ use crate::model::unspliced::UnsplicedMetrics;
 const COLUMNS: &[(&str, bool)] = &[
     ("cell_id", false),
     ("cell_name", false),
+    ("low_depth", false),
+    ("doublet", false),
     ("sis", true),
     ("class", true),
     ("p_missplicing", true),
@@ -100,6 +103,7 @@ pub fn write_tsv(
     unspliced: Option<&UnsplicedMetrics>,
     intron_retention: Option<&IntronRetentionMetrics>,
     cell_cycle: &CellCycleMetrics,
+    cell_qc: &CellQc,
     experimental: bool,
 ) -> Result<(), InputError> {
     let file = File::create(path).map_err(|e| InputError::io(path, e))?;
@@ -127,6 +131,7 @@ pub fn write_tsv(
             unspliced,
             intron_retention,
             cell_cycle,
+            cell_qc,
         );
         debug_assert_eq!(values.len(), COLUMNS.len());
 
@@ -174,9 +179,12 @@ fn cell_values<'a>(
     unspliced: Option<&UnsplicedMetrics>,
     ir: Option<&IntronRetentionMetrics>,
     cc: &CellCycleMetrics,
+    qc: &CellQc,
 ) {
     out.push(Value::Index(cell_id));
     out.push(Value::Str(&cell_names[cell_id]));
+    out.push(Value::Bool(qc.low_depth[cell_id]));
+    out.push(Value::Bool(qc.doublet[cell_id]));
     out.push(Value::F32(sis.sis[cell_id]));
     out.push(Value::Str(class_str(sis.class[cell_id])));
     out.push(Value::F32(sis.p_missplicing[cell_id]));
