@@ -7,7 +7,7 @@ use tracing::{debug, info, warn};
 use crate::input::error::InputError;
 use crate::model::coupling::CouplingStressMetrics;
 use crate::model::geneset_activity::GenesetActivityMatrix;
-use crate::stats::robust::{extract_geneset_slice, robust_z};
+use crate::stats::robust::{extract_geneset_slice, robust_z_logged};
 
 const REQUIRED: &[&str] = &["TRANSCRIPTION_COUPLING", "U1_CORE", "U2_CORE", "SF3B_AXIS"];
 
@@ -25,7 +25,7 @@ pub fn compute(activity: &GenesetActivityMatrix) -> Result<CouplingStressMetrics
     for &id in REQUIRED {
         if let Some(&idx) = id_to_idx.get(id) {
             let slice = extract_geneset_slice(&activity.values, idx, n_cells);
-            let (z, _) = robust_z(slice);
+            let (z, _) = robust_z_logged(slice, id);
             if !z.iter().any(|v| v.is_finite()) {
                 warn!(geneset_id = id, "geneset has no resolved genes (all NaN)");
             }

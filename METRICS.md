@@ -126,7 +126,7 @@ Panel trimmed mean:
 
 Robust z-score:
 - `Z(x) = (x - median(x)) / (1.4826 * MAD(x) + EPS_ROBUST)`
-- if `MAD == 0`, z-score for finite values is `0`
+- if `MAD == 0`, z-score for finite values is `0` and a warning naming the panel is logged (the panel then carries no signal)
 
 Spliceosome Overload Score (SOS):
 - `splice_core = TM(SpliceosomePanel, c)`

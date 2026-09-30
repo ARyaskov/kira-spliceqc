@@ -1,6 +1,8 @@
 //! Robust statistics using O(n) quickselect (`select_nth_unstable_by`) instead
 //! of O(n log n) sort. All routines treat non-finite inputs as missing.
 
+use tracing::warn;
+
 const ROBUST_EPS: f32 = 1e-6;
 const MAD_TO_SIGMA: f32 = 1.4826;
 
@@ -72,6 +74,25 @@ pub fn robust_z(values: &[f32]) -> (Vec<f32>, RobustRef) {
         })
         .collect();
     (z, RobustRef { median: med, mad: m })
+}
+
+/// `robust_z` with diagnostics: logs a warning when the MAD collapses to
+/// zero (every finite input maps to z = 0, which silently disables any
+/// metric built on this panel) or when no finite value is present.
+pub fn robust_z_logged(values: &[f32], name: &str) -> (Vec<f32>, RobustRef) {
+    let (z, r) = robust_z(values);
+    if !r.median.is_finite() {
+        warn!(panel = name, "robust z-score undefined: no finite values");
+    } else if r.mad <= 0.0 {
+        let n_finite = values.iter().filter(|v| v.is_finite()).count();
+        warn!(
+            panel = name,
+            median = r.median,
+            n_finite,
+            "MAD is zero; z-scores collapsed to 0 for every cell (panel carries no signal)"
+        );
+    }
+    (z, r)
 }
 
 /// Quantile by the `round((n-1) * q)` rule on finite values.

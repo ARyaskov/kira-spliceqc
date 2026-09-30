@@ -14,7 +14,8 @@ use self::panels::{
     CONFLICT_RISK_PANEL, MIN_GENES_PER_PANEL_CELL, NMD_PANEL, RLOOP_RESOLUTION_PANEL,
     SPLICEOSOME_PANEL, SPLICEQC_INSTABILITY_PANEL_V1, SPLICING_RBP_PANEL,
 };
-use self::scores::{panel_trimmed_mean, percentile, robust_z};
+use self::scores::{panel_trimmed_mean, percentile};
+use crate::stats::robust::robust_z_logged;
 
 pub mod aggregate;
 pub mod junction;
@@ -119,17 +120,17 @@ pub fn compute(matrix: &dyn ExpressionMatrix) -> SplicingInstabilityMetrics {
         nmd_core.push(row[4]);
     }
 
-    let (z_splice, ref_splice) = robust_z(&splice_core);
-    let (z_rbp, ref_rbp) = robust_z(&rbp_core);
-    let (z_rloop, ref_rloop) = robust_z(&rloop_resolve_core);
+    let (z_splice, ref_splice) = robust_z_logged(&splice_core, "splice_core");
+    let (z_rbp, ref_rbp) = robust_z_logged(&rbp_core, "rbp_core");
+    let (z_rloop, ref_rloop) = robust_z_logged(&rloop_resolve_core, "rloop_resolve_core");
     let (z_conflict, ref_conflict) = if conflict_panel_enabled {
-        let (z, r) = robust_z(&conflict_risk_core);
+        let (z, r) = robust_z_logged(&conflict_risk_core, "conflict_risk_core");
         (z, Some(r))
     } else {
         (vec![0.0; n_cells], None)
     };
     let (z_nmd, ref_nmd) = if nmd_panel_enabled {
-        let (z, r) = robust_z(&nmd_core);
+        let (z, r) = robust_z_logged(&nmd_core, "nmd_core");
         (z, Some(r))
     } else {
         (vec![0.0; n_cells], None)

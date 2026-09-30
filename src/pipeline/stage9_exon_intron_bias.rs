@@ -7,7 +7,7 @@ use tracing::{debug, info, warn};
 use crate::input::error::InputError;
 use crate::model::exon_intron_bias::ExonIntronDefinitionMetrics;
 use crate::model::geneset_activity::GenesetActivityMatrix;
-use crate::stats::robust::{extract_geneset_slice, robust_z};
+use crate::stats::robust::{extract_geneset_slice, robust_z_logged};
 
 const REQUIRED: &[&str] = &["SRSF_SR", "HNRNP", "U2AF_AXIS"];
 
@@ -30,7 +30,7 @@ pub fn compute(
     for &id in REQUIRED {
         if let Some(&idx) = id_to_idx.get(id) {
             let slice = extract_geneset_slice(&activity.values, idx, n_cells);
-            let (z, _) = robust_z(slice);
+            let (z, _) = robust_z_logged(slice, id);
             let has_finite = z.iter().any(|v| v.is_finite());
             if !has_finite {
                 warn!(geneset_id = id, "geneset has no resolved genes (all NaN)");
