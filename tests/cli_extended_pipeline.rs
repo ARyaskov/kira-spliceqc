@@ -107,7 +107,7 @@ fn extended_pipeline_logs_and_json() {
         );
     }
 
-    let json_path = out_dir.path().join("spliceqc.json");
+    let json_path = out_dir.path().join("cells.json");
     let data = fs::read_to_string(json_path).unwrap();
     let v: serde_json::Value = serde_json::from_str(&data).unwrap();
     assert!(v.get("splicing_noise").is_some());
@@ -151,8 +151,8 @@ fn extended_pipeline_deterministic_hash() {
     run_pipeline(config1).unwrap();
     run_pipeline(config2).unwrap();
 
-    let bytes1 = fs::read(out_dir1.path().join("spliceqc.json")).unwrap();
-    let bytes2 = fs::read(out_dir2.path().join("spliceqc.json")).unwrap();
+    let bytes1 = fs::read(out_dir1.path().join("cells.json")).unwrap();
+    let bytes2 = fs::read(out_dir2.path().join("cells.json")).unwrap();
 
     let mut hasher1 = Sha256::new();
     hasher1.update(&bytes1);

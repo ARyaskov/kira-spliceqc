@@ -61,9 +61,9 @@ Runtime order in `run_pipeline`:
 `--out <DIR>` is used directly.
 
 Outputs from stage 7:
-- `spliceqc.json` (if `--json` or no explicit format flags)
-- `spliceqc.tsv` (if `--tsv` or no explicit format flags)
-- `spliceqc.tsv` includes additive per-cell columns for:
+- `cells.json` (if `--json` or no explicit format flags)
+- `cells.tsv` (if `--tsv` or no explicit format flags)
+- `cells.tsv` includes additive per-cell columns for:
   - panel cores: `splice_core`, `rbp_core`, `rloop_resolve_core`, `conflict_risk_core`, `nmd_core`
   - scores: `SOS`, `RLR`, `SII`
   - flags: `splice_overload_high`, `rloop_risk_high`, `splicing_instability_high`, `genome_instability_splicing_flag`
@@ -74,7 +74,7 @@ Effective output directory:
 - `<OUT>/kira-spliceqc`
 
 Outputs:
-- stage-7 outputs (`spliceqc.json`, `spliceqc.tsv`) with same flag rules as standalone
+- stage-7 outputs (`cells.json`, `cells.tsv`) with same flag rules as standalone
 - pipeline contract outputs:
   - `spliceqc.tsv` (contract-formatted table for pipeline integration)
   - `panels_report.tsv`
@@ -82,7 +82,7 @@ Outputs:
   - includes additive `splicing_instability` block: `panel_version`, `thresholds`, `global_stats`, `cluster_stats`, `missingness`
 - `pipeline_step.json`
 
-Note: in pipeline mode, contract `spliceqc.tsv` is always written and overwrites any stage-7 TSV with the same name.
+Note: the contract table `spliceqc.tsv` and the per-cell table `cells.tsv` have distinct names, so neither overwrites the other.
 
 ## Stage 1 internal cache: `expr.bin`
 

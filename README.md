@@ -84,8 +84,8 @@ Behavior:
 
 Standalone mode (`--run-mode standalone`):
 
-- `spliceqc.json` (when `--json` is set, or by default when no format flags are passed)
-- `spliceqc.tsv` (when `--tsv` is set, or by default when no format flags are passed)
+- `cells.json` (when `--json` is set, or by default when no format flags are passed)
+- `cells.tsv` (when `--tsv` is set, or by default when no format flags are passed)
 
 Pipeline mode (`--run-mode pipeline`), output directory: `<OUT>/kira-spliceqc`:
 
@@ -93,7 +93,10 @@ Pipeline mode (`--run-mode pipeline`), output directory: `<OUT>/kira-spliceqc`:
 - `summary.json` (aggregate distributions/regimes/QC fractions)
 - `panels_report.tsv` (panel coverage/sum quantiles)
 - `pipeline_step.json` (pipeline ingestion manifest)
-- `spliceqc.json` (stage-7 JSON output, depending on `--json`/`--tsv` flags)
+- `cells.json` / `cells.tsv` (per-cell stage-7 outputs, depending on `--json`/`--tsv` flags)
+
+Before v0.3 the per-cell stage-7 table was also named `spliceqc.tsv` and was
+overwritten by the pipeline contract table in pipeline mode.
 
 ## Splicing instability proxies
 

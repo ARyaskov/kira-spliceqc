@@ -172,7 +172,7 @@ fn json_schema_sanity() {
         splicing_instability,
     ) = make_metrics(2);
     let dir = tempdir().unwrap();
-    let path = dir.path().join("spliceqc.json");
+    let path = dir.path().join("cells.json");
     json::write_json(
         &path,
         &cells,
@@ -222,7 +222,7 @@ fn tsv_header_order() {
         splicing_instability,
     ) = make_metrics(1);
     let dir = tempdir().unwrap();
-    let path = dir.path().join("spliceqc.tsv");
+    let path = dir.path().join("cells.tsv");
     tsv::write_tsv(
         &path,
         &cells,
@@ -344,6 +344,6 @@ fn run_stage7_outputs() {
     )
     .unwrap();
     assert!(summary.contains("kira-spliceqc summary"));
-    assert!(dir.path().join("spliceqc.json").exists());
-    assert!(dir.path().join("spliceqc.tsv").exists());
+    assert!(dir.path().join("cells.json").exists());
+    assert!(dir.path().join("cells.tsv").exists());
 }

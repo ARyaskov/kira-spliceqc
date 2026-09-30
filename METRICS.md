@@ -3,7 +3,7 @@
 This document defines the metrics produced by `kira-spliceqc`, including formulas, constants, and classification rules.
 
 Scope:
-- standalone outputs: `spliceqc.tsv`, `spliceqc.json`
+- standalone outputs: `cells.tsv`, `cells.json`
 - pipeline outputs: `kira-spliceqc/spliceqc.tsv`, `kira-spliceqc/summary.json`, `kira-spliceqc/pipeline_step.json`, `kira-spliceqc/panels_report.tsv`
 
 ## Canonical Conventions

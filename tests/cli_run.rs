@@ -36,7 +36,7 @@ fn end_to_end_json_produced() {
     };
 
     run_pipeline(config).unwrap();
-    assert!(out_dir.path().join("spliceqc.json").exists());
+    assert!(out_dir.path().join("cells.json").exists());
 }
 
 #[test]
@@ -58,8 +58,8 @@ fn json_tsv_flag_behavior() {
     };
 
     run_pipeline(config).unwrap();
-    assert!(out_dir.path().join("spliceqc.json").exists());
-    assert!(!out_dir.path().join("spliceqc.tsv").exists());
+    assert!(out_dir.path().join("cells.json").exists());
+    assert!(!out_dir.path().join("cells.tsv").exists());
 }
 
 #[test]
@@ -96,8 +96,8 @@ fn deterministic_output_hash() {
     run_pipeline(config1).unwrap();
     run_pipeline(config2).unwrap();
 
-    let bytes1 = fs::read(out_dir1.path().join("spliceqc.json")).unwrap();
-    let bytes2 = fs::read(out_dir2.path().join("spliceqc.json")).unwrap();
+    let bytes1 = fs::read(out_dir1.path().join("cells.json")).unwrap();
+    let bytes2 = fs::read(out_dir2.path().join("cells.json")).unwrap();
 
     let mut hasher1 = Sha256::new();
     hasher1.update(&bytes1);

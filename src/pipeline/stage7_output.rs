@@ -61,7 +61,7 @@ pub fn run_stage7(
     let start = Instant::now();
 
     if write_json {
-        let path = out_dir.join("spliceqc.json");
+        let path = out_dir.join("cells.json");
         json::write_json(
             &path,
             cell_names,
@@ -124,7 +124,7 @@ pub fn run_stage7(
     };
 
     if write_tsv {
-        let path = out_dir.join("spliceqc.tsv");
+        let path = out_dir.join("cells.tsv");
         tsv::write_tsv(
             &path,
             cell_names,
