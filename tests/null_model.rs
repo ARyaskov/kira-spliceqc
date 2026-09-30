@@ -5,10 +5,12 @@
 //! one shared gene-abundance vector. Any structure the tool reports on this
 //! data is an artefact of the method.
 //!
-//! Phase 0 (v0.3) bounds are *baselines* measured on the current
-//! expression-signature implementation; they guard against regressions and
-//! document the known confounding. Phase 1 targets (see ROADMAP in the design
-//! spec) are: every flag fraction <= 1 % and |Spearman(metric, libsize)| <= 0.1.
+//! Phase 1 targets: every non-experimental flag fires on at most 1 % of cells
+//! and |Spearman(metric, libsize)| <= 0.1 for every standardized metric.
+//! The experimental composite flags (fixed thresholds, unvalidated) keep a
+//! looser baseline bound until Phase 2 calibrates them. The dataset also
+//! carries spliced/unspliced layers with one shared unspliced ratio, so the
+//! Tier A metrics are tested on the same null.
 
 use std::collections::HashMap;
 use std::fs;
@@ -30,12 +32,23 @@ const CATALOG: &str = include_str!(concat!(
 const N_CELLS: usize = 1500;
 const N_FILLER_GENES: usize = 800;
 
-/// Phase 0 baselines (measured 0.09 / 0.09 / 0.68 on v0.3 with the fixed seed,
-/// bounds leave headroom for platform float differences). Tighten to the
-/// Phase 1 targets once expression signatures are depth-corrected.
-const MAX_FLAG_FRACTION: f64 = 0.15;
-const MAX_FAILURE_FRACTION: f64 = 0.15;
-const MAX_ABS_SPEARMAN_LIBSIZE: f64 = 0.80;
+/// Phase 1 targets for production (non-experimental) outputs.
+const MAX_FLAG_FRACTION: f64 = 0.01;
+const MAX_ABS_SPEARMAN_LIBSIZE: f64 = 0.10;
+/// Depth-binned deviations have a zero median in every library-size bin by
+/// construction; a rank correlation across bins then only reflects shape
+/// differences between bins, so they are checked per depth quintile instead:
+/// |median| below this and a flag rate below `MAX_FLAG_FRACTION` in every
+/// quintile.
+const MAX_ABS_QUINTILE_MEDIAN: f64 = 0.15;
+/// Baselines for the experimental composites (fixed thresholds; measured
+/// 4.6 % rloop_risk_high and 3.6 % Impaired+Broken after depth correction,
+/// |rho(sis, libsize)| up to 0.18 because SIS still contains the raw entropy).
+const MAX_EXPERIMENTAL_FLAG_FRACTION: f64 = 0.08;
+const MAX_FAILURE_FRACTION: f64 = 0.08;
+const MAX_EXPERIMENTAL_ABS_SPEARMAN: f64 = 0.30;
+/// Shared unspliced ratio of every gene in the null layers.
+const NULL_UNSPLICED_RATIO: f64 = 0.25;
 
 // ---------------------------------------------------------------------------
 // Deterministic PRNG (xorshift64*) and samplers; no external crates.
@@ -124,6 +137,8 @@ fn write_null_tenx(dir: &Path, seed: u64) -> HashMap<String, f64> {
     let total: f64 = weights.iter().sum();
 
     let mut triplets: Vec<(usize, usize, u32)> = Vec::new();
+    let mut spliced: Vec<(usize, usize, u32)> = Vec::new();
+    let mut unspliced: Vec<(usize, usize, u32)> = Vec::new();
     let mut libsizes = HashMap::with_capacity(N_CELLS);
     for cell in 0..N_CELLS {
         let libsize = (4000f64.ln() + 0.5 * rng.gauss()).exp().max(300.0).round();
@@ -132,17 +147,30 @@ fn write_null_tenx(dir: &Path, seed: u64) -> HashMap<String, f64> {
             let k = rng.poisson(libsize * w / total);
             if k > 0 {
                 triplets.push((g + 1, cell + 1, k));
+                // Layers: every UMI is unspliced with the same probability.
+                let u = (0..k).filter(|_| rng.uniform() < NULL_UNSPLICED_RATIO).count() as u32;
+                if u > 0 {
+                    unspliced.push((g + 1, cell + 1, u));
+                }
+                if k - u > 0 {
+                    spliced.push((g + 1, cell + 1, k - u));
+                }
             }
         }
     }
 
-    let mut mtx = String::new();
-    mtx.push_str("%%MatrixMarket matrix coordinate integer general\n");
-    mtx.push_str(&format!("{} {} {}\n", genes.len(), N_CELLS, triplets.len()));
-    for (g, c, k) in &triplets {
-        mtx.push_str(&format!("{g} {c} {k}\n"));
-    }
-    fs::write(dir.join("matrix.mtx"), mtx).unwrap();
+    let write_mtx = |name: &str, entries: &[(usize, usize, u32)]| {
+        let mut mtx = String::new();
+        mtx.push_str("%%MatrixMarket matrix coordinate integer general\n");
+        mtx.push_str(&format!("{} {} {}\n", genes.len(), N_CELLS, entries.len()));
+        for (g, c, k) in entries {
+            mtx.push_str(&format!("{g} {c} {k}\n"));
+        }
+        fs::write(dir.join(name), mtx).unwrap();
+    };
+    write_mtx("matrix.mtx", &triplets);
+    write_mtx("spliced.mtx", &spliced);
+    write_mtx("unspliced.mtx", &unspliced);
 
     let features = genes
         .iter()
@@ -264,7 +292,7 @@ fn null_model_baseline() {
     let cells = Table::read(&out.path().join("cells.tsv"));
     assert_eq!(cells.rows.len(), N_CELLS);
 
-    // 1. No missing-value flood: the null data resolves every panel.
+    // 1. No missing-value flood: the null data resolves every panel and layer.
     for metric in [
         "sis",
         "regulator_entropy_expr",
@@ -274,6 +302,8 @@ fn null_model_baseline() {
         "SOS",
         "RLR",
         "SII",
+        "unspliced_fraction",
+        "intron_retention_index",
     ] {
         let undefined = cells.f64_col(metric).iter().filter(|v| v.is_none()).count();
         assert!(
@@ -282,8 +312,14 @@ fn null_model_baseline() {
         );
     }
 
-    // 2. Flag fractions on pure noise (Phase 0 baseline; Phase 1 target 1 %).
+    // 2a. Production flags on pure noise: at most 1 %.
     let mut report = String::new();
+    for flag in ["nuclear_fraction_flag", "intron_retention_high"] {
+        let f = fraction(&cells.str_col(flag), "true");
+        report.push_str(&format!("{flag}: {:.3}\n", f));
+        assert!(f <= MAX_FLAG_FRACTION, "{flag} fraction {f:.3} on null data");
+    }
+    // 2b. Experimental composite flags: baseline bound until Phase 2.
     for flag in [
         "splice_overload_high",
         "rloop_risk_high",
@@ -291,8 +327,8 @@ fn null_model_baseline() {
         "genome_instability_splicing_flag",
     ] {
         let f = fraction(&cells.str_col(flag), "true");
-        report.push_str(&format!("{flag}: {:.3}\n", f));
-        assert!(f <= MAX_FLAG_FRACTION, "{flag} fraction {f:.3} on null data");
+        report.push_str(&format!("{flag} (experimental): {:.3}\n", f));
+        assert!(f <= MAX_EXPERIMENTAL_FLAG_FRACTION, "{flag} fraction {f:.3} on null data");
     }
     let class = cells.str_col("class");
     let failure = fraction(&class, "Impaired") + fraction(&class, "Broken");
@@ -302,29 +338,62 @@ fn null_model_baseline() {
         "Impaired+Broken fraction {failure:.3} on null data"
     );
 
-    // 3. Library-size confounding (Phase 0 baseline; Phase 1 target |rho| <= 0.1).
+    // 3a. Library-size confounding of production metrics: |rho| <= 0.1.
+    // (`regulator_entropy_expr` is the raw entropy and is depth-driven by
+    // construction; only its depth-standardized form feeds the composites.)
     let names = cells.str_col("cell_name");
     let lib: Vec<f64> = names.iter().map(|n| libsizes[*n]).collect();
-    for metric in [
-        "sis",
-        "regulator_entropy_expr",
-        "spliceosome_imbalance_expr",
-        "spliceosome_core_expr",
-        "SOS",
-    ] {
+    let rho_with_libsize = |metric: &str| -> f64 {
         let values = cells.f64_col(metric);
         let (x, y): (Vec<f64>, Vec<f64>) = values
             .iter()
             .zip(&lib)
             .filter_map(|(v, l)| v.map(|v| (v, *l)))
             .unzip();
-        let rho = spearman(&x, &y);
+        spearman(&x, &y)
+    };
+    for metric in [
+        "spliceosome_imbalance_expr",
+        "missplicing_burden_expr",
+        "spliceosome_core_expr",
+        "SOS",
+        "unspliced_fraction",
+        "unspliced_fraction_dev",
+    ] {
+        let rho = rho_with_libsize(metric);
         report.push_str(&format!("spearman({metric}, libsize): {rho:+.3}\n"));
         assert!(
             rho.abs() <= MAX_ABS_SPEARMAN_LIBSIZE,
             "{metric}: |spearman with libsize| = {:.3} on null data",
             rho.abs()
         );
+    }
+    // 3b. Experimental composite: baseline bound.
+    let rho = rho_with_libsize("sis");
+    report.push_str(&format!("spearman(sis, libsize) (experimental): {rho:+.3}\n"));
+    assert!(rho.abs() <= MAX_EXPERIMENTAL_ABS_SPEARMAN, "sis: |spearman| = {:.3}", rho.abs());
+
+    // 3c. Depth-binned deviations: per depth quintile, |median| small and the
+    // flag rate at most MAX_FLAG_FRACTION.
+    let mut order: Vec<usize> = (0..lib.len()).collect();
+    order.sort_by(|&a, &b| lib[a].partial_cmp(&lib[b]).unwrap());
+    let quintile = order.len() / 5;
+    for (metric, flag) in [
+        ("intron_retention_index_dev", "intron_retention_high"),
+        ("unspliced_fraction_dev", "nuclear_fraction_flag"),
+    ] {
+        let values = cells.f64_col(metric);
+        let flags = cells.str_col(flag);
+        for q in 0..5 {
+            let sel = &order[q * quintile..(q + 1) * quintile];
+            let mut v: Vec<f64> = sel.iter().filter_map(|&i| values[i]).collect();
+            v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            let med = v[v.len() / 2];
+            let rate = sel.iter().filter(|&&i| flags[i] == "true").count() as f64 / sel.len() as f64;
+            report.push_str(&format!("{metric} quintile {q}: median {med:+.3}, {flag} rate {rate:.3}\n"));
+            assert!(med.abs() <= MAX_ABS_QUINTILE_MEDIAN, "{metric} quintile {q}: median {med:+.3}");
+            assert!(rate <= MAX_FLAG_FRACTION, "{flag} quintile {q}: rate {rate:.3}");
+        }
     }
     println!("null-model report\n{report}");
 }

@@ -13,9 +13,15 @@
 //! agree, and then shrinks exactly the outlier cells the index is meant to
 //! reveal. With `K = 10`, a gene with 5 UMIs is pulled two thirds of the way
 //! to the reference while a gene with 50 UMIs keeps five sixths of its own
-//! signal. The cell's index is the median over informative genes of
-//! `log2(IR_gc / p_gs)`; the MAD of the same values separates a global shift
-//! (retention in every gene) from gene-specific changes.
+//! signal. The cell's index is the precision-weighted mean over informative
+//! genes of `r_gc = log2(IR_gc / p_gs)`, with delta-method variances
+//! `Var(r_gc) = n (1 - p) / ((n + K)^2 p ln^2 2)` and weights capped at the
+//! weight of a gene with `WEIGHT_CAP_UMIS` UMIs so no single gene dominates;
+//! `se = 1 / sqrt(sum w)`. The MAD of the unweighted `r_gc` separates a global
+//! shift (retention in every gene) from gene-specific changes. A median was
+//! tried first and rejected: its standard error has no closed form when the
+//! per-gene ratios are not identically distributed (few-UMI genes are far
+//! noisier), which left the outlier flags uncalibrated at low depth.
 //!
 //! Adapted from the intron-retention ratio of IRFinder (Middleton et al. 2017)
 //! to sparse per-cell counts.
@@ -24,7 +30,7 @@ use rayon::prelude::*;
 
 use crate::expression::SplicedUnspliced;
 use crate::model::intron_retention::IntronRetentionMetrics;
-use crate::reference::{Strata, flag_outliers, robust_z_by_stratum};
+use crate::reference::{Strata, flag_outliers, robust_z_by_stratum, scaled_deviation_by_stratum_and_depth};
 use crate::stats::robust::{mad, median};
 
 /// A gene counts for a cell when it has at least this many `S + U` UMIs.
@@ -36,6 +42,10 @@ pub const MIN_GENES: usize = 20;
 pub const MIN_CELLS_PER_GENE: usize = 10;
 /// Prior strength (pseudo-counts) of the beta shrinkage toward the stratum ratio.
 pub const PRIOR_STRENGTH: f64 = 10.0;
+/// A gene's weight is capped at the weight it would have with this many UMIs.
+pub const WEIGHT_CAP_UMIS: f64 = 50.0;
+/// Floor for the per-cell standard error (log2 units).
+const MIN_SE: f32 = 0.01;
 
 /// Per-gene reference of one stratum.
 struct GeneReference {
@@ -57,11 +67,17 @@ pub fn compute(layers: &SplicedUnspliced, strata: &Strata) -> IntronRetentionMet
         .filter(|&g| references.iter().any(|r| r.p[g].is_finite()))
         .count();
 
-    let rows: Vec<(f32, f32, u32)> = (0..n_cells)
+    let ln2_sq = std::f64::consts::LN_2.powi(2);
+    // Delta-method variance of log2(IR / p) for a gene with n UMIs.
+    let ratio_var = |n: f64, p: f64| n * (1.0 - p) / ((n + PRIOR_STRENGTH).powi(2) * p * ln2_sq);
+
+    let rows: Vec<(f32, f32, f32, u32)> = (0..n_cells)
         .into_par_iter()
         .map_init(Vec::<f32>::new, |ratios, cell| {
             ratios.clear();
             let reference = &references[strata.labels[cell] as usize];
+            let mut sum_w = 0f64;
+            let mut sum_wr = 0f64;
             layers.for_each_gene(cell, |gene, s, u| {
                 let n = s + u;
                 if n < MIN_GENE_UMIS {
@@ -74,33 +90,51 @@ pub fn compute(layers: &SplicedUnspliced, strata: &Strata) -> IntronRetentionMet
                 }
                 let a = PRIOR_STRENGTH * p;
                 let b = PRIOR_STRENGTH * (1.0 - p);
-                let ir = (u as f64 + a) / (n as f64 + a + b);
-                ratios.push((ir / p).log2() as f32);
+                let nf = n as f64;
+                let ir = (u as f64 + a) / (nf + a + b);
+                let r = (ir / p).log2();
+                let w = (1.0 / ratio_var(nf, p)).min(1.0 / ratio_var(WEIGHT_CAP_UMIS, p));
+                sum_w += w;
+                sum_wr += w * r;
+                ratios.push(r as f32);
             });
             let used = ratios.len() as u32;
-            if ratios.len() < MIN_GENES {
-                (f32::NAN, f32::NAN, used)
+            if ratios.len() < MIN_GENES || sum_w <= 0.0 {
+                (f32::NAN, f32::NAN, f32::NAN, used)
             } else {
+                let index = (sum_wr / sum_w) as f32;
+                let se = ((1.0 / sum_w.sqrt()) as f32).max(MIN_SE);
                 let med = median(ratios);
-                (med, mad(ratios, med), used)
+                (index, se, mad(ratios, med), used)
             }
         })
         .collect();
 
     let mut index = Vec::with_capacity(n_cells);
+    let mut se = Vec::with_capacity(n_cells);
     let mut dispersion = Vec::with_capacity(n_cells);
     let mut genes_used = Vec::with_capacity(n_cells);
     let mut undefined_cells = 0usize;
-    for (i, d, u) in rows {
+    for (i, s, d, u) in rows {
         if !i.is_finite() {
             undefined_cells += 1;
         }
         index.push(i);
+        se.push(s);
         dispersion.push(d);
         genes_used.push(u);
     }
 
-    let (dev, reference) = robust_z_by_stratum(&index, strata);
+    // The raw index carries a small depth bias (Jensen: the log of a shrunk
+    // ratio is biased low when a cell has few UMIs per gene), so the
+    // deviation is computed within stratum *and* layer-depth bin, scaled by
+    // the cell's own standard error plus the bin's overdispersion. The
+    // per-stratum median/MAD of the raw index are still reported.
+    let depth: Vec<u64> = (0..n_cells)
+        .map(|c| layers.spliced.cell_total(c) + layers.unspliced.cell_total(c))
+        .collect();
+    let (_, reference) = robust_z_by_stratum(&index, strata);
+    let dev = scaled_deviation_by_stratum_and_depth(&index, &se, strata, &depth);
     let high = flag_outliers(&dev, strata, 1.0);
 
     IntronRetentionMetrics {
@@ -190,6 +224,7 @@ mod tests {
         // pulls it below the naive log2(2) but keeps the sign and order).
         for &c in &boosted {
             assert!(m.intron_retention_index[c] > 0.4, "{}", m.intron_retention_index[c]);
+            assert!(m.intron_retention_index_dev[c] > 3.0, "{}", m.intron_retention_index_dev[c]);
             assert!(m.intron_retention_high[c]);
         }
         assert_eq!(m.intron_retention_high.iter().filter(|f| **f).count(), 2);

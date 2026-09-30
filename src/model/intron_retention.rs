@@ -5,9 +5,12 @@ pub struct IntronRetentionMetrics {
     pub min_gene_umis: u32,
     /// Minimum genes with a defined ratio for a defined index.
     pub min_genes: usize,
-    /// Median over genes of `log2(IR_gc / IR_g,ref)`; NaN when undefined.
+    /// Precision-weighted mean over genes of `log2(IR_gc / IR_g,ref)`; NaN
+    /// when undefined.
     pub intron_retention_index: Vec<f32>,
-    /// Robust z-score of the index within the cell's reference stratum.
+    /// Deviation of the index from its reference stratum and layer-depth
+    /// bin, scaled by the cell's own standard error plus the bin's
+    /// overdispersion (`reference::scaled_deviation_by_stratum_and_depth`).
     pub intron_retention_index_dev: Vec<f32>,
     /// MAD over genes of the per-gene log2 ratios (gene-specific vs global shift).
     pub ir_gene_dispersion: Vec<f32>,
