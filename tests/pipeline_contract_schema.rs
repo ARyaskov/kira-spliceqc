@@ -61,10 +61,14 @@ fn summary_json_schema() {
     assert!(v["tool"]["simd"].is_string());
     assert!(v["input"]["n_cells"].is_number());
     assert!(v["input"]["species"].is_string());
-    assert!(v["distributions"]["splice_fidelity_index"]["median"].is_number());
-    assert!(v["distributions"]["splice_fidelity_index"]["p90"].is_number());
-    assert!(v["distributions"]["splice_fidelity_index"]["p99"].is_number());
-    assert!(v["distributions"]["stress_splicing_index"]["median"].is_number());
+    // Distribution statistics are `null` when no cell has a finite value
+    // (missing data is never coerced to 0).
+    for metric in ["splice_fidelity_index", "stress_splicing_index"] {
+        for stat in ["median", "p90", "p99"] {
+            let value = &v["distributions"][metric][stat];
+            assert!(value.is_number() || value.is_null(), "{metric}.{stat}");
+        }
+    }
     assert!(v["regimes"]["counts"].is_object());
     assert!(v["regimes"]["fractions"].is_object());
     assert!(v["qc"]["low_confidence_fraction"].is_number());

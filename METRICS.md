@@ -243,18 +243,31 @@ Trajectory class (`n_timepoints >= 3` and all finite):
 
 ## Pipeline Contract Derived Metrics
 
-Row metrics in `kira-spliceqc/spliceqc.tsv`:
-- `splice_fidelity_index = normalize01(sis)`
-- `intron_retention_rate = normalize01(b_u12)`
-- `exon_skipping_rate = normalize01(|axis_u2_u1|)`
-- `alt_splice_burden = normalize01(missplicing_burden)`
-- `splice_junction_noise = normalize01(burden_star)`
-- `stress_splicing_index = normalize01(coupling_stress)` if stage 8 present, else `normalize01(imbalance)`
+Row metrics in `kira-spliceqc/spliceqc.tsv`. Each is a single strictly monotone
+map of one source metric onto `[0, 1]`; non-finite sources stay non-finite and
+are written as empty fields (see "Missing values" below).
 
-`normalize01(x)`:
-- if finite and already in `[0,1]`, keep value
-- otherwise apply logistic transform `1 / (1 + exp(-x))`, then clamp to `[0,1]`
-- if non-finite, return `0`
+- `splice_fidelity_index = unit_clamp(sis)`
+- `intron_retention_rate = saturate(b_u12)`
+- `exon_skipping_rate = saturate(|axis_u2_u1|)`
+- `alt_splice_burden = rational_saturate(missplicing_burden)`
+- `splice_junction_noise = unit_clamp(burden_star)`
+- `stress_splicing_index = sigmoid(coupling_stress)` if stage 8 present, else `saturate(imbalance)`
+
+Transforms:
+- `unit_clamp(x)`: identity on `[0,1]`, clamped outside (for metrics that are unit-bounded by construction).
+- `saturate(x) = 1 - exp(-max(x, 0))` for non-negative unbounded inputs.
+- `rational_saturate(x) = max(x, 0) / (1 + max(x, 0))`.
+- `sigmoid(x) = 1 / (1 + exp(-x))` for signed inputs.
+
+Note: `alt_splice_burden` and `splice_junction_noise` are two monotone
+transforms of the same `missplicing_burden` and carry no independent
+information. Both are kept for contract compatibility and are deprecated.
+
+Missing values:
+- If any of the six row metrics is non-finite, the row gets the `MISSING_METRICS` flag,
+  `regime = Unclassified`, and `confidence` is empty.
+- Missing values are never coerced to `0`.
 
 Confidence:
 - `penalty = 0.4*intron_retention_rate + 0.3*alt_splice_burden + 0.3*splice_junction_noise`
@@ -269,8 +282,9 @@ Regime classification:
 - `Unclassified` otherwise
 
 Flags:
-- `LOW_CONFIDENCE` if `confidence < 0.5`
+- `LOW_CONFIDENCE` if `confidence` is finite and `< 0.5`
 - `LOW_SPLICE_SIGNAL` if `nnz < 50`
+- `MISSING_METRICS` if any row metric is non-finite
 
 Summary metrics in `summary.json`:
 - Distribution stats for fidelity/stress: `median`, `p90`, `p99`

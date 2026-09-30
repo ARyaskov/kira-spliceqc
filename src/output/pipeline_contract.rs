@@ -291,14 +291,17 @@ fn build_rows(
             let libsize = matrix.libsize(cell);
             let nnz = matrix.nnz_cell(cell);
 
-            let splice_fidelity_index = normalize01(sis.sis[cell]);
-            let intron_retention_rate = normalize01(missplicing.b_u12[cell]);
-            let exon_skipping_rate = normalize01(imbalance.axis_u2_u1[cell].abs());
-            let alt_splice_burden = normalize01(missplicing.burden[cell]);
-            let splice_junction_noise = normalize01(missplicing.burden_star[cell]);
+            // Every contract metric is a single monotone map of its source
+            // metric onto [0, 1]. Non-finite sources stay non-finite: missing
+            // data is written as an empty field and flagged, never coerced to 0.
+            let splice_fidelity_index = unit_clamp(sis.sis[cell]);
+            let intron_retention_rate = saturate(missplicing.b_u12[cell]);
+            let exon_skipping_rate = saturate(imbalance.axis_u2_u1[cell].abs());
+            let alt_splice_burden = rational_saturate(missplicing.burden[cell]);
+            let splice_junction_noise = unit_clamp(missplicing.burden_star[cell]);
             let stress_splicing_index = coupling
-                .map(|c| normalize01(c.coupling_stress[cell]))
-                .unwrap_or_else(|| normalize01(imbalance.imbalance[cell]));
+                .map(|c| sigmoid(c.coupling_stress[cell]))
+                .unwrap_or_else(|| saturate(imbalance.imbalance[cell]));
 
             let confidence = confidence_score(
                 splice_fidelity_index,
@@ -316,7 +319,18 @@ fn build_rows(
                 stress_splicing_index,
             );
 
-            let flags = build_flags(confidence, nnz);
+            let missing_metrics = [
+                splice_fidelity_index,
+                intron_retention_rate,
+                exon_skipping_rate,
+                alt_splice_burden,
+                splice_junction_noise,
+                stress_splicing_index,
+            ]
+            .iter()
+            .any(|v| !v.is_finite());
+
+            let flags = build_flags(confidence, nnz, missing_metrics);
 
             PipelineCellRow {
                 barcode,
@@ -354,7 +368,7 @@ fn write_spliceqc_tsv(path: &Path, rows: &[PipelineCellRow]) -> Result<(), Input
         let row = &rows[i];
         writeln!(
             w,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:.6}\t{:.6}\t{:.6}\t{:.6}\t{:.6}\t{:.6}\t{}\t{}\t{:.6}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             row.barcode,
             row.sample,
             row.condition,
@@ -362,15 +376,15 @@ fn write_spliceqc_tsv(path: &Path, rows: &[PipelineCellRow]) -> Result<(), Input
             row.libsize,
             row.nnz,
             row.expressed_genes,
-            row.splice_fidelity_index,
-            row.intron_retention_rate,
-            row.exon_skipping_rate,
-            row.alt_splice_burden,
-            row.splice_junction_noise,
-            row.stress_splicing_index,
+            fmt_metric(row.splice_fidelity_index),
+            fmt_metric(row.intron_retention_rate),
+            fmt_metric(row.exon_skipping_rate),
+            fmt_metric(row.alt_splice_burden),
+            fmt_metric(row.splice_junction_noise),
+            fmt_metric(row.stress_splicing_index),
             row.regime,
             row.flags,
-            row.confidence
+            fmt_metric(row.confidence)
         )
         .map_err(|e| InputError::io(path, e))?;
     }
@@ -686,20 +700,62 @@ pub fn spliceqc_header() -> &'static str {
     SPLICEQC_HEADER
 }
 
-fn normalize01(value: f32) -> f64 {
+/// Identity on `[0, 1]` for metrics that are unit-bounded by construction
+/// (SIS, burden*). Values outside the range are clamped; NaN is preserved.
+fn unit_clamp(value: f32) -> f64 {
     if !value.is_finite() {
-        return 0.0;
+        return f64::NAN;
+    }
+    (value as f64).clamp(0.0, 1.0)
+}
+
+/// `1 - exp(-x)` for non-negative, unbounded burden-like inputs. Strictly
+/// monotone on `[0, inf)`, maps 0 -> 0. Negative inputs are treated as 0.
+fn saturate(value: f32) -> f64 {
+    if !value.is_finite() {
+        return f64::NAN;
+    }
+    let x = (value as f64).max(0.0);
+    1.0 - (-x).exp()
+}
+
+/// `x / (1 + x)` for non-negative inputs. Strictly monotone on `[0, inf)`.
+/// Used where a second, distinct saturation of the same burden is part of
+/// the deprecated contract (see METRICS.md).
+fn rational_saturate(value: f32) -> f64 {
+    if !value.is_finite() {
+        return f64::NAN;
+    }
+    let x = (value as f64).max(0.0);
+    x / (1.0 + x)
+}
+
+/// Logistic map for signed inputs such as `coupling_stress`.
+fn sigmoid(value: f32) -> f64 {
+    if !value.is_finite() {
+        return f64::NAN;
     }
     let x = value as f64;
-    if (0.0..=1.0).contains(&x) {
-        x
+    1.0 / (1.0 + (-x).exp())
+}
+
+/// Six-decimal fixed formatting; non-finite values become an empty field.
+fn fmt_metric(value: f64) -> String {
+    if value.is_finite() {
+        format!("{value:.6}")
     } else {
-        let s = 1.0 / (1.0 + (-x).exp());
-        s.clamp(0.0, 1.0)
+        String::new()
     }
 }
 
 fn confidence_score(fidelity: f64, intron_retention: f64, alt_splice: f64, noise: f64) -> f64 {
+    if !(fidelity.is_finite()
+        && intron_retention.is_finite()
+        && alt_splice.is_finite()
+        && noise.is_finite())
+    {
+        return f64::NAN;
+    }
     let penalty = 0.4 * intron_retention + 0.3 * alt_splice + 0.3 * noise;
     (0.65 * fidelity + 0.35 * (1.0 - penalty)).clamp(0.0, 1.0)
 }
@@ -712,6 +768,15 @@ fn classify_regime(
     noise: f64,
     stress: f64,
 ) -> &'static str {
+    if !(fidelity.is_finite()
+        && intron_retention.is_finite()
+        && exon_skipping.is_finite()
+        && alt_splice.is_finite()
+        && noise.is_finite()
+        && stress.is_finite())
+    {
+        return "Unclassified";
+    }
     if fidelity < 0.2 && stress > 0.8 {
         "SplicingCollapse"
     } else if noise > 0.75 {
@@ -727,17 +792,72 @@ fn classify_regime(
     }
 }
 
-fn build_flags(confidence: f64, nnz: u64) -> String {
+fn build_flags(confidence: f64, nnz: u64, missing_metrics: bool) -> String {
     let mut flags = Vec::new();
-    if confidence < 0.5 {
+    if confidence.is_finite() && confidence < 0.5 {
         flags.push("LOW_CONFIDENCE");
     }
     if nnz < 50 {
         flags.push("LOW_SPLICE_SIGNAL");
+    }
+    if missing_metrics {
+        flags.push("MISSING_METRICS");
     }
     flags.join(",")
 }
 
 fn opt_f32(value: f32) -> Option<f32> {
     if value.is_finite() { Some(value) } else { None }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn assert_monotone(name: &str, f: fn(f32) -> f64, lo: f32, hi: f32) {
+        let steps = 4000;
+        let mut prev = f(lo);
+        assert!(prev.is_finite(), "{name}: non-finite at lower bound");
+        for i in 1..=steps {
+            let x = lo + (hi - lo) * (i as f32 / steps as f32);
+            let y = f(x);
+            assert!(y.is_finite(), "{name}: non-finite at {x}");
+            assert!(
+                y >= prev,
+                "{name}: not monotone between {} and {x} ({prev} > {y})",
+                lo + (hi - lo) * ((i - 1) as f32 / steps as f32)
+            );
+            assert!((0.0..=1.0).contains(&y), "{name}: {y} outside [0, 1]");
+            prev = y;
+        }
+    }
+
+    #[test]
+    fn contract_transforms_are_monotone_and_unit_bounded() {
+        assert_monotone("unit_clamp", unit_clamp, -2.0, 3.0);
+        assert_monotone("saturate", saturate, -2.0, 20.0);
+        assert_monotone("rational_saturate", rational_saturate, -2.0, 20.0);
+        assert_monotone("sigmoid", sigmoid, -12.0, 12.0);
+    }
+
+    #[test]
+    fn contract_transforms_preserve_nan() {
+        for f in [unit_clamp, saturate, rational_saturate, sigmoid] {
+            assert!(f(f32::NAN).is_nan());
+            assert!(f(f32::INFINITY).is_nan());
+        }
+        assert!(confidence_score(f64::NAN, 0.1, 0.1, 0.1).is_nan());
+        assert_eq!(
+            classify_regime(f64::NAN, 0.1, 0.1, 0.1, 0.1, 0.1),
+            "Unclassified"
+        );
+        assert_eq!(fmt_metric(f64::NAN), "");
+        assert_eq!(fmt_metric(0.5), "0.500000");
+    }
+
+    #[test]
+    fn missing_metrics_flag_is_set_without_low_confidence() {
+        let flags = build_flags(f64::NAN, 1000, true);
+        assert_eq!(flags, "MISSING_METRICS");
+    }
 }
