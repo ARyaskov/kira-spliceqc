@@ -8,8 +8,56 @@ use crate::input::error::InputError;
 use crate::input::shared_cache::validate_dimensions;
 use crate::input::{InputDescriptor, InputKind, OrganelleCacheInput};
 use crate::input::{h5ad, tenx};
+use crate::io::layers::{LayerLocation, detect_mtx_layers, h5ad_has_layers};
 
 pub fn run_stage0(
+    path: &Path,
+    run_mode: RunMode,
+    cache_override: Option<&Path>,
+) -> Result<InputDescriptor, InputError> {
+    run_stage0_with_layers(path, run_mode, cache_override, None)
+}
+
+/// Stage 0 with an explicit spliced/unspliced layer source (`--layers`).
+/// Without an override, layers are auto-detected next to the input (see
+/// `io::layers::detect_mtx_layers`) or inside the AnnData file.
+pub fn run_stage0_with_layers(
+    path: &Path,
+    run_mode: RunMode,
+    cache_override: Option<&Path>,
+    layers_override: Option<&Path>,
+) -> Result<InputDescriptor, InputError> {
+    let mut descriptor = run_stage0_inner(path, run_mode, cache_override)?;
+    descriptor.layers = detect_layers(&descriptor, layers_override)?;
+    match &descriptor.layers {
+        Some(location) => info!(layers = %location.describe(), "spliced/unspliced layers detected (input level L1)"),
+        None => info!("no spliced/unspliced layers found (input level L0 only)"),
+    }
+    Ok(descriptor)
+}
+
+fn detect_layers(
+    descriptor: &InputDescriptor,
+    layers_override: Option<&Path>,
+) -> Result<Option<LayerLocation>, InputError> {
+    if let Some(p) = layers_override {
+        if !p.exists() {
+            return Err(InputError::MissingFile(p.display().to_string()));
+        }
+        return Ok(Some(if p.is_dir() {
+            LayerLocation::MtxDir(p.to_path_buf())
+        } else {
+            LayerLocation::H5ad(p.to_path_buf())
+        }));
+    }
+    Ok(match &descriptor.kind {
+        InputKind::TenX(tenx) => detect_mtx_layers(&tenx.root, None),
+        InputKind::H5AD(h5) => h5ad_has_layers(&h5.path).then(|| LayerLocation::H5ad(h5.path.clone())),
+        InputKind::OrganelleCache(cache) => detect_mtx_layers(&cache.root, None),
+    })
+}
+
+fn run_stage0_inner(
     path: &Path,
     run_mode: RunMode,
     cache_override: Option<&Path>,
@@ -38,6 +86,7 @@ pub fn run_stage0(
                 n_cells: validation.n_cells,
                 has_multiple_samples: validation.has_multiple_samples,
                 has_metadata: validation.has_metadata,
+                layers: None,
             })
         }
         DetectedInput::H5AD(path) => {
@@ -54,6 +103,7 @@ pub fn run_stage0(
                 n_cells: validation.n_cells,
                 has_multiple_samples: validation.has_multiple_samples,
                 has_metadata: validation.has_metadata,
+                layers: None,
             })
         }
     };
@@ -105,5 +155,6 @@ fn descriptor_from_cache(
         n_cells,
         has_multiple_samples: false,
         has_metadata: root.join("metadata.tsv").exists() || root.join("metadata.tsv.gz").exists(),
+        layers: None,
     })
 }

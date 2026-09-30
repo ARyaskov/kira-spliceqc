@@ -4,15 +4,30 @@ use tracing::info;
 
 use crate::expression::cache_writer::{CacheData, write_expr_bin};
 use crate::expression::index::build_index;
+use crate::expression::ExpressionMatrix;
+use crate::expression::layers::{LayerMatrix, SplicedUnspliced};
 use crate::expression::mmap::MmapExpressionMatrix;
+use crate::io::layers::{RawLayer, RawLayers, read_layers};
 use crate::input::error::InputError;
 use crate::input::{InputDescriptor, InputKind};
 use crate::io::{h5ad, mtx};
+
+/// Stage 1 result: the mmap'd main matrix plus, when the input carries them,
+/// the spliced/unspliced layers reindexed to the same gene/cell order.
+#[derive(Debug)]
+pub struct Stage1Output {
+    pub matrix: MmapExpressionMatrix,
+    pub layers: Option<SplicedUnspliced>,
+}
 
 pub fn run_stage1(
     input: &InputDescriptor,
     out_dir: &Path,
 ) -> Result<MmapExpressionMatrix, InputError> {
+    Ok(run_stage1_full(input, out_dir)?.matrix)
+}
+
+pub fn run_stage1_full(input: &InputDescriptor, out_dir: &Path) -> Result<Stage1Output, InputError> {
     let expr_path = out_dir.join("expr.bin");
     std::fs::create_dir_all(out_dir).map_err(|e| InputError::io(out_dir, e))?;
 
@@ -21,7 +36,21 @@ pub fn run_stage1(
         InputKind::H5AD(h5ad_input) => h5ad::read_h5ad(h5ad_input)?,
         InputKind::OrganelleCache(shared) => {
             info!("using shared cache mmap: {}", shared.cache_path.display());
-            return MmapExpressionMatrix::open_shared_cache(&shared.cache_path);
+            let matrix = MmapExpressionMatrix::open_shared_cache(&shared.cache_path)?;
+            // The shared cache is already in canonical order, so layers found
+            // next to it are matched by barcode against that order.
+            let layers = match &input.layers {
+                Some(location) => {
+                    let genes: Vec<String> =
+                        (0..matrix.n_genes()).map(|g| matrix.gene_symbol(g).to_string()).collect();
+                    let cells: Vec<String> =
+                        (0..matrix.n_cells()).map(|c| matrix.cell_name(c).to_string()).collect();
+                    let raw_layers = read_layers(location, &genes, &cells)?;
+                    Some(build_layers(raw_layers, genes.len(), cells.len(), None, None))
+                }
+                None => None,
+            };
+            return Ok(Stage1Output { matrix, layers });
         }
     };
 
@@ -29,8 +58,25 @@ pub fn run_stage1(
         return Err(InputError::InvalidSparseMatrix);
     }
 
+    // Layers are read in the raw index space and reindexed with the same maps
+    // as the main matrix below.
+    let raw_layers = match &input.layers {
+        Some(location) => Some(read_layers(location, &raw.genes, &raw.cells)?),
+        None => None,
+    };
+
     let gene_index = build_index(raw.genes, true)?;
     let cell_index = build_index(raw.cells, false)?;
+
+    let layers = raw_layers.map(|rl| {
+        build_layers(
+            rl,
+            input.n_genes,
+            input.n_cells,
+            Some(&gene_index.old_to_new),
+            Some(&cell_index.old_to_new),
+        )
+    });
 
     let mut triplets: Vec<(u32, u32, u32)> = raw
         .triplets
@@ -66,7 +112,48 @@ pub fn run_stage1(
     write_expr_bin(&expr_path, data)?;
     info!("expression cache written: {}", expr_path.display());
 
-    MmapExpressionMatrix::open(&expr_path)
+    let matrix = MmapExpressionMatrix::open(&expr_path)?;
+    Ok(Stage1Output { matrix, layers })
+}
+
+/// Reindexes raw layer triplets (optional `old_to_new` maps) and builds the
+/// CSC layer set.
+fn build_layers(
+    raw: RawLayers,
+    n_genes: usize,
+    n_cells: usize,
+    gene_map: Option<&[u32]>,
+    cell_map: Option<&[u32]>,
+) -> SplicedUnspliced {
+    let remap = |layer: RawLayer| -> LayerMatrix {
+        let triplets: Vec<(u32, u32, u32)> = layer
+            .triplets
+            .into_iter()
+            .map(|(g, c, k)| {
+                let g = gene_map.map_or(g, |m| m[g as usize]);
+                let c = cell_map.map_or(c, |m| m[c as usize]);
+                (g, c, k)
+            })
+            .collect();
+        LayerMatrix::from_triplets(n_genes, n_cells, triplets)
+    };
+    let spliced = remap(raw.spliced);
+    let unspliced = remap(raw.unspliced);
+    let ambiguous = raw.ambiguous.map(remap);
+    info!(
+        source = raw.source.as_str(),
+        spliced_nnz = spliced.nnz(),
+        unspliced_nnz = unspliced.nnz(),
+        cells_without_layers = raw.cells_without_layers,
+        "spliced/unspliced layers indexed"
+    );
+    SplicedUnspliced {
+        spliced,
+        unspliced,
+        ambiguous,
+        source: raw.source,
+        cells_without_layers: raw.cells_without_layers,
+    }
 }
 
 fn consolidate_triplets(

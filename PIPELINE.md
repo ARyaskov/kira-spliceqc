@@ -32,6 +32,22 @@ Order of resolution:
 
 Shared cache spec: [kira-shared-sc-cache/CACHE_FILE.md](https://github.com/ARyaskov/kira-shared-sc-cache/blob/main/CACHE_FILE.md)
 
+## Spliced/unspliced layers (input level L1)
+
+Stage 0 records a layer source in `InputDescriptor.layers`:
+
+1. `--layers PATH` if given (directory with `spliced.mtx`/`unspliced.mtx`, or an `.h5ad` with `layers/`).
+2. `spliced.mtx[.gz]` + `unspliced.mtx[.gz]` inside the input directory.
+3. STARsolo sibling: `<root>/Gene/<subset>` -> `<root>/Velocyto/<subset>` (also `GeneFull`).
+4. `.h5ad`: `layers/spliced` + `layers/unspliced` (+ optional `layers/ambiguous`).
+
+Stage 1 reads the layers in the raw index space, reindexes them with the same
+gene/cell sort as the main matrix and keeps them in memory as CSC
+(`expression::layers::SplicedUnspliced`). A layer directory with its own
+`barcodes.tsv` is matched by barcode (cells absent from it get zero layer counts
+and are counted in `cells_without_layers`); otherwise the layers must have the
+main matrix's dimensions and order. Gene count mismatches are hard errors.
+
 ## Stage order
 
 Runtime order in `run_pipeline`:

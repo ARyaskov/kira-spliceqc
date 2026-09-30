@@ -1,7 +1,7 @@
 pub mod config;
 pub mod run;
 
-use crate::expression::MmapExpressionMatrix;
+use crate::expression::{MmapExpressionMatrix, SplicedUnspliced};
 use crate::input::InputDescriptor;
 use crate::model::assembly_phase::AssemblyPhaseImbalanceMetrics;
 use crate::model::collapse::SpliceosomeCollapseMetrics;
@@ -20,6 +20,8 @@ use crate::model::timecourse::TimecourseSplicingMetrics;
 pub struct PipelineContext {
     pub stage0: InputDescriptor,
     pub stage1: MmapExpressionMatrix,
+    /// Spliced/unspliced layers (input level L1), when the input carries them.
+    pub stage1_layers: Option<SplicedUnspliced>,
     pub stage2: GenesetActivityMatrix,
     pub stage3: IsoformDispersionMetrics,
     pub stage4: MissplicingMetrics,

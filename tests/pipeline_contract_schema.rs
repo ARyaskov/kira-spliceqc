@@ -23,6 +23,7 @@ fn run_pipeline_contract(input: &Path, out: &Path) {
         input: input.to_path_buf(),
         out_dir: out.to_path_buf(),
         cache_path: None,
+        layers: None,
         mode: AnalysisMode::Cell,
         run_mode: RunMode::Pipeline,
         output_json: false,

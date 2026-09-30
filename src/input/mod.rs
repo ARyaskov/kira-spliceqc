@@ -1,4 +1,4 @@
-﻿use std::path::PathBuf;
+use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InputKind {
@@ -14,6 +14,8 @@ pub struct InputDescriptor {
     pub n_cells: usize,
     pub has_multiple_samples: bool,
     pub has_metadata: bool,
+    /// Spliced/unspliced layer source (input level L1), when detected.
+    pub layers: Option<crate::io::layers::LayerLocation>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

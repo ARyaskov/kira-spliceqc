@@ -39,6 +39,11 @@ pub struct RunArgs {
     pub out: Option<PathBuf>,
     #[arg(long)]
     pub cache: Option<PathBuf>,
+    /// Spliced/unspliced layer source: a directory with spliced.mtx and
+    /// unspliced.mtx (STARsolo Velocyto, kb-python) or an .h5ad with layers/.
+    /// Auto-detected next to the input when omitted.
+    #[arg(long)]
+    pub layers: Option<PathBuf>,
     #[arg(long, value_enum, default_value = "cell")]
     pub mode: ModeArg,
     #[arg(long)]
@@ -108,6 +113,7 @@ fn execute_run(args: RunArgs) -> Result<(), SpliceQcError> {
         input,
         out_dir: out,
         cache_path: args.cache,
+        layers: args.layers,
         mode: match args.mode {
             ModeArg::Cell => AnalysisMode::Cell,
             ModeArg::Sample => AnalysisMode::Sample,

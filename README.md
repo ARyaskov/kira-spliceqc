@@ -57,12 +57,25 @@ kira-spliceqc run \
   --run-mode pipeline
 ```
 
+## Input levels
+
+- **L0 — gene counts**: 10x MatrixMarket directory, `.h5ad`, or the shared
+  `kira-organelle.bin` cache. Enables the expression signatures (`*_expr`).
+- **L1 — spliced / unspliced (/ ambiguous) counts**: auto-detected as
+  `spliced.mtx[.gz]` + `unspliced.mtx[.gz]` next to `matrix.mtx` (kb-python),
+  in the STARsolo sibling `Solo.out/Velocyto/<subset>` of `Solo.out/Gene/<subset>`,
+  or as `layers/spliced` + `layers/unspliced` inside an `.h5ad`. Pass `--layers PATH`
+  to point at another directory or file. When the layer directory carries its own
+  `barcodes.tsv`, cells are matched by barcode; otherwise the layers must have the
+  main matrix's shape and order.
+
 ## Modes
 
 - `--mode cell` (default): per-cell QC run.
 - `--mode sample`: currently not implemented (returns an error).
 - `--run-mode standalone` (default): writes stage outputs to `--out`.
 - `--run-mode pipeline`: writes into `<OUT>/kira-spliceqc` and generates pipeline contract artifacts.
+- `--layers PATH`: explicit spliced/unspliced layer source (see "Input levels").
 - `--extended`: enables stages 8-13 (`coupling`, `exon/intron`, `assembly`, `noise`, `cryptic risk`, `collapse`).
 - `--experimental-signatures`: writes the experimental composite signatures (`sis`/`class`, `SOS`/`RLR`/`SII` and their flags, cryptic risk, collapse) to the per-cell outputs. Off by default; implied by `--run-mode pipeline` because the pipeline contract is built on them.
 

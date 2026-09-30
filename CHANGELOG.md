@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+Phase 1 of the scientific roadmap (Tier A, direct splicing measurements).
+
+### Added
+
+- Input level L1: spliced/unspliced/ambiguous count layers are auto-detected
+  next to a 10x directory, in the STARsolo `Velocyto/` sibling of `Gene/`,
+  or inside an `.h5ad` (`layers/`), and can be pointed at with `--layers`.
+  Layers are reindexed with the main matrix (`SplicedUnspliced`).
+
 ## [0.3.0] - 2026-10-01
 
 Phase 0 of the scientific roadmap: correctness fixes, honest naming and a

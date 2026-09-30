@@ -5,6 +5,10 @@ pub struct RunConfig {
     pub input: PathBuf,
     pub out_dir: PathBuf,
     pub cache_path: Option<PathBuf>,
+    /// Explicit spliced/unspliced layer source (directory with
+    /// `spliced.mtx`/`unspliced.mtx`, or an AnnData file with `layers/`).
+    /// Auto-detected when absent.
+    pub layers: Option<PathBuf>,
     pub mode: AnalysisMode,
     pub run_mode: RunMode,
     pub output_json: bool,

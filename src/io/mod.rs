@@ -13,6 +13,7 @@ pub struct RawMatrix {
 }
 
 pub mod h5ad;
+pub mod layers;
 pub mod mtx;
 
 /// Shared CSC → triplets loader for stage 1 ingestion.

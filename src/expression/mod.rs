@@ -79,6 +79,8 @@ pub trait ExpressionMatrix: Sync {
 
 pub mod cache_writer;
 pub mod index;
+pub mod layers;
 pub mod mmap;
 
+pub use layers::{LayerMatrix, SplicedUnspliced};
 pub use mmap::MmapExpressionMatrix;

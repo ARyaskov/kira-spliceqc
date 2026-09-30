@@ -60,6 +60,8 @@ pub enum InputError {
     InvalidSparseMatrix,
     #[error("invalid shared cache: {0}")]
     InvalidSharedCache(String),
+    #[error("spliced/unspliced layers do not match the main matrix: {0}")]
+    LayerMismatch(String),
     #[error("gene index overflow")]
     GeneIndexOverflow,
     #[error("cell index overflow")]

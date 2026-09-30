@@ -9,8 +9,8 @@ use crate::genesets::catalog::default_catalog_path;
 use crate::genesets::load_catalog;
 use crate::input::error::InputError;
 use crate::output::pipeline_contract;
-use crate::pipeline::stage0_input::run_stage0;
-use crate::pipeline::stage1_expression::run_stage1;
+use crate::pipeline::stage0_input::run_stage0_with_layers;
+use crate::pipeline::stage1_expression::{Stage1Output, run_stage1_full};
 use crate::pipeline::stage2_genesets::aggregate as run_stage2;
 use crate::pipeline::stage3_isoform::compute as run_stage3;
 use crate::pipeline::stage4_missplicing::compute as compute_missplicing;
@@ -77,13 +77,28 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
     std::fs::create_dir_all(&effective_out_dir)?;
 
     let stage0 = run_logged(0, || {
-        run_stage0(&config.input, config.run_mode, config.cache_path.as_deref())
+        run_stage0_with_layers(
+            &config.input,
+            config.run_mode,
+            config.cache_path.as_deref(),
+            config.layers.as_deref(),
+        )
     })?;
     // Stage 1 materialises an internal expression cache (expr.bin). It is an
     // implementation detail, so it lives in a hidden scratch directory that is
     // removed once the run completes instead of polluting the output directory.
     let cache_dir = effective_out_dir.join(EXPR_CACHE_DIR);
-    let stage1 = run_logged(1, || run_stage1(&stage0, &cache_dir))?;
+    let Stage1Output {
+        matrix: stage1,
+        layers: stage1_layers,
+    } = run_logged(1, || run_stage1_full(&stage0, &cache_dir))?;
+    if let Some(layers) = &stage1_layers {
+        info!(
+            target: "kira_spliceqc::cli::run",
+            source = layers.source.as_str(),
+            "input level L1 available: spliced/unspliced layers loaded"
+        );
+    }
 
     // Load catalog ONCE and pass &GenesetCatalog to all downstream consumers
     // (previously stages 2, 3 and pipeline contract each reloaded it).
@@ -124,6 +139,7 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
     let context = PipelineContext {
         stage0,
         stage1,
+        stage1_layers,
         stage2,
         stage3,
         stage4,

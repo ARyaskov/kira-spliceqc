@@ -34,6 +34,8 @@ kira-scio = { version = "0.2.1", features = ["h5ad"] }
 # kira-scio's h5ad feature pulls in `hdf5` (no static), so the project would not
 # link without a system HDF5 installation. Force static linkage explicitly.
 hdf5-sys = { version = "0.8.1", features = ["static"] }
+# Direct HDF5 access for AnnData `layers/` and `obs/` (kira-scio only reads X).
+hdf5 = "0.8.1"
 
 
 [dev-dependencies]
