@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::time::Instant;
 
 use tracing::{info, warn};
@@ -31,6 +32,7 @@ use crate::pipeline::stage17_intron_retention::run_stage17;
 use crate::pipeline::stage18_cell_cycle::run_stage18;
 use crate::metrics::cell_cycle::cell_cycle_gene_ids;
 use crate::reference::Strata;
+use crate::reference::external::{ReferenceFile, build_reference};
 
 /// Scratch directory (inside the output directory) for the stage-1 cache.
 const EXPR_CACHE_DIR: &str = ".kira-spliceqc-cache";
@@ -100,7 +102,14 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
         layers: stage1_layers,
         metadata: stage1_metadata,
     } = run_logged(1, || run_stage1_full(&stage0, &cache_dir, config.metadata.as_deref()))?;
-    let strata = Strata::from_metadata(&stage1_metadata, stage1.n_cells(), config.stratify_by.as_deref());
+    let external = match &config.reference {
+        Some(path) => Some(ReferenceFile::read(path)?),
+        None => None,
+    };
+    let strata = match &external {
+        Some(file) => file.assign(&stage1_metadata, stage1.n_cells()),
+        None => Strata::from_metadata(&stage1_metadata, stage1.n_cells(), config.stratify_by.as_deref()),
+    };
     info!(
         target: "kira_spliceqc::cli::run",
         reference = strata.mode.as_str(),
@@ -151,8 +160,8 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
     let stage18 = run_logged(18, || Ok(run_stage18(&stage1, Some(&controls))))?;
     let (stage16, stage17) = match &stage1_layers {
         Some(layers) => (
-            Some(run_logged(16, || Ok(run_stage16(layers, &strata)))?),
-            Some(run_logged(17, || Ok(run_stage17(layers, &strata)))?),
+            Some(run_logged(16, || Ok(run_stage16(layers, &strata, external.as_ref())))?),
+            Some(run_logged(17, || Ok(run_stage17(&stage1, layers, &strata, external.as_ref())))?),
         ),
         None => {
             info!(target: "kira_spliceqc::cli::run", "skipping Stages 16-17 (no spliced/unspliced layers)");
@@ -256,6 +265,7 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
             context.stage17.as_ref(),
             &context.stage18,
             &strata,
+            config.reference.as_deref(),
             &catalog,
         )?;
         info!(
@@ -278,6 +288,48 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
             "failed to remove expression cache directory"
         );
     }
+    Ok(())
+}
+
+/// `kira-spliceqc reference build`: runs stages 0, 1, 16 and 17 on a control
+/// dataset and writes its Tier A norms as a reference file.
+pub fn build_reference_file(config: RunConfig, out: &Path) -> Result<(), SpliceQcError> {
+    if let Some(threads) = config.threads {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build_global()
+            .map_err(|e| SpliceQcError::InvalidInput(format!("failed to set threads: {e}")))?;
+    }
+    let scratch = std::env::temp_dir().join(format!("kira-spliceqc-ref-{}", std::process::id()));
+    let stage0 = run_logged(0, || {
+        run_stage0_with_layers(&config.input, RunMode::Standalone, None, config.layers.as_deref())
+    })?;
+    if stage0.layers.is_none() {
+        return Err(SpliceQcError::InvalidInput(
+            "reference build needs spliced/unspliced layers (input level L1)".to_string(),
+        ));
+    }
+    let Stage1Output {
+        matrix,
+        layers,
+        metadata,
+    } = run_logged(1, || run_stage1_full(&stage0, &scratch, config.metadata.as_deref()))?;
+    let layers = layers.expect("layers detected in stage 0");
+    let strata = Strata::from_metadata(&metadata, matrix.n_cells(), config.stratify_by.as_deref());
+    let stage16 = run_logged(16, || Ok(run_stage16(&layers, &strata, None)))?;
+    let stage17 = run_logged(17, || Ok(run_stage17(&matrix, &layers, &strata, None)))?;
+    let symbols: Vec<String> = (0..matrix.n_genes()).map(|g| matrix.gene_symbol(g).to_string()).collect();
+    let file = build_reference(&strata, matrix.n_cells(), Some(&stage16), Some(&stage17), &symbols);
+    drop(matrix);
+    let _ = std::fs::remove_dir_all(&scratch);
+    file.write(out)?;
+    info!(
+        target: "kira_spliceqc::cli::run",
+        path = %out.display(),
+        strata = file.strata.len(),
+        "reference written"
+    );
+    println!("reference written: {} ({} strata)", out.display(), file.strata.len());
     Ok(())
 }
 

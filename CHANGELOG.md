@@ -36,6 +36,13 @@ Phase 1 of the scientific roadmap (Tier A, direct splicing measurements).
   13 and 15. Null-model library-size correlations of the expression
   signatures drop from 0.4-0.7 to below 0.1; a zero MAD in a bin now gives
   undefined z-scores instead of silent zeros.
+- External reference: `kira-spliceqc reference build --input CONTROL --out
+  ref.json` stores per-stratum Tier A norms (logit median and
+  overdispersion of the unspliced fraction, median and overdispersion of
+  the intron retention index, pooled per-gene unspliced ratios);
+  `run --reference ref.json` assigns cells to the reference strata and
+  computes Tier A deviations and flags against them, so a whole stratum
+  shifted relative to the control is detected.
 - Legacy HGNC alias table for panel symbol resolution (SR proteins,
   hnRNPs, snRNP/SF3 subunits, U2AF, NMD factors, cell-cycle genes) shared
   by the geneset loader, the stage-15 panels and the cell-cycle scores;

@@ -74,7 +74,7 @@ the cell's own stratum. `summary.json.reference.mode` records which mode ran:
 | --- | --- | --- |
 | `stratified` | metadata column found (`--stratify-by`, else the first of `cell_type`, `celltype`, `cell_type_annotation`, `annotation`, ..., then `cluster`, `leiden`, `louvain`, `seurat_clusters`, ...) | per stratum; strata with fewer than `MIN_STRATUM_CELLS = 50` cells (and cells with an empty value) fold into the `global` stratum |
 | `global` | no usable column | one stratum, the whole dataset |
-| `external` | reserved for `--reference ref.json` (not yet available) | |
+| `external` | `--reference ref.json` (built by `kira-spliceqc reference build` on a control dataset) | cells are assigned to the reference strata by the reference's metadata column (unmatched -> `global`); Tier A deviations (`unspliced_fraction_dev`, `intron_retention_index_dev`) and the per-gene intron-retention ratios use the file's norms; expression signatures stay dataset-relative |
 
 Metadata sources: `metadata.tsv[.gz]` next to a 10x directory (header line,
 first column = barcode) or `--metadata PATH`; `obs` string and categorical
@@ -91,6 +91,15 @@ Proportion `p_c` with `n_c` trials (e.g. unspliced fraction with `S + U` UMIs):
 Outlier flags: `sign * d_c >= 3` **and** Benjamini-Hochberg adjusted two-sided
 normal p-value `< 0.05` within the stratum. Expected flag rate on a null model
 is therefore below 1 %.
+
+Reference file (`ref.json`, `format = kira-spliceqc-reference`, `version = 1`):
+per stratum `unspliced_fraction {median_logit, tau2, median, n_defined}`,
+`intron_retention_index {median, tau2, n_defined}` and
+`gene_unspliced_ratio {symbol: p_gs}`; the first stratum is always `global`.
+With an external reference the target run's own norms are still computed and
+reported (`summary.json.unspliced.strata`), while `_dev` values and flags use the
+file's norms, so a whole stratum that shifted relative to the control shows up
+(it is invisible to a dataset-relative reference by construction).
 
 ## Tier A: Unspliced Fraction (Stage 16, requires input level L1)
 

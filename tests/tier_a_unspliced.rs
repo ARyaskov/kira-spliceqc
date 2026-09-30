@@ -58,6 +58,7 @@ fn config(input: &Path, out: &Path, run_mode: RunMode) -> RunConfig {
         layers: None,
         metadata: None,
         stratify_by: None,
+        reference: None,
         mode: AnalysisMode::Cell,
         run_mode,
         output_json: true,

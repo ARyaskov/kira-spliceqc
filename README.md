@@ -69,6 +69,20 @@ kira-spliceqc run \
   `barcodes.tsv`, cells are matched by barcode; otherwise the layers must have the
   main matrix's shape and order.
 
+## External reference
+
+Build a reference from a control dataset with spliced/unspliced layers and
+apply it to other runs; Tier A deviations and flags are then relative to the
+control's strata instead of the dataset's own:
+
+```bash
+kira-spliceqc reference build --input ./control --out ./ref.json --stratify-by cell_type
+```
+
+```bash
+kira-spliceqc run --input ./sample --out ./out/sample --reference ./ref.json
+```
+
 ## Modes
 
 - `--mode cell` (default): per-cell QC run.
@@ -78,6 +92,7 @@ kira-spliceqc run \
 - `--layers PATH`: explicit spliced/unspliced layer source (see "Input levels").
 - `--metadata PATH`: cell metadata table (`barcode` + columns); auto-detected as `metadata.tsv[.gz]` next to a 10x directory, `.h5ad` inputs use `obs`.
 - `--stratify-by COLUMN`: metadata column defining reference strata (default: `cell_type`-like, then `cluster`-like columns, else one global stratum). Strata under 50 cells fold into `global`.
+- `--reference ref.json`: external reference (see above); `summary.json.reference` records the file and the metrics that used it.
 - `--extended`: enables stages 8-13 (`coupling`, `exon/intron`, `assembly`, `noise`, `cryptic risk`, `collapse`).
 - `--experimental-signatures`: writes the experimental composite signatures (`sis`/`class`, `SOS`/`RLR`/`SII` and their flags, cryptic risk, collapse) to the per-cell outputs. Off by default; implied by `--run-mode pipeline` because the pipeline contract is built on them.
 

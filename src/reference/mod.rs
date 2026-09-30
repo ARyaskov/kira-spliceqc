@@ -352,6 +352,138 @@ pub fn logit_deviation_by_stratum(
     (d, stats)
 }
 
+/// Logit-scale reference of a proportion in one stratum (buildable into and
+/// applicable from an external reference file).
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+pub struct ProportionNorm {
+    /// Median of the clamped logits.
+    pub median_logit: f64,
+    /// Method-of-moments overdispersion of the logits.
+    pub tau2: f64,
+    /// Median proportion (for reporting).
+    pub median: f32,
+    pub n_defined: usize,
+}
+
+/// Reference of a continuous value with a per-cell standard error.
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+pub struct ContinuousNorm {
+    pub median: f32,
+    /// Overdispersion beyond the cells' own standard errors.
+    pub tau2: f64,
+    pub n_defined: usize,
+}
+
+fn logit_terms(proportions: &[f32], trials: &[u64]) -> (Vec<f64>, Vec<f64>) {
+    let n_cells = proportions.len();
+    let mut logits = vec![f64::NAN; n_cells];
+    let mut binom_var = vec![f64::NAN; n_cells];
+    for c in 0..n_cells {
+        let p = proportions[c] as f64;
+        let n = trials[c] as f64;
+        if p.is_finite() && n > 0.0 {
+            let half = 0.5 / n;
+            let pc = p.clamp(half, 1.0 - half);
+            logits[c] = (pc / (1.0 - pc)).ln();
+            binom_var[c] = 1.0 / (n * pc * (1.0 - pc));
+        }
+    }
+    (logits, binom_var)
+}
+
+/// Per-stratum proportion norms of this dataset (what an external reference stores).
+pub fn proportion_norms(proportions: &[f32], trials: &[u64], strata: &Strata) -> Vec<ProportionNorm> {
+    let (logits, binom_var) = logit_terms(proportions, trials);
+    strata
+        .members()
+        .iter()
+        .map(|members| {
+            let props: Vec<f32> = members.iter().map(|&c| proportions[c]).collect();
+            let member_logits: Vec<f32> = members.iter().map(|&c| logits[c] as f32).collect();
+            let med_logit = median(&member_logits) as f64;
+            let robust_var = (1.4826 * mad(&member_logits, med_logit as f32) as f64).powi(2);
+            let defined: Vec<usize> = members.iter().copied().filter(|&c| logits[c].is_finite()).collect();
+            let mean_binom = if defined.is_empty() {
+                f64::NAN
+            } else {
+                defined.iter().map(|&c| binom_var[c]).sum::<f64>() / defined.len() as f64
+            };
+            ProportionNorm {
+                median_logit: med_logit,
+                tau2: (robust_var - mean_binom).max(0.0),
+                median: median(&props),
+                n_defined: defined.len(),
+            }
+        })
+        .collect()
+}
+
+/// Logit deviation of every cell from the norm of its stratum label.
+pub fn apply_proportion_norms(
+    proportions: &[f32],
+    trials: &[u64],
+    labels: &[u32],
+    norms: &[Option<ProportionNorm>],
+) -> Vec<f32> {
+    let (logits, binom_var) = logit_terms(proportions, trials);
+    (0..proportions.len())
+        .map(|c| match norms[labels[c] as usize] {
+            Some(norm) if logits[c].is_finite() && norm.median_logit.is_finite() => {
+                let denom = (binom_var[c] + norm.tau2).sqrt();
+                if denom > 0.0 { ((logits[c] - norm.median_logit) / denom) as f32 } else { f32::NAN }
+            }
+            _ => f32::NAN,
+        })
+        .collect()
+}
+
+/// Per-stratum norms of a value with per-cell standard errors (no depth bins:
+/// an external reference carries one norm per stratum).
+pub fn continuous_norms(values: &[f32], se: &[f32], strata: &Strata) -> Vec<ContinuousNorm> {
+    strata
+        .members()
+        .iter()
+        .map(|members| {
+            let defined: Vec<usize> = members
+                .iter()
+                .copied()
+                .filter(|&c| values[c].is_finite() && se[c].is_finite() && se[c] > 0.0)
+                .collect();
+            let sample: Vec<f32> = defined.iter().map(|&c| values[c]).collect();
+            let med = median(&sample);
+            let robust_var = (1.4826 * mad(&sample, med)).powi(2) as f64;
+            let mean_se2 = if defined.is_empty() {
+                f64::NAN
+            } else {
+                defined.iter().map(|&c| (se[c] as f64).powi(2)).sum::<f64>() / defined.len() as f64
+            };
+            ContinuousNorm {
+                median: med,
+                tau2: (robust_var - mean_se2).max(0.0),
+                n_defined: defined.len(),
+            }
+        })
+        .collect()
+}
+
+/// Scaled deviation of every cell from the continuous norm of its label.
+pub fn apply_continuous_norms(
+    values: &[f32],
+    se: &[f32],
+    labels: &[u32],
+    norms: &[Option<ContinuousNorm>],
+) -> Vec<f32> {
+    (0..values.len())
+        .map(|c| match norms[labels[c] as usize] {
+            Some(norm) if values[c].is_finite() && se[c].is_finite() && norm.median.is_finite() => {
+                let denom = ((se[c] as f64).powi(2) + norm.tau2).sqrt();
+                if denom > 0.0 { ((values[c] - norm.median) as f64 / denom) as f32 } else { f32::NAN }
+            }
+            _ => f32::NAN,
+        })
+        .collect()
+}
+
 /// Two-sided normal tail probability `P(|Z| >= |d|)`.
 pub fn two_sided_p(d: f64) -> f64 {
     if !d.is_finite() {
@@ -525,6 +657,8 @@ fn erfc(x: f64) -> f64 {
         .exp();
     if x >= 0.0 { r } else { 2.0 - r }
 }
+
+pub mod external;
 
 #[cfg(test)]
 mod tests {

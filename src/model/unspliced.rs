@@ -29,4 +29,8 @@ pub struct UnsplicedMetrics {
     pub nuclear_fraction_flag: Vec<bool>,
     /// Per-stratum reference of `unspliced_fraction` (median / MAD).
     pub reference: Vec<crate::reference::StratumStat>,
+    /// This dataset's per-stratum logit norms (stored by `reference build`).
+    pub norms: Vec<crate::reference::ProportionNorm>,
+    /// `internal` or `external` (norms taken from a reference file).
+    pub norm_source: &'static str,
 }

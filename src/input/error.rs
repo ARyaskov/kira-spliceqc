@@ -64,6 +64,8 @@ pub enum InputError {
     LayerMismatch(String),
     #[error("invalid cell metadata: {0}")]
     InvalidMetadata(String),
+    #[error("invalid reference file: {0}")]
+    InvalidReference(String),
     #[error("gene index overflow")]
     GeneIndexOverflow,
     #[error("cell index overflow")]

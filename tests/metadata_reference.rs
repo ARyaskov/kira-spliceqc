@@ -162,6 +162,7 @@ fn run(input: &Path, out: &Path, stratify_by: Option<&str>) {
         layers: None,
         metadata: None,
         stratify_by: stratify_by.map(str::to_string),
+        reference: None,
         mode: AnalysisMode::Cell,
         run_mode: RunMode::Pipeline,
         output_json: true,

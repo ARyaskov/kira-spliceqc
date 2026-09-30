@@ -10,7 +10,10 @@ use rayon::prelude::*;
 
 use crate::expression::SplicedUnspliced;
 use crate::model::unspliced::UnsplicedMetrics;
-use crate::reference::{Strata, flag_outliers, logit_deviation_by_stratum};
+use crate::reference::external::ReferenceFile;
+use crate::reference::{
+    Strata, apply_proportion_norms, flag_outliers, logit_deviation_by_stratum, proportion_norms,
+};
 
 /// Cells with fewer spliced + unspliced UMIs get an undefined fraction: a
 /// binomial proportion on fewer trials has a Wilson interval wider than
@@ -20,7 +23,10 @@ pub const MIN_LAYER_UMIS: u64 = 100;
 /// z for a 95 % two-sided interval.
 const Z95: f64 = 1.959_963_984_540_054;
 
-pub fn compute(layers: &SplicedUnspliced, strata: &Strata) -> UnsplicedMetrics {
+/// With an external reference the deviations use the file's per-stratum
+/// norms (cells are already assigned to the reference strata); the
+/// dataset's own norms are still computed and reported.
+pub fn compute(layers: &SplicedUnspliced, strata: &Strata, external: Option<&ReferenceFile>) -> UnsplicedMetrics {
     let n_cells = layers.n_cells();
     debug_assert_eq!(strata.n_cells(), n_cells);
 
@@ -67,8 +73,18 @@ pub fn compute(layers: &SplicedUnspliced, strata: &Strata) -> UnsplicedMetrics {
         .zip(&unspliced_umis)
         .map(|(s, u)| s + u)
         .collect();
-    let (unspliced_fraction_dev, reference) =
-        logit_deviation_by_stratum(&unspliced_fraction, &trials, strata);
+    let (_, reference) = logit_deviation_by_stratum(&unspliced_fraction, &trials, strata);
+    let norms = proportion_norms(&unspliced_fraction, &trials, strata);
+    let (unspliced_fraction_dev, norm_source) = match external {
+        Some(file) => (
+            apply_proportion_norms(&unspliced_fraction, &trials, &strata.labels, &file.unspliced_norms()),
+            "external",
+        ),
+        None => {
+            let own: Vec<_> = norms.iter().map(|n| Some(*n)).collect();
+            (apply_proportion_norms(&unspliced_fraction, &trials, &strata.labels, &own), "internal")
+        }
+    };
     let nuclear_fraction_flag = flag_outliers(&unspliced_fraction_dev, strata, -1.0);
 
     UnsplicedMetrics {
@@ -86,6 +102,8 @@ pub fn compute(layers: &SplicedUnspliced, strata: &Strata) -> UnsplicedMetrics {
         unspliced_fraction_dev,
         nuclear_fraction_flag,
         reference,
+        norms,
+        norm_source,
     }
 }
 
@@ -139,7 +157,7 @@ mod tests {
             source: "test".to_string(),
             cells_without_layers: 0,
         };
-        let m = compute(&layers, &Strata::global(2));
+        let m = compute(&layers, &Strata::global(2), None);
         assert_eq!(m.spliced_umis, vec![150, 10]);
         assert_eq!(m.unspliced_umis, vec![50, 10]);
         assert_eq!(m.ambiguous_umis, vec![8, 0]);

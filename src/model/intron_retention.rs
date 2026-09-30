@@ -24,4 +24,11 @@ pub struct IntronRetentionMetrics {
     pub reference: Vec<crate::reference::StratumStat>,
     /// Genes with a defined reference ratio in at least one stratum.
     pub genes_with_reference: usize,
+    /// Per stratum, per gene: pooled unspliced ratio used as the reference
+    /// (NaN = undefined). From this dataset or from the external file.
+    pub gene_reference: Vec<Vec<f64>>,
+    /// This dataset's per-stratum norms of the index (stored by `reference build`).
+    pub norms: Vec<crate::reference::ContinuousNorm>,
+    /// `internal` or `external`.
+    pub norm_source: &'static str,
 }

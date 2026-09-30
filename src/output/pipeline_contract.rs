@@ -153,6 +153,10 @@ struct StratumStatJson {
 struct ReferenceJson {
     mode: &'static str,
     column: Option<String>,
+    /// Path of the external reference file, when one was used.
+    external_file: Option<String>,
+    /// Metrics whose deviations used the external norms.
+    external_metrics: Vec<&'static str>,
     n_strata: usize,
     min_stratum_cells: usize,
     folded_cells: usize,
@@ -333,6 +337,7 @@ pub fn write_pipeline_contract(
     intron_retention: Option<&IntronRetentionMetrics>,
     cell_cycle: &CellCycleMetrics,
     strata: &Strata,
+    reference_file: Option<&Path>,
     catalog: &GenesetCatalog,
 ) -> Result<(), InputError> {
     info!("pipeline contract: building rows");
@@ -351,6 +356,7 @@ pub fn write_pipeline_contract(
         intron_retention,
         cell_cycle,
         strata,
+        reference_file,
         detect_species(matrix),
     )?;
     info!("pipeline contract: writing pipeline_step.json");
@@ -582,6 +588,7 @@ fn write_summary_json(
     intron_retention: Option<&IntronRetentionMetrics>,
     cell_cycle: &CellCycleMetrics,
     strata: &Strata,
+    reference_file: Option<&Path>,
     species: &'static str,
 ) -> Result<(), InputError> {
     let mut fidelity = rows
@@ -715,6 +722,12 @@ fn write_summary_json(
         reference: ReferenceJson {
             mode: strata.mode.as_str(),
             column: strata.column.clone(),
+            external_file: reference_file.map(|p| p.display().to_string()),
+            external_metrics: if reference_file.is_some() {
+                vec!["unspliced_fraction", "intron_retention_index"]
+            } else {
+                Vec::new()
+            },
             n_strata: strata.n_strata(),
             min_stratum_cells: MIN_STRATUM_CELLS,
             folded_cells: strata.folded_cells,

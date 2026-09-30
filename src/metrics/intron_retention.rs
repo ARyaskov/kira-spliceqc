@@ -30,7 +30,10 @@ use rayon::prelude::*;
 
 use crate::expression::SplicedUnspliced;
 use crate::model::intron_retention::IntronRetentionMetrics;
-use crate::reference::{Strata, flag_outliers, robust_z_by_stratum, scaled_deviation_by_stratum_and_depth};
+use crate::reference::{
+    ContinuousNorm, Strata, apply_continuous_norms, continuous_norms, flag_outliers,
+    robust_z_by_stratum, scaled_deviation_by_stratum_and_depth,
+};
 use crate::stats::robust::{mad, median};
 
 /// A gene counts for a cell when it has at least this many `S + U` UMIs.
@@ -47,22 +50,35 @@ pub const WEIGHT_CAP_UMIS: f64 = 50.0;
 /// Floor for the per-cell standard error (log2 units).
 const MIN_SE: f32 = 0.01;
 
-/// Per-gene reference of one stratum.
+/// Per-gene reference of one stratum: pooled unspliced ratio `p_gs`, NaN when undefined.
 struct GeneReference {
-    /// Pooled unspliced ratio `p_gs`; NaN when undefined.
     p: Vec<f64>,
 }
 
-pub fn compute(layers: &SplicedUnspliced, strata: &Strata) -> IntronRetentionMetrics {
+/// External norms for the index: per-stratum gene ratios (indexed by this
+/// matrix's gene ids) and per-stratum index norms.
+pub struct ExternalIntronRetentionNorms {
+    pub gene_ratios: Vec<Vec<f64>>,
+    pub norms: Vec<Option<ContinuousNorm>>,
+}
+
+pub fn compute(
+    layers: &SplicedUnspliced,
+    strata: &Strata,
+    external: Option<&ExternalIntronRetentionNorms>,
+) -> IntronRetentionMetrics {
     let n_cells = layers.n_cells();
     let n_genes = layers.n_genes();
     debug_assert_eq!(strata.n_cells(), n_cells);
 
-    let references: Vec<GeneReference> = strata
-        .members()
-        .par_iter()
-        .map(|members| gene_reference(layers, members, n_genes))
-        .collect();
+    let references: Vec<GeneReference> = match external {
+        Some(ext) => ext.gene_ratios.iter().map(|p| GeneReference { p: p.clone() }).collect(),
+        None => strata
+            .members()
+            .par_iter()
+            .map(|members| gene_reference(layers, members, n_genes))
+            .collect(),
+    };
     let genes_with_reference = (0..n_genes)
         .filter(|&g| references.iter().any(|r| r.p[g].is_finite()))
         .count();
@@ -134,7 +150,11 @@ pub fn compute(layers: &SplicedUnspliced, strata: &Strata) -> IntronRetentionMet
         .map(|c| layers.spliced.cell_total(c) + layers.unspliced.cell_total(c))
         .collect();
     let (_, reference) = robust_z_by_stratum(&index, strata);
-    let dev = scaled_deviation_by_stratum_and_depth(&index, &se, strata, &depth);
+    let norms = continuous_norms(&index, &se, strata);
+    let (dev, norm_source) = match external {
+        Some(ext) => (apply_continuous_norms(&index, &se, &strata.labels, &ext.norms), "external"),
+        None => (scaled_deviation_by_stratum_and_depth(&index, &se, strata, &depth), "internal"),
+    };
     let high = flag_outliers(&dev, strata, 1.0);
 
     IntronRetentionMetrics {
@@ -148,6 +168,9 @@ pub fn compute(layers: &SplicedUnspliced, strata: &Strata) -> IntronRetentionMet
         undefined_cells,
         reference,
         genes_with_reference,
+        gene_reference: references.into_iter().map(|r| r.p).collect(),
+        norms,
+        norm_source,
     }
 }
 
@@ -215,7 +238,7 @@ mod tests {
     fn boosted_cells_have_positive_index_and_are_flagged() {
         let boosted = [3usize, 40];
         let l = layers(80, 30, 30, 10, &boosted);
-        let m = compute(&l, &Strata::global(80));
+        let m = compute(&l, &Strata::global(80), None);
         assert_eq!(m.undefined_cells, 0);
         assert_eq!(m.genes_with_reference, 30);
         // Typical cell: ratio at the reference -> index ~ 0.
@@ -236,7 +259,7 @@ mod tests {
     #[test]
     fn too_few_genes_is_undefined() {
         let l = layers(30, 10, 30, 10, &[]);
-        let m = compute(&l, &Strata::global(30));
+        let m = compute(&l, &Strata::global(30), None);
         assert_eq!(m.undefined_cells, 30);
         assert!(m.intron_retention_index.iter().all(|v| v.is_nan()));
         assert_eq!(m.ir_genes_used[0], 10);

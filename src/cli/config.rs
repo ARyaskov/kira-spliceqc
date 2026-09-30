@@ -15,6 +15,9 @@ pub struct RunConfig {
     /// Metadata column to stratify references by (default: first cell-type
     /// alias, then first cluster alias, else global).
     pub stratify_by: Option<String>,
+    /// External reference file (`ref.json` from `reference build`). Tier A
+    /// deviations and flags are then relative to the reference's strata.
+    pub reference: Option<PathBuf>,
     pub mode: AnalysisMode,
     pub run_mode: RunMode,
     pub output_json: bool,

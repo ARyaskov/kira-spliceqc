@@ -26,6 +26,7 @@ fn run_pipeline_contract(input: &Path, out: &Path) {
         layers: None,
         metadata: None,
         stratify_by: None,
+        reference: None,
         mode: AnalysisMode::Cell,
         run_mode: RunMode::Pipeline,
         output_json: false,

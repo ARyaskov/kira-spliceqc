@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use kira_spliceqc::cli::config::{AnalysisMode, RunConfig, RunMode};
-use kira_spliceqc::cli::run::{SpliceQcError, run_pipeline};
+use kira_spliceqc::cli::run::{SpliceQcError, build_reference_file, run_pipeline};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
@@ -17,6 +17,39 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Commands {
     Run(RunArgs),
+    /// Reference-file commands.
+    Reference(ReferenceCommand),
+}
+
+#[derive(Args, Clone)]
+pub struct ReferenceCommand {
+    #[command(subcommand)]
+    pub action: ReferenceAction,
+}
+
+#[derive(Subcommand, Clone)]
+pub enum ReferenceAction {
+    /// Build a reference (ref.json) from a control dataset with
+    /// spliced/unspliced layers; use it in later runs with --reference.
+    Build(ReferenceBuildArgs),
+}
+
+#[derive(Args, Clone)]
+pub struct ReferenceBuildArgs {
+    /// Control dataset (10x directory or .h5ad) with spliced/unspliced layers.
+    #[arg(long)]
+    pub input: PathBuf,
+    /// Output reference file (ref.json).
+    #[arg(long)]
+    pub out: PathBuf,
+    #[arg(long)]
+    pub layers: Option<PathBuf>,
+    #[arg(long)]
+    pub metadata: Option<PathBuf>,
+    #[arg(long)]
+    pub stratify_by: Option<String>,
+    #[arg(long)]
+    pub threads: Option<usize>,
 }
 
 #[derive(ValueEnum, Clone, Copy)]
@@ -53,6 +86,10 @@ pub struct RunArgs {
     /// then cluster aliases, else one global stratum).
     #[arg(long)]
     pub stratify_by: Option<String>,
+    /// External reference (ref.json from `reference build`); Tier A
+    /// deviations and flags are then relative to the reference strata.
+    #[arg(long)]
+    pub reference: Option<PathBuf>,
     #[arg(long, value_enum, default_value = "cell")]
     pub mode: ModeArg,
     #[arg(long)]
@@ -76,12 +113,13 @@ fn main() {
     let cli = Cli::parse();
     init_tracing();
 
-    let run_args = match cli.command {
-        Some(Commands::Run(args)) => args,
-        None => cli.run,
+    let result = match cli.command {
+        Some(Commands::Run(args)) => execute_run(args),
+        Some(Commands::Reference(cmd)) => match cmd.action {
+            ReferenceAction::Build(args) => execute_reference_build(args),
+        },
+        None => execute_run(cli.run),
     };
-
-    let result = execute_run(run_args);
 
     if let Err(err) = result {
         handle_error(err);
@@ -110,6 +148,26 @@ fn handle_error(err: SpliceQcError) -> ! {
     }
 }
 
+fn execute_reference_build(args: ReferenceBuildArgs) -> Result<(), SpliceQcError> {
+    let config = RunConfig {
+        input: args.input,
+        out_dir: args.out.parent().map(|p| p.to_path_buf()).unwrap_or_default(),
+        cache_path: None,
+        layers: args.layers,
+        metadata: args.metadata,
+        stratify_by: args.stratify_by,
+        reference: None,
+        mode: AnalysisMode::Cell,
+        run_mode: RunMode::Standalone,
+        output_json: false,
+        output_tsv: false,
+        extended: false,
+        threads: args.threads,
+        experimental_signatures: false,
+    };
+    build_reference_file(config, &args.out)
+}
+
 fn execute_run(args: RunArgs) -> Result<(), SpliceQcError> {
     let input = args
         .input
@@ -125,6 +183,7 @@ fn execute_run(args: RunArgs) -> Result<(), SpliceQcError> {
         layers: args.layers,
         metadata: args.metadata,
         stratify_by: args.stratify_by,
+        reference: args.reference,
         mode: match args.mode {
             ModeArg::Cell => AnalysisMode::Cell,
             ModeArg::Sample => AnalysisMode::Sample,

@@ -58,6 +58,14 @@ order. `Strata::from_metadata` then picks the stratification column
 under 50 cells into `global`; `summary.json.reference` and `cells.json.reference`
 record the mode, the column, the strata and (in cells.json) the per-cell label.
 
+## External reference
+
+`kira-spliceqc reference build` runs stages 0, 1, 16 and 17 on a control
+dataset (layers required) and writes `ref.json` with the per-stratum Tier A
+norms. `run --reference ref.json` assigns cells to the reference strata
+(`Strata` in `external` mode) and stages 16/17 take their norms from the file;
+`summary.json.reference.external_file` / `external_metrics` record it.
+
 ## Stage order
 
 Runtime order in `run_pipeline`:
