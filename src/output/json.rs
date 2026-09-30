@@ -342,6 +342,7 @@ struct JsonSplicingInstabilityComposites {
     global_stats: JsonSplicingInstabilityGlobalStats,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn write_json(
     path: &Path,
     cell_names: &[String],
@@ -408,7 +409,7 @@ pub fn write_json(
         }
     };
 
-    for cell_id in 0..n_cells {
+    for (cell_id, cell_name) in cell_names.iter().enumerate() {
         let (sis_value, class, penalties) = if experimental {
             (
                 opt_f32(sis.sis[cell_id]),
@@ -425,7 +426,7 @@ pub fn write_json(
         };
         cells.push(JsonCell {
             cell_id,
-            cell_name: &cell_names[cell_id],
+            cell_name,
             sis: sis_value,
             class,
             penalties,

@@ -236,6 +236,7 @@ pub fn pipeline_out_dir(out_root: &Path) -> std::path::PathBuf {
     out_root.join(PIPELINE_DIR)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn write_pipeline_contract(
     out_dir: &Path,
     input: &InputDescriptor,

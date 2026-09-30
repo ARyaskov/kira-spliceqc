@@ -1,5 +1,6 @@
 use crate::model::splicing_instability::SplicingInstabilityClusterStat;
 
+#[allow(clippy::too_many_arguments)]
 pub fn aggregate_cluster_stats(
     _cluster_ids: Option<&[String]>,
     _sos: &[f32],

@@ -147,7 +147,7 @@ fn f32_total_cmp(a: &f32, b: &f32) -> std::cmp::Ordering {
 /// Zero-copy view of one geneset's column in a `n_genesets × n_cells` row-major
 /// activity matrix.
 #[inline]
-pub fn extract_geneset_slice<'a>(values: &'a [f32], geneset_idx: usize, n_cells: usize) -> &'a [f32] {
+pub fn extract_geneset_slice(values: &[f32], geneset_idx: usize, n_cells: usize) -> &[f32] {
     let start = geneset_idx * n_cells;
     &values[start..start + n_cells]
 }

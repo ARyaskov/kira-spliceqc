@@ -133,10 +133,10 @@ pub fn compute(
     })
 }
 
+type Unzipped5<A, B, C, D, E> = (Vec<A>, Vec<B>, Vec<C>, Vec<D>, Vec<E>);
+
 #[inline]
-fn unzip5<A, B, C, D, E>(
-    src: Vec<(A, B, C, D, E)>,
-) -> (Vec<A>, Vec<B>, Vec<C>, Vec<D>, Vec<E>) {
+fn unzip5<A, B, C, D, E>(src: Vec<(A, B, C, D, E)>) -> Unzipped5<A, B, C, D, E> {
     let n = src.len();
     let mut a = Vec::with_capacity(n);
     let mut b = Vec::with_capacity(n);

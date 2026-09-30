@@ -25,6 +25,7 @@ pub struct OutputOptions {
     pub experimental: bool,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn run_stage7(
     out_dir: &Path,
     cell_names: &[String],
@@ -159,6 +160,7 @@ pub fn run_stage7(
     Ok(summary_text)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn validate_lengths(
     cell_names: &[String],
     isoform: &IsoformDispersionMetrics,
@@ -210,48 +212,46 @@ fn validate_lengths(
             "splicing instability length mismatch".to_string(),
         ));
     }
-    if let Some(coupling) = coupling {
-        if coupling.coupling_stress.len() != n {
-            return Err(InputError::LengthMismatch(
-                "coupling length mismatch".to_string(),
-            ));
-        }
+    if let Some(coupling) = coupling
+        && coupling.coupling_stress.len() != n
+    {
+        return Err(InputError::LengthMismatch(
+            "coupling length mismatch".to_string(),
+        ));
     }
-    if let Some(exon_intron) = exon_intron {
-        if exon_intron.exon_definition_bias.len() != n {
-            return Err(InputError::LengthMismatch(
-                "exon/intron length mismatch".to_string(),
-            ));
-        }
+    if let Some(exon_intron) = exon_intron
+        && exon_intron.exon_definition_bias.len() != n
+    {
+        return Err(InputError::LengthMismatch(
+            "exon/intron length mismatch".to_string(),
+        ));
     }
-    if let Some(assembly) = assembly {
-        if assembly.ea_imbalance.len() != n {
-            return Err(InputError::LengthMismatch(
-                "assembly phase length mismatch".to_string(),
-            ));
-        }
+    if let Some(assembly) = assembly
+        && assembly.ea_imbalance.len() != n
+    {
+        return Err(InputError::LengthMismatch(
+            "assembly phase length mismatch".to_string(),
+        ));
     }
-    if let Some(cryptic) = cryptic_risk {
-        if cryptic.cryptic_risk.len() != n
+    if let Some(cryptic) = cryptic_risk
+        && (cryptic.cryptic_risk.len() != n
             || cryptic.x_sr_hnrnp.len() != n
             || cryptic.x_entropy.len() != n
-            || cryptic.x_nmd.len() != n
-        {
-            return Err(InputError::LengthMismatch(
-                "cryptic risk length mismatch".to_string(),
-            ));
-        }
+            || cryptic.x_nmd.len() != n)
+    {
+        return Err(InputError::LengthMismatch(
+            "cryptic risk length mismatch".to_string(),
+        ));
     }
-    if let Some(collapse) = collapse {
-        if collapse.collapse_status.len() != n
+    if let Some(collapse) = collapse
+        && (collapse.collapse_status.len() != n
             || collapse.core_suppression.len() != n
             || collapse.high_imbalance.len() != n
-            || collapse.low_sis.len() != n
-        {
-            return Err(InputError::LengthMismatch(
-                "collapse length mismatch".to_string(),
-            ));
-        }
+            || collapse.low_sis.len() != n)
+    {
+        return Err(InputError::LengthMismatch(
+            "collapse length mismatch".to_string(),
+        ));
     }
     Ok(())
 }
