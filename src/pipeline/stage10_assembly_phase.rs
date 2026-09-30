@@ -7,7 +7,7 @@ use tracing::{debug, info, warn};
 use crate::input::error::InputError;
 use crate::model::assembly_phase::AssemblyPhaseImbalanceMetrics;
 use crate::model::geneset_activity::GenesetActivityMatrix;
-use crate::stats::robust::{extract_geneset_slice, robust_z_logged};
+use crate::stats::robust::extract_geneset_slice;
 
 const REQUIRED: &[&str] = &[
     "SPLICE_EA_PHASE",
@@ -34,7 +34,8 @@ pub fn compute(
     for &id in REQUIRED {
         if let Some(&idx) = id_to_idx.get(id) {
             let slice = extract_geneset_slice(&activity.values, idx, n_cells);
-            let (z, _) = robust_z_logged(slice, id);
+            // `activity` is already standardized (stage 2 `standardize_activity`).
+            let z = slice.to_vec();
             let has_finite = z.iter().any(|v| v.is_finite());
             if !has_finite {
                 warn!(geneset_id = id, "geneset has no resolved genes (all NaN)");

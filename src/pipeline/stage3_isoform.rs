@@ -9,7 +9,7 @@ use crate::genesets::catalog::default_catalog_path;
 use crate::genesets::{GenesetCatalog, load_catalog};
 use crate::input::error::InputError;
 use crate::model::isoform_dispersion::IsoformDispersionMetrics;
-use crate::stats::robust::robust_z;
+use crate::reference::{Strata, robust_z_by_stratum_and_depth};
 
 const EPS: f32 = 1e-12;
 
@@ -20,12 +20,15 @@ const REGULATOR_SET_IDS: &[&str] = &[
 pub fn run_stage3(matrix: &dyn ExpressionMatrix) -> Result<IsoformDispersionMetrics, InputError> {
     let catalog_path = default_catalog_path();
     let catalog = load_catalog(&catalog_path, matrix)?;
-    compute(matrix, &catalog)
+    compute(matrix, &catalog, &Strata::global(matrix.n_cells()))
 }
 
+/// `z_entropy` is standardized within the cell's reference stratum and
+/// library-size bin (the raw entropy rises with depth on sparse data).
 pub fn compute(
     matrix: &dyn ExpressionMatrix,
     catalog: &GenesetCatalog,
+    strata: &Strata,
 ) -> Result<IsoformDispersionMetrics, InputError> {
     let regulator_genes = build_regulator_union(catalog)?;
     let n_reg = regulator_genes.len();
@@ -86,16 +89,16 @@ pub fn compute(
         );
     }
 
-    // Shared robust z-score: same EPS and MAD == 0 handling as every other
-    // stage (a private 1e-12 epsilon here previously let z explode to ~1e12
-    // whenever the entropy MAD collapsed to zero).
-    let (z_entropy, z_ref) = robust_z(&entropy);
-    if z_ref.mad.is_finite() && z_ref.mad <= 0.0 {
+    let libsize: Vec<u64> = (0..n_cells).map(|c| matrix.libsize(c)).collect();
+    let (z_entropy, depth_bins) = robust_z_by_stratum_and_depth(&entropy, strata, &libsize);
+    let undefined = z_entropy.iter().filter(|v| !v.is_finite()).count() - zero_count;
+    if undefined > 0 {
         warn!(
-            median = z_ref.median,
-            "isoform entropy MAD is zero; z_entropy collapsed to 0 for all cells"
+            undefined_after_standardization = undefined,
+            "entropy MAD is zero in some stratum/depth bin; z_entropy undefined there"
         );
     }
+    debug!(depth_bins = ?depth_bins, "entropy standardized");
 
     debug!(
         elapsed_ms = start.elapsed().as_millis(),

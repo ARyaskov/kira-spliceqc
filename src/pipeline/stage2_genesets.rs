@@ -5,9 +5,49 @@ use tracing::{debug, info, warn};
 
 use crate::expression::ExpressionMatrix;
 use crate::genesets::catalog::default_catalog_path;
+use crate::genesets::controls::ControlPool;
 use crate::genesets::{GenesetCatalog, load_catalog};
 use crate::input::error::InputError;
 use crate::model::geneset_activity::GenesetActivityMatrix;
+use crate::reference::{Strata, robust_z_by_stratum, robust_z_by_stratum_and_depth};
+
+/// Depth-adaptive, stratified standardization of a raw activity matrix:
+/// every panel score becomes a robust z-score against the cells of the same
+/// stratum and library-size bin (`reference::robust_z_by_stratum_and_depth`).
+/// Stages 4, 5, 8, 9, 10 and 13 consume the standardized matrix; stage 11
+/// (noise) keeps the raw one. Panels whose MAD collapses to zero in a bin
+/// are logged and yield NaN there.
+pub fn standardize_activity(
+    activity: &GenesetActivityMatrix,
+    strata: &Strata,
+    libsize: Option<&[u64]>,
+) -> GenesetActivityMatrix {
+    let n_cells = activity.n_cells;
+    let mut values = vec![f32::NAN; activity.values.len()];
+    for (idx, id) in activity.genesets.iter().enumerate() {
+        let slice = &activity.values[idx * n_cells..(idx + 1) * n_cells];
+        let z = match libsize {
+            Some(l) => robust_z_by_stratum_and_depth(slice, strata, l).0,
+            None => robust_z_by_stratum(slice, strata).0,
+        };
+        let finite_in = slice.iter().filter(|v| v.is_finite()).count();
+        let finite_out = z.iter().filter(|v| v.is_finite()).count();
+        if finite_in > 0 && finite_out < finite_in {
+            warn!(
+                geneset_id = id.as_str(),
+                undefined_after_standardization = finite_in - finite_out,
+                "panel MAD is zero in some stratum/depth bin; z-scores undefined there"
+            );
+        }
+        values[idx * n_cells..(idx + 1) * n_cells].copy_from_slice(&z);
+    }
+    GenesetActivityMatrix {
+        genesets: activity.genesets.clone(),
+        axes: activity.axes.clone(),
+        values,
+        n_cells,
+    }
+}
 
 pub fn run_stage2(matrix: &dyn ExpressionMatrix) -> Result<GenesetActivityMatrix, InputError> {
     let catalog_path = default_catalog_path();
@@ -15,9 +55,22 @@ pub fn run_stage2(matrix: &dyn ExpressionMatrix) -> Result<GenesetActivityMatrix
     aggregate(matrix, &catalog)
 }
 
+/// Raw panel means (no background subtraction).
 pub fn aggregate(
     matrix: &dyn ExpressionMatrix,
     catalog: &GenesetCatalog,
+) -> Result<GenesetActivityMatrix, InputError> {
+    aggregate_with_controls(matrix, catalog, None)
+}
+
+/// Panel means with the control-gene background subtracted when a
+/// `ControlPool` is given: `score = mean_panel(log1p cp10k) - mean_controls(log1p cp10k)`
+/// (Tirosh et al. 2016; Seurat AddModuleScore). A panel whose control set
+/// is empty falls back to the raw mean with a warning.
+pub fn aggregate_with_controls(
+    matrix: &dyn ExpressionMatrix,
+    catalog: &GenesetCatalog,
+    controls: Option<&ControlPool>,
 ) -> Result<GenesetActivityMatrix, InputError> {
     let n_cells = matrix.n_cells();
     let n_genesets = catalog.genesets.len();
@@ -46,15 +99,29 @@ pub fn aggregate(
 
         let panel = geneset.gene_ids.as_slice();
         let n_panel = panel.len() as f32;
+        let control_set: Vec<u32> = controls.map(|p| p.controls_for(panel)).unwrap_or_default();
+        if controls.is_some() && control_set.is_empty() {
+            warn!(
+                geneset_id = geneset.id.as_str(),
+                "no eligible control genes; panel score is the raw mean"
+            );
+        }
+        let n_ctrl = control_set.len() as f32;
         row.par_iter_mut().enumerate().for_each(|(cell, out)| {
             let scale = libsize_scale[cell];
             let sum = matrix.panel_ln1p_scaled_sum(panel, cell, scale);
-            *out = sum / n_panel;
+            let background = if control_set.is_empty() {
+                0.0
+            } else {
+                matrix.panel_ln1p_scaled_sum(&control_set, cell, scale) / n_ctrl
+            };
+            *out = sum / n_panel - background;
         });
 
         debug!(
             geneset_id = geneset.id.as_str(),
             resolved = geneset.gene_ids.len(),
+            controls = control_set.len(),
             "geneset aggregated"
         );
     }

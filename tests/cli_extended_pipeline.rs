@@ -48,10 +48,12 @@ fn write_tenx_extended(dir: &Path) {
     matrix.push_str("%%MatrixMarket matrix coordinate integer general\n%\n");
     matrix.push_str(&format!("{} 2 {}\n", genes.len(), genes.len() * 2));
 
+    // Cell 2 is not a scaled copy of cell 1: identical cp10k profiles would
+    // give a zero MAD and undefined z-scores for every panel.
     for (idx, _gene) in genes.iter().enumerate() {
         let gene_id = idx + 1;
-        matrix.push_str(&format!("{gene_id} 1 1\n"));
-        matrix.push_str(&format!("{gene_id} 2 2\n"));
+        matrix.push_str(&format!("{gene_id} 1 {}\n", 1 + idx % 2));
+        matrix.push_str(&format!("{gene_id} 2 {}\n", 1 + (idx + 1) % 3));
     }
 
     fs::write(dir.join("matrix.mtx"), matrix).unwrap();

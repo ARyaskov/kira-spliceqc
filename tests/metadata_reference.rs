@@ -121,7 +121,9 @@ fn write_stratified_dataset(dir: &Path) {
         };
         for g in 1..=genes.len() {
             let u = (200.0 * uf).round() as u32;
-            let s = 200 - u;
+            // Per-gene jitter on the spliced count so that panel scores are
+            // not identical across cells (a zero MAD gives undefined z-scores).
+            let s = 200 - u + ((c * 7 + g) % 5) as u32;
             body_m.push_str(&format!("{g} {} {}\n", c + 1, s + u));
             body_s.push_str(&format!("{g} {} {s}\n", c + 1));
             body_u.push_str(&format!("{g} {} {u}\n", c + 1));

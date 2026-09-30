@@ -130,13 +130,21 @@ Per gene `g`, cell `c`, reference stratum `s = s(c)`:
   cells keep their signal while low-count genes are stabilised)
 - gene set `G_c` = genes with `S_gc + U_gc >= 5` and a defined `p_gs`; the cell is undefined
   when `|G_c| < MIN_GENES = 20`
-- `intron_retention_index = median_{g in G_c} log2(IR_gc / p_gs)` (log2 units; 0 = at the
-  stratum reference, +1 = twice the reference unspliced ratio)
-- `ir_gene_dispersion = MAD_{g in G_c} log2(IR_gc / p_gs)`: small when every gene shifts
-  together (global retention), large for gene-specific changes
+- `r_gc = log2(IR_gc / p_gs)` (log2 units; 0 = at the stratum reference, +1 = twice the
+  reference unspliced ratio)
+- `Var(r_gc) = n (1 - p_gs) / ((n + K)^2 p_gs ln^2 2)` (delta method), weights
+  `w_gc = min(1 / Var(r_gc), 1 / Var at n = WEIGHT_CAP_UMIS = 50)` so no single gene dominates
+- `intron_retention_index = sum_g w_gc r_gc / sum_g w_gc`; `se_c = 1 / sqrt(sum_g w_gc)`
+- `ir_gene_dispersion = MAD_{g in G_c} r_gc`: small when every gene shifts together
+  (global retention), large for gene-specific changes
 - `ir_genes_used = |G_c|`
-- `intron_retention_index_dev` = robust z-score within the stratum; `intron_retention_high`
-  = `dev >= 3` and BH-adjusted p < 0.05
+- `intron_retention_index_dev = (index_c - median_bin) / sqrt(se_c^2 + tau2_bin)` within the
+  cell's stratum and layer-depth bin (`tau2` = method-of-moments overdispersion of the bin);
+  `intron_retention_high` = `dev >= 3` and BH-adjusted two-sided normal p < 0.05
+
+The raw index keeps a small depth bias (the log of a shrunk ratio is biased low
+at few UMIs per gene); compare cells through `_dev`, use the raw index only for
+effect sizes.
 
 Adapted from the IRFinder intron-retention ratio (Middleton et al. 2017 Genome
 Biology) to sparse per-cell counts. 3' libraries confound unspliced signal with
@@ -145,10 +153,34 @@ the index measures departure from the stratum, not absolute retention.
 
 ## Geneset Activity (Stage 2)
 
-For each geneset `S` and cell `c`:
-- `A(S, c) = mean_{g in S}( ln(1 + 1e4 * count(g, c) / max(1, libsize(c))) )`
+Raw panel mean for geneset `S` and cell `c`:
+- `A_raw(S, c) = mean_{g in S}( ln(1 + 1e4 * count(g, c) / max(1, libsize(c))) )`
 
-This matrix is the source for downstream robust z-score metrics.
+Control-gene background (Tirosh et al. 2016 Science; Seurat `AddModuleScore`):
+- gene mean `m_g = mean_c ln(1 + cp10k(g, c))` over all cells
+- control pool = genes not in any splicing panel (catalog genesets and the stage-15
+  panels) with `m_g > 0`, ranked by `m_g`
+- for every panel gene the `CONTROLS_PER_GENE = 50` pool genes nearest in `m_g`;
+  the panel's control set `C(S)` is their union (a panel gene is never its own control)
+- `A(S, c) = A_raw(S, c) - mean_{g in C(S)} ln(1 + cp10k(g, c))`
+
+A panel with an empty control set (every gene excluded) falls back to the raw
+mean with a warning.
+
+Standardization (`standardize_activity`): every panel score is turned into a
+robust z-score against the cells of the same reference stratum **and**
+library-size bin (`robust_z_by_stratum_and_depth`, up to 20 bins of at least
+50 cells per stratum). The mean *and* the variance of a sparse panel score
+depend on depth, so a stratum-wide reference removes only the mean. A bin with
+a zero MAD leaves its cells undefined (no silent zeros). Stages 4, 5, 8, 9, 10
+and 13 consume the standardized matrix; stage 11 (noise) uses the raw one;
+stage 3 (`z_entropy`) and stage 15 (panel cores) apply the same
+control-gene subtraction and depth-binned standardization.
+
+On a Poisson null model this brings |Spearman(metric, libsize)| from 0.4-0.7
+down to below 0.1 for `spliceosome_core_expr`, `SOS`,
+`spliceosome_imbalance_expr` and `missplicing_burden_expr`
+(`tests/null_model.rs`).
 
 ## Isoform Dispersion (Stage 3)
 

@@ -64,7 +64,7 @@ Runtime order in `run_pipeline`:
 
 - Stage 0: input detection/validation
 - Stage 1: expression matrix materialization/opening
-- Stage 2: geneset activity aggregation
+- Stage 2: geneset activity aggregation (control-gene corrected) and depth-binned, stratified standardization
 - Stage 3: isoform entropy/dispersion
 - Stage 4: missplicing metrics
 - Stage 5: spliceosome imbalance metrics

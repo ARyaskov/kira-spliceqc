@@ -17,6 +17,7 @@ pub struct GenesetCatalog {
 }
 
 pub mod catalog;
+pub mod controls;
 pub mod loader;
 
 pub fn load_catalog(

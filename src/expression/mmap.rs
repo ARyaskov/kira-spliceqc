@@ -182,6 +182,45 @@ impl ExpressionMatrix for MmapExpressionMatrix {
         }
     }
 
+    /// One sparse pass; zeros contribute log(1) = 0.
+    fn gene_mean_log_cp10k(&self) -> Vec<f32> {
+        let mut sums = vec![0f64; self.n_genes];
+        let scale: Vec<f32> = self
+            .libsizes
+            .iter()
+            .map(|&l| 1e4_f32 / l.max(1) as f32)
+            .collect();
+        match &self.backend {
+            Backend::ExprBin(b) => {
+                for (gene, sum) in sums.iter_mut().enumerate() {
+                    let nnz = b.row_nnz[gene] as usize;
+                    let start = b.row_offsets[gene] as usize;
+                    let mut acc = 0f64;
+                    for i in 0..nnz {
+                        let cell = read_u32_unchecked(&b.mmap, start + i * 8) as usize;
+                        let count = read_u32_unchecked(&b.mmap, start + i * 8 + 4) as f32;
+                        acc += (1.0 + scale[cell] * count).ln() as f64;
+                    }
+                    *sum = acc;
+                }
+            }
+            Backend::SharedCache(b) => {
+                let cp = b.cache.col_ptr();
+                let rows = b.cache.row_idx();
+                let vals = b.cache.values_u32();
+                for cell in 0..self.n_cells {
+                    let s = cp[cell] as usize;
+                    let e = cp[cell + 1] as usize;
+                    for i in s..e {
+                        sums[rows[i] as usize] += (1.0 + scale[cell] * vals[i] as f32).ln() as f64;
+                    }
+                }
+            }
+        }
+        let n = self.n_cells.max(1) as f64;
+        sums.into_iter().map(|s| (s / n) as f32).collect()
+    }
+
     fn gather_panel_log_cp10k(
         &self,
         panel_sorted: &[u32],

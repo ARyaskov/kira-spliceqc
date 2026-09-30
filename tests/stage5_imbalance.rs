@@ -1,4 +1,6 @@
 use kira_spliceqc::model::geneset_activity::GenesetActivityMatrix;
+use kira_spliceqc::pipeline::stage2_genesets::standardize_activity;
+use kira_spliceqc::reference::Strata;
 use kira_spliceqc::pipeline::stage5_imbalance::compute;
 
 fn make_activity(genesets: Vec<&str>, values: Vec<Vec<f32>>) -> GenesetActivityMatrix {
@@ -63,7 +65,7 @@ fn synthetic_z_axes_and_magnitude() {
     let values = vec![
         vec![-1.0, 1.0],
         vec![1.0, -1.0],
-        vec![0.0, 0.0],
+        vec![0.0, 0.5], // a constant panel would have a zero MAD (undefined z)
         vec![2.0, 0.0],
         vec![0.0, 2.0],
         vec![1.0, -1.0],
@@ -71,7 +73,7 @@ fn synthetic_z_axes_and_magnitude() {
     ];
 
     let activity = make_activity(genesets, values);
-    let metrics = compute(&activity).unwrap();
+    let metrics = compute(&standardize_activity(&activity, &Strata::global(activity.n_cells), None)).unwrap();
 
     let z_u1 = robust_z(&activity.values[0..2]);
     let z_u2 = robust_z(&activity.values[2..4]);
@@ -112,13 +114,13 @@ fn missing_geneset_nan_propagates() {
     let values = vec![
         vec![-1.0, 1.0],
         vec![1.0, -1.0],
-        vec![0.0, 0.0],
+        vec![0.0, 0.5], // a constant panel would have a zero MAD (undefined z)
         vec![2.0, 0.0],
         vec![0.0, 2.0],
         vec![1.0, -1.0],
     ];
     let activity = make_activity(genesets, values);
-    let metrics = compute(&activity).unwrap();
+    let metrics = compute(&standardize_activity(&activity, &Strata::global(activity.n_cells), None)).unwrap();
 
     assert!(metrics.axis_nmd[0].is_nan());
     assert!(metrics.imbalance[0].is_finite());
@@ -146,8 +148,8 @@ fn deterministic_outputs() {
     ];
     let activity = make_activity(genesets, values);
 
-    let first = compute(&activity).unwrap();
-    let second = compute(&activity).unwrap();
+    let first = compute(&standardize_activity(&activity, &Strata::global(activity.n_cells), None)).unwrap();
+    let second = compute(&standardize_activity(&activity, &Strata::global(activity.n_cells), None)).unwrap();
 
     assert_eq!(first.z_u1, second.z_u1);
     assert_eq!(first.z_u2, second.z_u2);

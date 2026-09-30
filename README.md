@@ -139,6 +139,15 @@ dependence).
 
 These are deterministic expression-only metrics (no timepoints, no ML). Per-cell values and flags are appended to stage-7 TSV/JSON outputs, and pipeline `summary.json` includes a `splicing_instability` block with thresholds, robust z-score references, quantiles, and missingness.
 
+## Depth correction and reference strata
+
+Panel scores subtract a control-gene background (50 genes of matching mean
+expression per panel gene, Tirosh et al. 2016) and are standardized within the
+cell's reference stratum and library-size bin. On a Poisson null model this
+removes the library-size correlation of the expression signatures (|rho| < 0.1)
+and keeps production flags at or below 1 % of cells. `tests/null_model.rs`
+enforces both.
+
 ## Metric naming
 
 Metrics derived purely from panel expression carry the `_expr` suffix

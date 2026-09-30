@@ -58,6 +58,21 @@ pub trait ExpressionMatrix: Sync {
         sum
     }
 
+    /// Per-gene mean of `log1p(cp10k)` over all cells (control-gene pools).
+    /// Default impl is O(genes x cells) through `count`; production backends
+    /// override with one sparse pass.
+    fn gene_mean_log_cp10k(&self) -> Vec<f32> {
+        let n_cells = self.n_cells().max(1) as f64;
+        (0..self.n_genes())
+            .map(|g| {
+                let sum: f64 = (0..self.n_cells())
+                    .map(|c| self.log_cp10k(g, c) as f64)
+                    .sum();
+                (sum / n_cells) as f32
+            })
+            .collect()
+    }
+
     /// `(sum, detected)` over `panel_sorted` — used by pipeline_contract panels report.
     fn panel_count_sum_and_detected(
         &self,

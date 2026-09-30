@@ -29,6 +29,13 @@ Phase 1 of the scientific roadmap (Tier A, direct splicing measurements).
 - Tier A: `unspliced_fraction_dev` and `nuclear_fraction_flag`
   (damaged-cell candidate, DropletQC-style) per cell; per-stratum reference
   medians in `summary.json` and `cells.json`.
+- Control-gene depth correction of every expression panel score (50
+  nearest-mean control genes per panel gene, Tirosh et al. 2016) in stages
+  2 and 15, and robust standardization within reference stratum and
+  library-size bin (`standardize_activity`) for stages 3, 4, 5, 8, 9, 10,
+  13 and 15. Null-model library-size correlations of the expression
+  signatures drop from 0.4-0.7 to below 0.1; a zero MAD in a bin now gives
+  undefined z-scores instead of silent zeros.
 - Tier A stage 17: `intron_retention_index` (median log2 ratio of per-gene
   unspliced ratios to the stratum's pooled ratio, beta-shrunk with 10
   pseudo-counts), `ir_gene_dispersion`, `ir_genes_used`,

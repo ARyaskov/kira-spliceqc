@@ -1,6 +1,7 @@
 use kira_spliceqc::expression::ExpressionMatrix;
 use kira_spliceqc::genesets::{Geneset, GenesetCatalog};
 use kira_spliceqc::pipeline::stage3_isoform::compute;
+use kira_spliceqc::reference::Strata;
 
 struct MockMatrix {
     genes: Vec<String>,
@@ -67,7 +68,7 @@ fn catalog_with_ids(ids: Vec<u32>) -> GenesetCatalog {
 fn uniform_expression_high_entropy() {
     let matrix = MockMatrix::new(vec!["G1", "G2"], vec!["c1"], vec![vec![10], vec![10]]);
     let catalog = catalog_with_ids(vec![0, 1]);
-    let metrics = compute(&matrix, &catalog).unwrap();
+    let metrics = compute(&matrix, &catalog, &Strata::global(matrix.n_cells())).unwrap();
 
     assert!((metrics.entropy[0] - 1.0).abs() < 1e-5);
     assert!((metrics.dispersion[0] - 1.0).abs() < 1e-5);
@@ -77,7 +78,7 @@ fn uniform_expression_high_entropy() {
 fn skewed_expression_low_entropy() {
     let matrix = MockMatrix::new(vec!["G1", "G2"], vec!["c1"], vec![vec![100], vec![1]]);
     let catalog = catalog_with_ids(vec![0, 1]);
-    let metrics = compute(&matrix, &catalog).unwrap();
+    let metrics = compute(&matrix, &catalog, &Strata::global(matrix.n_cells())).unwrap();
 
     assert!(metrics.entropy[0] < 0.5);
     assert!(metrics.dispersion[0] < 0.8);
@@ -91,8 +92,8 @@ fn deterministic_outputs() {
         vec![vec![1, 2], vec![3, 4]],
     );
     let catalog = catalog_with_ids(vec![0, 1]);
-    let first = compute(&matrix, &catalog).unwrap();
-    let second = compute(&matrix, &catalog).unwrap();
+    let first = compute(&matrix, &catalog, &Strata::global(matrix.n_cells())).unwrap();
+    let second = compute(&matrix, &catalog, &Strata::global(matrix.n_cells())).unwrap();
 
     assert_eq!(first.entropy, second.entropy);
     assert_eq!(first.dispersion, second.dispersion);

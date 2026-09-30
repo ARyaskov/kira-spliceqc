@@ -16,11 +16,21 @@ fn write_dataset(dir: &Path, with_layers: bool) {
     let mut mtx = String::from("%%MatrixMarket matrix coordinate integer general\n5 3 15\n");
     let mut spliced = String::from("%%MatrixMarket matrix coordinate integer general\n5 3 15\n");
     let mut unspliced = String::from("%%MatrixMarket matrix coordinate integer general\n5 3 15\n");
-    // cell 1: 300 spliced + 100 unspliced per gene (UF 0.25)
-    // cell 2: 100 spliced + 100 unspliced per gene (UF 0.5)
-    // cell 3: 10 spliced + 5 unspliced per gene  (75 UMIs total -> undefined)
-    for g in 1..=5 {
-        for (c, (s, u)) in [(300u32, 100u32), (100, 100), (10, 5)].iter().enumerate() {
+    // cell 1: ~300 spliced + ~100 unspliced per gene (UF exactly 0.25)
+    // cell 2: ~100 spliced + ~100 unspliced per gene (UF exactly 0.5)
+    // cell 3: 10 spliced + 5 unspliced per gene  (< 100 UMIs -> undefined)
+    // Per-gene jitter keeps cell profiles non-proportional (identical cp10k
+    // profiles give zero-MAD panels and undefined z-scores) while preserving
+    // each cell's overall unspliced fraction.
+    for g in 1..=5u32 {
+        for c in 0..3u32 {
+            // jitter differs per gene *and* per cell
+            let j = (g * 7 + c * 3) % 5;
+            let (s, u) = match c {
+                0 => (300 + 3 * j, 100 + j),
+                1 => (100 + 2 * j, 100 + 2 * j),
+                _ => (10 + j, 5),
+            };
             mtx.push_str(&format!("{g} {} {}\n", c + 1, s + u));
             spliced.push_str(&format!("{g} {} {s}\n", c + 1));
             unspliced.push_str(&format!("{g} {} {u}\n", c + 1));
@@ -86,14 +96,15 @@ fn unspliced_fraction_is_written_per_cell() {
         let f: Vec<&str> = line.split('\t').collect();
         match f[name] {
             "cellA" => {
-                assert_eq!(f[su], "1500");
+                // 5 genes x (300 + 3j), j = 7g mod 5 = 2, 4, 1, 3, 0 -> 1530
+                assert_eq!(f[su], "1530");
                 assert!((f[uf].parse::<f64>().unwrap() - 0.25).abs() < 1e-6);
                 assert!(f[lo].parse::<f64>().unwrap() < 0.25);
                 assert!(f[hi].parse::<f64>().unwrap() > 0.25);
             }
             "cellB" => assert!((f[uf].parse::<f64>().unwrap() - 0.5).abs() < 1e-6),
             "cellC" => {
-                assert_eq!(f[su], "50");
+                assert_eq!(f[su], "60");
                 assert_eq!(f[uf], "", "75 layer UMIs must be undefined");
             }
             other => panic!("unexpected cell {other}"),

@@ -2,6 +2,7 @@ use ahash::AHashMap;
 use rayon::prelude::*;
 
 use crate::expression::ExpressionMatrix;
+use crate::genesets::controls::ControlPool;
 use crate::model::splicing_instability::{
     PanelCoverage, RLOOP_RISK_HIGH_THRESHOLD, SPLICE_OVERLOAD_HIGH_THRESHOLD,
     SPLICING_INSTABILITY_HIGH_THRESHOLD, SplicingInstabilityGlobalStats,
@@ -15,7 +16,8 @@ use self::panels::{
     SPLICEOSOME_PANEL, SPLICEQC_INSTABILITY_PANEL_V1, SPLICING_RBP_PANEL,
 };
 use self::scores::{panel_trimmed_mean, percentile};
-use crate::stats::robust::robust_z_logged;
+use crate::reference::{Strata, robust_z_by_stratum_and_depth};
+use crate::stats::robust::{RobustRef, robust_z_logged};
 
 pub mod aggregate;
 pub mod junction;
@@ -30,7 +32,13 @@ struct ResolvedPanel {
     gene_indices: Vec<u32>,
 }
 
-pub fn compute(matrix: &dyn ExpressionMatrix) -> SplicingInstabilityMetrics {
+/// Panel cores are trimmed means of `log1p(cp10k)`; with a `ControlPool` the
+/// mean of each panel's control set is subtracted (depth correction).
+pub fn compute(
+    matrix: &dyn ExpressionMatrix,
+    controls: Option<&ControlPool>,
+    strata: &Strata,
+) -> SplicingInstabilityMetrics {
     let n_cells = matrix.n_cells();
 
     // Case-insensitive index, first occurrence wins. Matches loader behavior.
@@ -53,6 +61,22 @@ pub fn compute(matrix: &dyn ExpressionMatrix) -> SplicingInstabilityMetrics {
     let conflict_panel_enabled = conflict_panel.gene_indices.len() >= MIN_GENES_PER_PANEL_CELL;
     let nmd_panel_enabled = nmd_panel.gene_indices.len() >= MIN_GENES_PER_PANEL_CELL;
 
+    let control_sets: Vec<Vec<u32>> = [&splice_panel, &rbp_panel, &rloop_panel, &conflict_panel, &nmd_panel]
+        .iter()
+        .map(|p| controls.map(|c| c.controls_for(&p.gene_indices)).unwrap_or_default())
+        .collect();
+    let libsize_scale: Vec<f32> = (0..n_cells)
+        .map(|cell| 1e4_f32 / matrix.libsize(cell).max(1) as f32)
+        .collect();
+    let background = |k: usize, cell: usize| -> f32 {
+        let set = &control_sets[k];
+        if set.is_empty() {
+            0.0
+        } else {
+            matrix.panel_ln1p_scaled_sum(set, cell, libsize_scale[cell]) / set.len() as f32
+        }
+    };
+
     // One parallel per-cell pass over all enabled panels (each gets its own scratch buf).
     let panel_rows: Vec<[f32; 5]> = (0..n_cells)
         .into_par_iter()
@@ -65,21 +89,21 @@ pub fn compute(matrix: &dyn ExpressionMatrix) -> SplicingInstabilityMetrics {
                     cell,
                     MIN_GENES_PER_PANEL_CELL,
                     scratch,
-                );
+                ) - background(0, cell);
                 let rbp = panel_trimmed_mean(
                     matrix,
                     &rbp_panel.gene_indices,
                     cell,
                     MIN_GENES_PER_PANEL_CELL,
                     scratch,
-                );
+                ) - background(1, cell);
                 let rloop = panel_trimmed_mean(
                     matrix,
                     &rloop_panel.gene_indices,
                     cell,
                     MIN_GENES_PER_PANEL_CELL,
                     scratch,
-                );
+                ) - background(2, cell);
                 let conflict = if conflict_panel_enabled {
                     panel_trimmed_mean(
                         matrix,
@@ -87,7 +111,7 @@ pub fn compute(matrix: &dyn ExpressionMatrix) -> SplicingInstabilityMetrics {
                         cell,
                         MIN_GENES_PER_PANEL_CELL,
                         scratch,
-                    )
+                    ) - background(3, cell)
                 } else {
                     f32::NAN
                 };
@@ -98,7 +122,7 @@ pub fn compute(matrix: &dyn ExpressionMatrix) -> SplicingInstabilityMetrics {
                         cell,
                         MIN_GENES_PER_PANEL_CELL,
                         scratch,
-                    )
+                    ) - background(4, cell)
                 } else {
                     f32::NAN
                 };
@@ -120,17 +144,26 @@ pub fn compute(matrix: &dyn ExpressionMatrix) -> SplicingInstabilityMetrics {
         nmd_core.push(row[4]);
     }
 
-    let (z_splice, ref_splice) = robust_z_logged(&splice_core, "splice_core");
-    let (z_rbp, ref_rbp) = robust_z_logged(&rbp_core, "rbp_core");
-    let (z_rloop, ref_rloop) = robust_z_logged(&rloop_resolve_core, "rloop_resolve_core");
+    // z-scores are standardized within stratum and library-size bin; the
+    // reported `z_reference` medians/MADs are the dataset-wide values kept
+    // for provenance and cross-sample comparison.
+    let libsize: Vec<u64> = (0..n_cells).map(|c| matrix.libsize(c)).collect();
+    let standardize = |values: &[f32], name: &str| -> (Vec<f32>, RobustRef) {
+        let (_, r) = robust_z_logged(values, name);
+        let (z, _) = robust_z_by_stratum_and_depth(values, strata, &libsize);
+        (z, r)
+    };
+    let (z_splice, ref_splice) = standardize(&splice_core, "splice_core");
+    let (z_rbp, ref_rbp) = standardize(&rbp_core, "rbp_core");
+    let (z_rloop, ref_rloop) = standardize(&rloop_resolve_core, "rloop_resolve_core");
     let (z_conflict, ref_conflict) = if conflict_panel_enabled {
-        let (z, r) = robust_z_logged(&conflict_risk_core, "conflict_risk_core");
+        let (z, r) = standardize(&conflict_risk_core, "conflict_risk_core");
         (z, Some(r))
     } else {
         (vec![0.0; n_cells], None)
     };
     let (z_nmd, ref_nmd) = if nmd_panel_enabled {
-        let (z, r) = robust_z_logged(&nmd_core, "nmd_core");
+        let (z, r) = standardize(&nmd_core, "nmd_core");
         (z, Some(r))
     } else {
         (vec![0.0; n_cells], None)
@@ -304,6 +337,20 @@ pub fn compute(matrix: &dyn ExpressionMatrix) -> SplicingInstabilityMetrics {
         cluster_stats,
         missingness,
     }
+}
+
+/// Gene ids (in `matrix`) of every stage-15 panel gene, for control-pool exclusion.
+pub fn panel_gene_ids(matrix: &dyn ExpressionMatrix) -> Vec<u32> {
+    let mut symbol_to_idx: AHashMap<String, u32> = AHashMap::with_capacity(matrix.n_genes());
+    for gene_idx in 0..matrix.n_genes() {
+        let symbol = matrix.gene_symbol(gene_idx).to_ascii_uppercase();
+        symbol_to_idx.entry(symbol).or_insert(gene_idx as u32);
+    }
+    let mut ids = Vec::new();
+    for panel in [SPLICEOSOME_PANEL, SPLICING_RBP_PANEL, RLOOP_RESOLUTION_PANEL, CONFLICT_RISK_PANEL, NMD_PANEL] {
+        ids.extend(resolve_panel("", panel, &symbol_to_idx).gene_indices);
+    }
+    ids
 }
 
 fn resolve_panel(

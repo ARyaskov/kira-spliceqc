@@ -6,12 +6,14 @@ use crate::cli::PipelineContext;
 use crate::cli::config::{AnalysisMode, RunConfig, RunMode};
 use crate::expression::ExpressionMatrix;
 use crate::genesets::catalog::default_catalog_path;
+use crate::genesets::controls::ControlPool;
 use crate::genesets::load_catalog;
+use crate::metrics::splicing_instability::panel_gene_ids as instability_panel_gene_ids;
 use crate::input::error::InputError;
 use crate::output::pipeline_contract;
 use crate::pipeline::stage0_input::run_stage0_with_layers;
 use crate::pipeline::stage1_expression::{Stage1Output, run_stage1_full};
-use crate::pipeline::stage2_genesets::aggregate as run_stage2;
+use crate::pipeline::stage2_genesets::{aggregate_with_controls as run_stage2, standardize_activity};
 use crate::pipeline::stage3_isoform::compute as run_stage3;
 use crate::pipeline::stage4_missplicing::compute as compute_missplicing;
 use crate::pipeline::stage5_imbalance::compute as compute_imbalance;
@@ -118,12 +120,31 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
     let catalog_path = default_catalog_path();
     let catalog = load_catalog(&catalog_path, &stage1)?;
 
-    let stage2 = run_logged(2, || run_stage2(&stage1, &catalog))?;
-    let stage3 = run_logged(3, || run_stage3(&stage1, &catalog))?;
+    // Control-gene pool for depth correction: every gene of any splicing panel
+    // is excluded from the pool (see genesets::controls).
+    let controls = {
+        let mut exclude: Vec<u32> = catalog.genesets.iter().flat_map(|g| g.gene_ids.iter().copied()).collect();
+        exclude.extend(instability_panel_gene_ids(&stage1));
+        let pool = ControlPool::new(stage1.gene_mean_log_cp10k(), &exclude);
+        info!(
+            target: "kira_spliceqc::cli::run",
+            eligible_control_genes = pool.n_eligible(),
+            controls_per_gene = pool.controls_per_gene,
+            "control-gene pool built"
+        );
+        pool
+    };
+
+    let libsizes: Vec<u64> = (0..stage1.n_cells()).map(|c| stage1.libsize(c)).collect();
+    let stage2_raw = run_logged(2, || run_stage2(&stage1, &catalog, Some(&controls)))?;
+    let stage2 = standardize_activity(&stage2_raw, &strata, Some(&libsizes));
+    let stage3 = run_logged(3, || run_stage3(&stage1, &catalog, &strata))?;
     let stage4 = run_logged(4, || compute_missplicing(&stage2))?;
     let stage5 = run_logged(5, || compute_imbalance(&stage2))?;
     let stage6 = run_logged(6, || run_stage6(&stage3, &stage4, &stage5))?;
-    let stage15 = run_logged(15, || Ok(compute_splicing_instability(&stage1)))?;
+    let stage15 = run_logged(15, || {
+        Ok(compute_splicing_instability(&stage1, Some(&controls), &strata))
+    })?;
     let (stage16, stage17) = match &stage1_layers {
         Some(layers) => (
             Some(run_logged(16, || Ok(run_stage16(layers, &strata)))?),
@@ -139,7 +160,7 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
         let stage8 = run_logged(8, || compute_coupling(&stage2))?;
         let stage9 = run_logged(9, || compute_exon_intron(&stage2))?;
         let stage10 = run_logged(10, || compute_assembly(&stage2))?;
-        let stage11 = run_logged(11, || compute_splicing_noise(&stage2))?;
+        let stage11 = run_logged(11, || compute_splicing_noise(&stage2_raw))?;
         let stage12 = run_logged(12, || compute_cryptic_risk(&stage3, &stage5))?;
         let stage13 = run_logged(13, || compute_collapse(&stage5, &stage6))?;
         (

@@ -7,7 +7,7 @@ use tracing::{debug, info, warn};
 use crate::input::error::InputError;
 use crate::model::geneset_activity::GenesetActivityMatrix;
 use crate::model::missplicing::MissplicingMetrics;
-use crate::stats::robust::{extract_geneset_slice, robust_z_logged};
+use crate::stats::robust::extract_geneset_slice;
 
 /// Minimum number of resolved core panels (U1_CORE, U2_CORE, SF3B_AXIS) both
 /// for the stage gate and for the per-cell core mean.
@@ -39,7 +39,8 @@ pub fn compute(activity: &GenesetActivityMatrix) -> Result<MissplicingMetrics, I
     for &id in REQUIRED_GENESETS {
         if let Some(&idx) = id_to_idx.get(id) {
             let slice = extract_geneset_slice(&activity.values, idx, n_cells);
-            let (z, _) = robust_z_logged(slice, id);
+            // `activity` is already standardized (stage 2 `standardize_activity`).
+            let z = slice.to_vec();
             let has_finite = z.iter().any(|v| v.is_finite());
             if !has_finite {
                 warn!(geneset_id = id, "geneset has no resolved genes (all NaN)");
