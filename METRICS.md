@@ -308,8 +308,8 @@ Summary metrics in `summary.json`:
 
 ## Constants
 
-- `EPS_STAGE3 = 1e-12` (entropy/dispersion stability in stage 3)
-- `EPS_ROBUST = 1e-6` (robust z-score denominator in stages 4, 5, 8, 9, 10, 11)
+- `EPS_STAGE3 = 1e-12` (entropy/dispersion stability in stage 3; the entropy z-score uses `EPS_ROBUST`)
+- `EPS_ROBUST = 1e-6` (robust z-score denominator in stages 3, 4, 5, 8, 9, 10, 11)
 - `EPS_STAGE11 = 1e-6` (splicing-noise denominator)
 - `MAD_SCALE = 1.4826` (MAD to robust sigma scale)
 - `SAT = 6.0` (stage 12 saturation bound)

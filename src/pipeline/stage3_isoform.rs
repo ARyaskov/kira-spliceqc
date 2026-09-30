@@ -9,7 +9,7 @@ use crate::genesets::catalog::default_catalog_path;
 use crate::genesets::{GenesetCatalog, load_catalog};
 use crate::input::error::InputError;
 use crate::model::isoform_dispersion::IsoformDispersionMetrics;
-use crate::stats::robust::{mad, median};
+use crate::stats::robust::robust_z;
 
 const EPS: f32 = 1e-12;
 
@@ -86,18 +86,16 @@ pub fn compute(
         );
     }
 
-    let med = median(&entropy);
-    let mad_val = mad(&entropy, med) * 1.4826 + EPS;
-    let z_entropy: Vec<f32> = entropy
-        .iter()
-        .map(|&value| {
-            if value.is_finite() && med.is_finite() && mad_val.is_finite() {
-                (value - med) / mad_val
-            } else {
-                f32::NAN
-            }
-        })
-        .collect();
+    // Shared robust z-score: same EPS and MAD == 0 handling as every other
+    // stage (a private 1e-12 epsilon here previously let z explode to ~1e12
+    // whenever the entropy MAD collapsed to zero).
+    let (z_entropy, z_ref) = robust_z(&entropy);
+    if z_ref.mad.is_finite() && z_ref.mad <= 0.0 {
+        warn!(
+            median = z_ref.median,
+            "isoform entropy MAD is zero; z_entropy collapsed to 0 for all cells"
+        );
+    }
 
     debug!(
         elapsed_ms = start.elapsed().as_millis(),
