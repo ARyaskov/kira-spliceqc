@@ -18,6 +18,17 @@ Phase 1 of the scientific roadmap (Tier A, direct splicing measurements).
   and raw spliced/unspliced/ambiguous UMI totals in `cells.tsv`/`cells.json`;
   `summary.json` gains `input.levels` and an `unspliced` block. Undefined
   below 100 layer UMIs.
+- Cell metadata: `metadata.tsv[.gz]` next to a 10x directory (or
+  `--metadata`) and AnnData `obs` string/categorical columns are aligned to
+  the canonical cell order.
+- Reference strata (`reference` module): `--stratify-by COLUMN`, else
+  cell-type / cluster aliases, else global; strata under 50 cells fold into
+  `global`. Deviations are robust z-scores (continuous metrics) or
+  logit-scale deviations with method-of-moments overdispersion
+  (proportions); outlier flags require |d| >= 3 and BH-adjusted p < 0.05.
+- Tier A: `unspliced_fraction_dev` and `nuclear_fraction_flag`
+  (damaged-cell candidate, DropletQC-style) per cell; per-stratum reference
+  medians in `summary.json` and `cells.json`.
 
 ## [0.3.0] - 2026-10-01
 

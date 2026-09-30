@@ -50,5 +50,6 @@ pub enum GeneSymbolSource {
 pub mod detect;
 pub mod error;
 pub mod h5ad;
+pub mod metadata;
 pub mod shared_cache;
 pub mod tenx;

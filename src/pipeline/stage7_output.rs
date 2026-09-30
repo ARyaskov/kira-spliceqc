@@ -17,6 +17,7 @@ use crate::model::splicing_instability::SplicingInstabilityMetrics;
 use crate::model::splicing_noise::SplicingNoiseMetrics;
 use crate::model::timecourse::TimecourseSplicingMetrics;
 use crate::model::unspliced::UnsplicedMetrics;
+use crate::reference::Strata;
 use crate::output::{json, summary, tsv};
 
 pub struct OutputOptions {
@@ -43,6 +44,7 @@ pub fn run_stage7(
     timecourse: Option<&TimecourseSplicingMetrics>,
     splicing_instability: &SplicingInstabilityMetrics,
     unspliced: Option<&UnsplicedMetrics>,
+    strata: &Strata,
     options: OutputOptions,
 ) -> Result<String, InputError> {
     if let Some(u) = unspliced
@@ -90,6 +92,7 @@ pub fn run_stage7(
             timecourse,
             splicing_instability,
             unspliced,
+            strata,
             options.experimental,
         )?;
         info!("wrote {}", path.display());
@@ -162,6 +165,7 @@ pub fn run_stage7(
         collapse,
         None,
         unspliced,
+        strata,
         options.experimental,
     );
     debug!(

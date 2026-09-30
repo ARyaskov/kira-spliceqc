@@ -2,6 +2,7 @@ use crate::model::collapse::{SpliceosomeCollapseMetrics, SpliceosomeCollapseStat
 use crate::model::cryptic_risk::CrypticSplicingRiskMetrics;
 use crate::model::sis::{SpliceIntegrityClass, SpliceIntegrityMetrics};
 use crate::model::unspliced::UnsplicedMetrics;
+use crate::reference::Strata;
 use crate::stats::robust::median;
 
 pub fn format_summary(
@@ -10,18 +11,33 @@ pub fn format_summary(
     collapse: Option<&SpliceosomeCollapseMetrics>,
     cell_cycle_confounded: Option<&[bool]>,
     unspliced: Option<&UnsplicedMetrics>,
+    strata: &Strata,
     experimental: bool,
 ) -> String {
     let n_cells = metrics.sis.len();
+    let reference = match &strata.column {
+        Some(col) => format!(
+            "Reference: {} by {} ({} strata, {} cells folded into global)\n",
+            strata.mode.as_str(),
+            col,
+            strata.n_strata() - 1,
+            strata.folded_cells
+        ),
+        None => format!("Reference: {} (no stratification column)\n", strata.mode.as_str()),
+    };
     let tier_a = match unspliced {
         Some(u) => {
             let med = median(&u.unspliced_fraction);
+            let flagged = u.nuclear_fraction_flag.iter().filter(|f| **f).count();
             format!(
-                "Input levels: L0, L1 ({})\nUnspliced fraction: median {:.3}, undefined in {} cells\n",
-                u.source, med, u.undefined_cells
+                "Input levels: L0, L1 ({})\n{}Unspliced fraction: median {:.3}, undefined in {} cells, nuclear-fraction flags: {}\n",
+                u.source, reference, med, u.undefined_cells, flagged
             )
         }
-        None => "Input levels: L0 (no spliced/unspliced layers; Tier A metrics unavailable)\n".to_string(),
+        None => format!(
+            "Input levels: L0 (no spliced/unspliced layers; Tier A metrics unavailable)\n{}",
+            reference
+        ),
     };
     if !experimental {
         let undefined = metrics.sis.iter().filter(|v| !v.is_finite()).count();

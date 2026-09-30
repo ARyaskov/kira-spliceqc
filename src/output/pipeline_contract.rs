@@ -16,6 +16,7 @@ use crate::model::imbalance::SpliceosomeImbalanceMetrics;
 use crate::model::missplicing::MissplicingMetrics;
 use crate::model::sis::SpliceIntegrityMetrics;
 use crate::model::unspliced::UnsplicedMetrics;
+use crate::reference::{MIN_STRATUM_CELLS, Strata};
 use crate::model::splicing_instability::{
     RLOOP_RISK_HIGH_THRESHOLD, SPLICE_OVERLOAD_HIGH_THRESHOLD, SPLICING_INSTABILITY_HIGH_THRESHOLD,
     SplicingInstabilityMetrics,
@@ -68,6 +69,8 @@ struct SummaryJson {
     splicing_instability: SplicingInstabilitySummaryJson,
     /// Tier A summary (input level L1); `null` without layers.
     unspliced: Option<UnsplicedSummaryJson>,
+    /// Reference strata used for deviations and flags.
+    reference: ReferenceJson,
 }
 
 #[derive(Serialize)]
@@ -96,6 +99,34 @@ struct UnsplicedSummaryJson {
     median: Option<f64>,
     p10: Option<f64>,
     p90: Option<f64>,
+    nuclear_fraction_flag_fraction: f64,
+    /// Per-stratum reference of the unspliced fraction.
+    strata: Vec<StratumStatJson>,
+}
+
+#[derive(Serialize)]
+struct StratumStatJson {
+    name: String,
+    n_cells: usize,
+    n_defined: usize,
+    median: Option<f32>,
+    mad: Option<f32>,
+}
+
+#[derive(Serialize)]
+struct ReferenceJson {
+    mode: &'static str,
+    column: Option<String>,
+    n_strata: usize,
+    min_stratum_cells: usize,
+    folded_cells: usize,
+    strata: Vec<StratumSizeJson>,
+}
+
+#[derive(Serialize)]
+struct StratumSizeJson {
+    name: String,
+    n_cells: usize,
 }
 
 #[derive(Serialize)]
@@ -263,6 +294,7 @@ pub fn write_pipeline_contract(
     coupling: Option<&CouplingStressMetrics>,
     splicing_instability: &SplicingInstabilityMetrics,
     unspliced: Option<&UnsplicedMetrics>,
+    strata: &Strata,
     catalog: &GenesetCatalog,
 ) -> Result<(), InputError> {
     info!("pipeline contract: building rows");
@@ -278,6 +310,7 @@ pub fn write_pipeline_contract(
         &rows,
         splicing_instability,
         unspliced,
+        strata,
     )?;
     info!("pipeline contract: writing pipeline_step.json");
     write_pipeline_step_json(&out_dir.join("pipeline_step.json"))?;
@@ -497,6 +530,7 @@ fn write_summary_json(
     rows: &[PipelineCellRow],
     splicing_instability: &SplicingInstabilityMetrics,
     unspliced: Option<&UnsplicedMetrics>,
+    strata: &Strata,
 ) -> Result<(), InputError> {
     let mut fidelity = rows
         .iter()
@@ -579,8 +613,38 @@ fn write_summary_json(
                 median: opt(quantile_f64(&mut defined, 0.5)),
                 p10: opt(quantile_f64(&mut defined, 0.1)),
                 p90: opt(quantile_f64(&mut defined, 0.9)),
+                nuclear_fraction_flag_fraction: u.nuclear_fraction_flag.iter().filter(|f| **f).count()
+                    as f64
+                    / u.nuclear_fraction_flag.len().max(1) as f64,
+                strata: u
+                    .reference
+                    .iter()
+                    .map(|s| StratumStatJson {
+                        name: s.name.clone(),
+                        n_cells: s.n_cells,
+                        n_defined: s.n_defined,
+                        median: opt_f32(s.median),
+                        mad: opt_f32(s.mad),
+                    })
+                    .collect(),
             }
         }),
+        reference: ReferenceJson {
+            mode: strata.mode.as_str(),
+            column: strata.column.clone(),
+            n_strata: strata.n_strata(),
+            min_stratum_cells: MIN_STRATUM_CELLS,
+            folded_cells: strata.folded_cells,
+            strata: strata
+                .names
+                .iter()
+                .zip(strata.sizes())
+                .map(|(name, n_cells)| StratumSizeJson {
+                    name: name.clone(),
+                    n_cells,
+                })
+                .collect(),
+        },
     };
 
     let file = File::create(path).map_err(|e| InputError::io(path, e))?;

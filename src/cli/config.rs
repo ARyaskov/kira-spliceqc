@@ -9,6 +9,12 @@ pub struct RunConfig {
     /// `spliced.mtx`/`unspliced.mtx`, or an AnnData file with `layers/`).
     /// Auto-detected when absent.
     pub layers: Option<PathBuf>,
+    /// Explicit `metadata.tsv[.gz]` (barcode + columns). Auto-detected next
+    /// to a 10x directory; AnnData inputs use `obs`.
+    pub metadata: Option<PathBuf>,
+    /// Metadata column to stratify references by (default: first cell-type
+    /// alias, then first cluster alias, else global).
+    pub stratify_by: Option<String>,
     pub mode: AnalysisMode,
     pub run_mode: RunMode,
     pub output_json: bool,

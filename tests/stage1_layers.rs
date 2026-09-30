@@ -47,7 +47,7 @@ fn layers_next_to_matrix_are_detected_and_reindexed() {
     assert_eq!(stage0.layers, Some(LayerLocation::MtxDir(input.clone())));
 
     let out = tempdir().unwrap();
-    let stage1 = run_stage1_full(&stage0, out.path()).unwrap();
+    let stage1 = run_stage1_full(&stage0, out.path(), None).unwrap();
     let layers = stage1.layers.expect("layers loaded");
     let m = &stage1.matrix;
 
@@ -87,7 +87,7 @@ fn starsolo_sibling_layout_matches_cells_by_barcode() {
     assert_eq!(stage0.layers, Some(LayerLocation::MtxDir(velo.clone())));
 
     let out = tempdir().unwrap();
-    let stage1 = run_stage1_full(&stage0, out.path()).unwrap();
+    let stage1 = run_stage1_full(&stage0, out.path(), None).unwrap();
     let layers = stage1.layers.unwrap();
     let m = &stage1.matrix;
     let cell = |name: &str| (0..m.n_cells()).find(|&c| m.cell_name(c) == name).unwrap();
@@ -116,12 +116,12 @@ fn layers_override_wins_and_dimension_mismatch_is_an_error() {
         run_stage0_with_layers(&input, RunMode::Standalone, None, Some(&elsewhere)).unwrap();
     assert_eq!(stage0.layers, Some(LayerLocation::MtxDir(elsewhere.clone())));
     let out = tempdir().unwrap();
-    assert!(run_stage1_full(&stage0, out.path()).unwrap().layers.is_some());
+    assert!(run_stage1_full(&stage0, out.path(), None).unwrap().layers.is_some());
 
     // Wrong gene count in the layer -> LayerMismatch.
     write_layer(&elsewhere.join("unspliced.mtx"), "2 3 1\n1 1 1\n");
     let out = tempdir().unwrap();
-    let err = run_stage1_full(&stage0, out.path()).unwrap_err().to_string();
+    let err = run_stage1_full(&stage0, out.path(), None).unwrap_err().to_string();
     assert!(err.contains("layers do not match"), "{err}");
 }
 
@@ -133,7 +133,7 @@ fn no_layers_means_level_zero_only() {
     let stage0 = run_stage0_with_layers(&input, RunMode::Standalone, None, None).unwrap();
     assert!(stage0.layers.is_none());
     let out = tempdir().unwrap();
-    assert!(run_stage1_full(&stage0, out.path()).unwrap().layers.is_none());
+    assert!(run_stage1_full(&stage0, out.path(), None).unwrap().layers.is_none());
 }
 
 fn write_sparse_group(file: &hdf5::File, path: &str, encoding: &str, indptr: &[i32], indices: &[i32], data: &[f32], shape: [u64; 2]) {
@@ -183,7 +183,7 @@ fn h5ad_layers_are_read_in_x_order() {
     let stage0 = run_stage0_with_layers(&path, RunMode::Standalone, None, None).unwrap();
     assert_eq!(stage0.layers, Some(LayerLocation::H5ad(path.clone())));
     let out = tempdir().unwrap();
-    let stage1 = run_stage1_full(&stage0, out.path()).unwrap();
+    let stage1 = run_stage1_full(&stage0, out.path(), None).unwrap();
     let layers = stage1.layers.unwrap();
     let m = &stage1.matrix;
     let cell = |name: &str| (0..m.n_cells()).find(|&c| m.cell_name(c) == name).unwrap();

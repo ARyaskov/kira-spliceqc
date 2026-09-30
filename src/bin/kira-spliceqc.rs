@@ -44,6 +44,15 @@ pub struct RunArgs {
     /// Auto-detected next to the input when omitted.
     #[arg(long)]
     pub layers: Option<PathBuf>,
+    /// Cell metadata table (barcode + columns, tab-separated, header line).
+    /// Auto-detected as metadata.tsv[.gz] next to a 10x directory; .h5ad
+    /// inputs use obs.
+    #[arg(long)]
+    pub metadata: Option<PathBuf>,
+    /// Metadata column that defines reference strata (default: cell_type,
+    /// then cluster aliases, else one global stratum).
+    #[arg(long)]
+    pub stratify_by: Option<String>,
     #[arg(long, value_enum, default_value = "cell")]
     pub mode: ModeArg,
     #[arg(long)]
@@ -114,6 +123,8 @@ fn execute_run(args: RunArgs) -> Result<(), SpliceQcError> {
         out_dir: out,
         cache_path: args.cache,
         layers: args.layers,
+        metadata: args.metadata,
+        stratify_by: args.stratify_by,
         mode: match args.mode {
             ModeArg::Cell => AnalysisMode::Cell,
             ModeArg::Sample => AnalysisMode::Sample,

@@ -65,6 +65,33 @@ Let:
 - `relu(x) = max(x, 0)`.
 - `sigmoid(x) = 1 / (1 + exp(-x))`.
 
+## Reference Strata and Deviations
+
+Every `_dev` metric and outlier flag is computed relative to the reference of
+the cell's own stratum. `summary.json.reference.mode` records which mode ran:
+
+| Mode | When | Norm |
+| --- | --- | --- |
+| `stratified` | metadata column found (`--stratify-by`, else the first of `cell_type`, `celltype`, `cell_type_annotation`, `annotation`, ..., then `cluster`, `leiden`, `louvain`, `seurat_clusters`, ...) | per stratum; strata with fewer than `MIN_STRATUM_CELLS = 50` cells (and cells with an empty value) fold into the `global` stratum |
+| `global` | no usable column | one stratum, the whole dataset |
+| `external` | reserved for `--reference ref.json` (not yet available) | |
+
+Metadata sources: `metadata.tsv[.gz]` next to a 10x directory (header line,
+first column = barcode) or `--metadata PATH`; `obs` string and categorical
+columns of an AnnData input.
+
+Continuous metric `m`, stratum `s(c)`:
+- `robust_z(m, c) = (m_c - median_s(m)) / (1.4826 * MAD_s(m))`; NaN when the stratum MAD is 0.
+
+Proportion `p_c` with `n_c` trials (e.g. unspliced fraction with `S + U` UMIs):
+- `p_c` is clamped to `[0.5/n_c, 1 - 0.5/n_c]`
+- `d_c = (logit(p_c) - median_s(logit p)) / sqrt(1 / (n_c p_c (1 - p_c)) + tau2_s)`
+- `tau2_s = max(0, (1.4826 * MAD_s(logit p))^2 - mean_s(1 / (n p (1 - p))))` (method-of-moments overdispersion)
+
+Outlier flags: `sign * d_c >= 3` **and** Benjamini-Hochberg adjusted two-sided
+normal p-value `< 0.05` within the stratum. Expected flag rate on a null model
+is therefore below 1 %.
+
 ## Tier A: Unspliced Fraction (Stage 16, requires input level L1)
 
 Direct measurement from spliced/unspliced count layers (see README "Input
@@ -78,6 +105,10 @@ UMI totals:
 - undefined (empty) when `S_c + U_c < MIN_LAYER_UMIS = 100`
 - cells absent from a barcode-matched layer directory have `S = U = 0` and are
   counted in `cells_without_layers`
+- `unspliced_fraction_dev = d_c` from "Reference Strata and Deviations" with `n_c = S_c + U_c`
+- `nuclear_fraction_flag`: `d_c <= -3` and BH-adjusted p < 0.05 within the stratum, i.e. an
+  unspliced fraction far below the cell's own stratum: cytoplasmic debris / damaged-cell
+  candidate (Muskovic & Powell 2021, DropletQC). Not raised for high fractions.
 
 Interpretation: the expected level depends on the protocol (single-nucleus
 0.5-0.7, whole-cell 3' 0.1-0.3) and on cell type; compare within a protocol
@@ -85,7 +116,8 @@ and a reference stratum. 3' libraries also count internal priming on A-rich
 introns as unspliced (La Manno et al. 2018; Muskovic & Powell 2021).
 
 `summary.json.unspliced` reports `n_defined_cells`, `median`, `p10`, `p90`
-(R type 7 quantiles over defined cells) and the layer source.
+(round((n-1)q) quantiles over defined cells), `nuclear_fraction_flag_fraction`,
+the layer source and per-stratum median/MAD.
 
 ## Geneset Activity (Stage 2)
 

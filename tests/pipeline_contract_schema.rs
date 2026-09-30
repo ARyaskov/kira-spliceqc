@@ -24,6 +24,8 @@ fn run_pipeline_contract(input: &Path, out: &Path) {
         out_dir: out.to_path_buf(),
         cache_path: None,
         layers: None,
+        metadata: None,
+        stratify_by: None,
         mode: AnalysisMode::Cell,
         run_mode: RunMode::Pipeline,
         output_json: false,

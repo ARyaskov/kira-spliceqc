@@ -62,6 +62,8 @@ pub enum InputError {
     InvalidSharedCache(String),
     #[error("spliced/unspliced layers do not match the main matrix: {0}")]
     LayerMismatch(String),
+    #[error("invalid cell metadata: {0}")]
+    InvalidMetadata(String),
     #[error("gene index overflow")]
     GeneIndexOverflow,
     #[error("cell index overflow")]

@@ -51,6 +51,8 @@ const COLUMNS: &[(&str, bool)] = &[
     ("unspliced_fraction", false),
     ("unspliced_fraction_ci_low", false),
     ("unspliced_fraction_ci_high", false),
+    ("unspliced_fraction_dev", false),
+    ("nuclear_fraction_flag", false),
     ("SOS", true),
     ("RLR", true),
     ("SII", true),
@@ -67,6 +69,8 @@ enum Value<'a> {
     Bool(bool),
     /// Optional integer count (empty field when None).
     OptU64(Option<u64>),
+    /// Optional flag (empty field when None).
+    OptBool(Option<bool>),
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -181,6 +185,8 @@ fn cell_values<'a>(
     out.push(Value::F32(unspliced.map_or(f32::NAN, |u| u.unspliced_fraction[cell_id])));
     out.push(Value::F32(unspliced.map_or(f32::NAN, |u| u.unspliced_fraction_ci_low[cell_id])));
     out.push(Value::F32(unspliced.map_or(f32::NAN, |u| u.unspliced_fraction_ci_high[cell_id])));
+    out.push(Value::F32(unspliced.map_or(f32::NAN, |u| u.unspliced_fraction_dev[cell_id])));
+    out.push(Value::OptBool(unspliced.map(|u| u.nuclear_fraction_flag[cell_id])));
     out.push(Value::F32(si.sos[cell_id]));
     out.push(Value::F32(si.rlr[cell_id]));
     out.push(Value::F32(si.sii[cell_id]));
@@ -226,6 +232,8 @@ fn write_value<W: Write>(
             let _ = write!(buf, "{v}");
         }
         Value::OptU64(None) => {}
+        Value::OptBool(Some(b)) => buf.push_str(if *b { "true" } else { "false" }),
+        Value::OptBool(None) => {}
     }
     w.write_all(buf.as_bytes()).map_err(|e| InputError::io(path, e))
 }

@@ -9,6 +9,7 @@ use crate::expression::layers::{LayerMatrix, SplicedUnspliced};
 use crate::expression::mmap::MmapExpressionMatrix;
 use crate::io::layers::{RawLayer, RawLayers, read_layers};
 use crate::input::error::InputError;
+use crate::input::metadata::{CellMetadata, read_metadata_h5ad, read_metadata_tsv};
 use crate::input::{InputDescriptor, InputKind};
 use crate::io::{h5ad, mtx};
 
@@ -18,16 +19,26 @@ use crate::io::{h5ad, mtx};
 pub struct Stage1Output {
     pub matrix: MmapExpressionMatrix,
     pub layers: Option<SplicedUnspliced>,
+    /// Per-cell metadata aligned to the matrix's cell order (may be empty).
+    pub metadata: CellMetadata,
 }
 
 pub fn run_stage1(
     input: &InputDescriptor,
     out_dir: &Path,
 ) -> Result<MmapExpressionMatrix, InputError> {
-    Ok(run_stage1_full(input, out_dir)?.matrix)
+    Ok(run_stage1_full(input, out_dir, None)?.matrix)
 }
 
-pub fn run_stage1_full(input: &InputDescriptor, out_dir: &Path) -> Result<Stage1Output, InputError> {
+/// Full stage 1: main matrix, optional layers, optional metadata.
+/// `metadata_override` points at a `metadata.tsv[.gz]`; otherwise the file is
+/// looked up next to a 10x directory / shared cache, or read from `obs` of an
+/// AnnData input.
+pub fn run_stage1_full(
+    input: &InputDescriptor,
+    out_dir: &Path,
+    metadata_override: Option<&Path>,
+) -> Result<Stage1Output, InputError> {
     let expr_path = out_dir.join("expr.bin");
     std::fs::create_dir_all(out_dir).map_err(|e| InputError::io(out_dir, e))?;
 
@@ -39,18 +50,23 @@ pub fn run_stage1_full(input: &InputDescriptor, out_dir: &Path) -> Result<Stage1
             let matrix = MmapExpressionMatrix::open_shared_cache(&shared.cache_path)?;
             // The shared cache is already in canonical order, so layers found
             // next to it are matched by barcode against that order.
+            let genes: Vec<String> =
+                (0..matrix.n_genes()).map(|g| matrix.gene_symbol(g).to_string()).collect();
+            let cells: Vec<String> =
+                (0..matrix.n_cells()).map(|c| matrix.cell_name(c).to_string()).collect();
             let layers = match &input.layers {
                 Some(location) => {
-                    let genes: Vec<String> =
-                        (0..matrix.n_genes()).map(|g| matrix.gene_symbol(g).to_string()).collect();
-                    let cells: Vec<String> =
-                        (0..matrix.n_cells()).map(|c| matrix.cell_name(c).to_string()).collect();
                     let raw_layers = read_layers(location, &genes, &cells)?;
                     Some(build_layers(raw_layers, genes.len(), cells.len(), None, None))
                 }
                 None => None,
             };
-            return Ok(Stage1Output { matrix, layers });
+            let metadata = load_tsv_metadata(&shared.root, metadata_override, &cells)?;
+            return Ok(Stage1Output {
+                matrix,
+                layers,
+                metadata,
+            });
         }
     };
 
@@ -65,8 +81,20 @@ pub fn run_stage1_full(input: &InputDescriptor, out_dir: &Path) -> Result<Stage1
         None => None,
     };
 
+    let raw_cell_order = raw.cells.clone();
     let gene_index = build_index(raw.genes, true)?;
     let cell_index = build_index(raw.cells, false)?;
+
+    let metadata = match &input.kind {
+        InputKind::TenX(tenx) => {
+            load_tsv_metadata(&tenx.root, metadata_override, &cell_index.sorted_names)?
+        }
+        InputKind::H5AD(h5) => match metadata_override {
+            Some(p) => read_metadata_tsv(p, &cell_index.sorted_names)?,
+            None => read_metadata_h5ad(&h5.path, &raw_cell_order, &cell_index.sorted_names)?,
+        },
+        InputKind::OrganelleCache(_) => unreachable!("handled above"),
+    };
 
     let layers = raw_layers.map(|rl| {
         build_layers(
@@ -113,7 +141,30 @@ pub fn run_stage1_full(input: &InputDescriptor, out_dir: &Path) -> Result<Stage1
     info!("expression cache written: {}", expr_path.display());
 
     let matrix = MmapExpressionMatrix::open(&expr_path)?;
-    Ok(Stage1Output { matrix, layers })
+    Ok(Stage1Output {
+        matrix,
+        layers,
+        metadata,
+    })
+}
+
+/// `metadata.tsv[.gz]` next to a 10x directory (or an explicit path); empty
+/// metadata when there is none.
+fn load_tsv_metadata(
+    root: &Path,
+    override_path: Option<&Path>,
+    cell_names: &[String],
+) -> Result<CellMetadata, InputError> {
+    if let Some(p) = override_path {
+        return read_metadata_tsv(p, cell_names);
+    }
+    for name in ["metadata.tsv", "metadata.tsv.gz"] {
+        let p = root.join(name);
+        if p.is_file() {
+            return read_metadata_tsv(&p, cell_names);
+        }
+    }
+    Ok(CellMetadata::default())
 }
 
 /// Reindexes raw layer triplets (optional `old_to_new` maps) and builds the

@@ -10,6 +10,7 @@ use rayon::prelude::*;
 
 use crate::expression::SplicedUnspliced;
 use crate::model::unspliced::UnsplicedMetrics;
+use crate::reference::{Strata, flag_outliers, logit_deviation_by_stratum};
 
 /// Cells with fewer spliced + unspliced UMIs get an undefined fraction: a
 /// binomial proportion on fewer trials has a Wilson interval wider than
@@ -19,8 +20,9 @@ pub const MIN_LAYER_UMIS: u64 = 100;
 /// z for a 95 % two-sided interval.
 const Z95: f64 = 1.959_963_984_540_054;
 
-pub fn compute(layers: &SplicedUnspliced) -> UnsplicedMetrics {
+pub fn compute(layers: &SplicedUnspliced, strata: &Strata) -> UnsplicedMetrics {
     let n_cells = layers.n_cells();
+    debug_assert_eq!(strata.n_cells(), n_cells);
 
     let rows: Vec<(u64, u64, u64, f32, f32, f32)> = (0..n_cells)
         .into_par_iter()
@@ -60,6 +62,15 @@ pub fn compute(layers: &SplicedUnspliced) -> UnsplicedMetrics {
         ci_high.push(hi);
     }
 
+    let trials: Vec<u64> = spliced_umis
+        .iter()
+        .zip(&unspliced_umis)
+        .map(|(s, u)| s + u)
+        .collect();
+    let (unspliced_fraction_dev, reference) =
+        logit_deviation_by_stratum(&unspliced_fraction, &trials, strata);
+    let nuclear_fraction_flag = flag_outliers(&unspliced_fraction_dev, strata, -1.0);
+
     UnsplicedMetrics {
         source: layers.source.clone(),
         min_layer_umis: MIN_LAYER_UMIS,
@@ -72,6 +83,9 @@ pub fn compute(layers: &SplicedUnspliced) -> UnsplicedMetrics {
         unspliced_fraction_ci_high: ci_high,
         cells_without_layers: layers.cells_without_layers,
         undefined_cells,
+        unspliced_fraction_dev,
+        nuclear_fraction_flag,
+        reference,
     }
 }
 
@@ -125,7 +139,7 @@ mod tests {
             source: "test".to_string(),
             cells_without_layers: 0,
         };
-        let m = compute(&layers);
+        let m = compute(&layers, &Strata::global(2));
         assert_eq!(m.spliced_umis, vec![150, 10]);
         assert_eq!(m.unspliced_umis, vec![50, 10]);
         assert_eq!(m.ambiguous_umis, vec![8, 0]);

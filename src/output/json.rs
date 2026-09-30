@@ -19,6 +19,7 @@ use crate::model::splicing_instability::{
 use crate::model::splicing_noise::SplicingNoiseMetrics;
 use crate::model::timecourse::{SplicingTrajectoryClass, TimecourseSplicingMetrics};
 use crate::model::unspliced::UnsplicedMetrics;
+use crate::reference::{MIN_STRATUM_CELLS, Strata};
 
 /// Bumped to 2.0 in v0.3: expression-signature keys carry the `_expr`
 /// suffix (`regulator_expr`, `missplicing_expr`, `imbalance_expr`,
@@ -55,6 +56,35 @@ struct JsonOutput<'a> {
     /// Tier A unspliced metrics (input level L1); absent without layers.
     #[serde(skip_serializing_if = "Option::is_none")]
     unspliced: Option<JsonUnsplicedStage>,
+    /// Reference strata used for `_dev` metrics and outlier flags.
+    reference: JsonReference,
+}
+
+#[derive(Serialize)]
+struct JsonReference {
+    mode: &'static str,
+    column: Option<String>,
+    n_strata: usize,
+    min_stratum_cells: usize,
+    folded_cells: usize,
+    strata: Vec<JsonStratum>,
+    /// Stratum label per cell (index into `strata`).
+    labels: Vec<u32>,
+}
+
+#[derive(Serialize)]
+struct JsonStratum {
+    name: String,
+    n_cells: usize,
+}
+
+#[derive(Serialize)]
+struct JsonStratumStat {
+    name: String,
+    n_cells: usize,
+    n_defined: usize,
+    median: Option<f32>,
+    mad: Option<f32>,
 }
 
 #[derive(Serialize)]
@@ -65,6 +95,8 @@ struct JsonCellUnspliced {
     unspliced_fraction: Option<f32>,
     unspliced_fraction_ci_low: Option<f32>,
     unspliced_fraction_ci_high: Option<f32>,
+    unspliced_fraction_dev: Option<f32>,
+    nuclear_fraction_flag: bool,
 }
 
 #[derive(Serialize)]
@@ -80,6 +112,10 @@ struct JsonUnsplicedStage {
     unspliced_fraction: Vec<Option<f32>>,
     unspliced_fraction_ci_low: Vec<Option<f32>>,
     unspliced_fraction_ci_high: Vec<Option<f32>>,
+    unspliced_fraction_dev: Vec<Option<f32>>,
+    nuclear_fraction_flag: Vec<bool>,
+    /// Per-stratum reference (median / MAD of `unspliced_fraction`).
+    reference: Vec<JsonStratumStat>,
 }
 
 #[derive(Serialize)]
@@ -392,6 +428,7 @@ pub fn write_json(
     timecourse: Option<&TimecourseSplicingMetrics>,
     splicing_instability: &SplicingInstabilityMetrics,
     unspliced: Option<&UnsplicedMetrics>,
+    strata: &Strata,
     experimental: bool,
 ) -> Result<(), InputError> {
     let n_cells = cell_names.len();
@@ -532,6 +569,8 @@ pub fn write_json(
                 unspliced_fraction: opt_f32(u.unspliced_fraction[cell_id]),
                 unspliced_fraction_ci_low: opt_f32(u.unspliced_fraction_ci_low[cell_id]),
                 unspliced_fraction_ci_high: opt_f32(u.unspliced_fraction_ci_high[cell_id]),
+                unspliced_fraction_dev: opt_f32(u.unspliced_fraction_dev[cell_id]),
+                nuclear_fraction_flag: u.nuclear_fraction_flag[cell_id],
             }),
         });
     }
@@ -731,7 +770,37 @@ pub fn write_json(
             unspliced_fraction: opt_vec(&u.unspliced_fraction),
             unspliced_fraction_ci_low: opt_vec(&u.unspliced_fraction_ci_low),
             unspliced_fraction_ci_high: opt_vec(&u.unspliced_fraction_ci_high),
+            unspliced_fraction_dev: opt_vec(&u.unspliced_fraction_dev),
+            nuclear_fraction_flag: u.nuclear_fraction_flag.clone(),
+            reference: u
+                .reference
+                .iter()
+                .map(|s| JsonStratumStat {
+                    name: s.name.clone(),
+                    n_cells: s.n_cells,
+                    n_defined: s.n_defined,
+                    median: opt_f32(s.median),
+                    mad: opt_f32(s.mad),
+                })
+                .collect(),
         }),
+        reference: JsonReference {
+            mode: strata.mode.as_str(),
+            column: strata.column.clone(),
+            n_strata: strata.n_strata(),
+            min_stratum_cells: MIN_STRATUM_CELLS,
+            folded_cells: strata.folded_cells,
+            strata: strata
+                .names
+                .iter()
+                .zip(strata.sizes())
+                .map(|(name, n_cells)| JsonStratum {
+                    name: name.clone(),
+                    n_cells,
+                })
+                .collect(),
+            labels: strata.labels.clone(),
+        },
     };
 
     let file = std::fs::File::create(path).map_err(|e| InputError::io(path, e))?;

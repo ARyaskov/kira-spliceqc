@@ -21,4 +21,12 @@ pub struct UnsplicedMetrics {
     pub cells_without_layers: usize,
     /// Cells with an undefined fraction (below `min_layer_umis`).
     pub undefined_cells: usize,
+    /// Logit-scale deviation of `unspliced_fraction` from its reference
+    /// stratum (see `reference::logit_deviation_by_stratum`).
+    pub unspliced_fraction_dev: Vec<f32>,
+    /// Damaged-cell candidate: unspliced fraction far below its stratum
+    /// (`dev <= -3` and BH-adjusted p < 0.05), after DropletQC.
+    pub nuclear_fraction_flag: Vec<bool>,
+    /// Per-stratum reference of `unspliced_fraction` (median / MAD).
+    pub reference: Vec<crate::reference::StratumStat>,
 }

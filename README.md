@@ -76,6 +76,8 @@ kira-spliceqc run \
 - `--run-mode standalone` (default): writes stage outputs to `--out`.
 - `--run-mode pipeline`: writes into `<OUT>/kira-spliceqc` and generates pipeline contract artifacts.
 - `--layers PATH`: explicit spliced/unspliced layer source (see "Input levels").
+- `--metadata PATH`: cell metadata table (`barcode` + columns); auto-detected as `metadata.tsv[.gz]` next to a 10x directory, `.h5ad` inputs use `obs`.
+- `--stratify-by COLUMN`: metadata column defining reference strata (default: `cell_type`-like, then `cluster`-like columns, else one global stratum). Strata under 50 cells fold into `global`.
 - `--extended`: enables stages 8-13 (`coupling`, `exon/intron`, `assembly`, `noise`, `cryptic risk`, `collapse`).
 - `--experimental-signatures`: writes the experimental composite signatures (`sis`/`class`, `SOS`/`RLR`/`SII` and their flags, cryptic risk, collapse) to the per-cell outputs. Off by default; implied by `--run-mode pipeline` because the pipeline contract is built on them.
 
@@ -117,7 +119,10 @@ overwritten by the pipeline contract table in pipeline mode.
 With spliced/unspliced layers (input level L1) every cell gets
 `unspliced_fraction = U / (S + U)` with a Wilson 95 % interval, plus the raw
 `spliced_umis`, `unspliced_umis` and `ambiguous_umis`. Fractions are undefined
-for cells with fewer than 100 layer UMIs. See METRICS.md for interpretation
+for cells with fewer than 100 layer UMIs. `unspliced_fraction_dev` is the
+logit-scale deviation from the cell's reference stratum and
+`nuclear_fraction_flag` marks damaged-cell candidates (fraction far below the
+stratum, FDR 5 %). See METRICS.md for the reference model and interpretation
 caveats (protocol and cell-type dependence).
 
 ## Splicing instability proxies

@@ -1,4 +1,4 @@
-﻿pub mod cli;
+pub mod cli;
 pub mod expression;
 pub mod genesets;
 pub mod input;
@@ -7,5 +7,6 @@ pub mod metrics;
 pub mod model;
 pub mod output;
 pub mod pipeline;
+pub mod reference;
 pub mod simd;
 pub mod stats;
