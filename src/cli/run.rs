@@ -28,6 +28,8 @@ use crate::pipeline::stage13_collapse::compute as compute_collapse;
 use crate::pipeline::stage15_splicing_instability::compute as compute_splicing_instability;
 use crate::pipeline::stage16_unspliced::run_stage16;
 use crate::pipeline::stage17_intron_retention::run_stage17;
+use crate::pipeline::stage18_cell_cycle::run_stage18;
+use crate::metrics::cell_cycle::cell_cycle_gene_ids;
 use crate::reference::Strata;
 
 /// Scratch directory (inside the output directory) for the stage-1 cache.
@@ -125,6 +127,7 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
     let controls = {
         let mut exclude: Vec<u32> = catalog.genesets.iter().flat_map(|g| g.gene_ids.iter().copied()).collect();
         exclude.extend(instability_panel_gene_ids(&stage1));
+        exclude.extend(cell_cycle_gene_ids(&stage1));
         let pool = ControlPool::new(stage1.gene_mean_log_cp10k(), &exclude);
         info!(
             target: "kira_spliceqc::cli::run",
@@ -145,6 +148,7 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
     let stage15 = run_logged(15, || {
         Ok(compute_splicing_instability(&stage1, Some(&controls), &strata))
     })?;
+    let stage18 = run_logged(18, || Ok(run_stage18(&stage1, Some(&controls))))?;
     let (stage16, stage17) = match &stage1_layers {
         Some(layers) => (
             Some(run_logged(16, || Ok(run_stage16(layers, &strata)))?),
@@ -199,6 +203,7 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
         stage15,
         stage16,
         stage17,
+        stage18,
     };
 
     if config.extended && context.stage14.is_none() {
@@ -223,6 +228,7 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
             &context.stage15,
             context.stage16.as_ref(),
             context.stage17.as_ref(),
+            &context.stage18,
             &strata,
             OutputOptions {
                 json: config.output_json,
@@ -248,6 +254,7 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
             &context.stage15,
             context.stage16.as_ref(),
             context.stage17.as_ref(),
+            &context.stage18,
             &strata,
             &catalog,
         )?;

@@ -4,6 +4,7 @@ use serde::Serialize;
 
 use crate::input::error::InputError;
 use crate::model::assembly_phase::AssemblyPhaseImbalanceMetrics;
+use crate::model::cell_cycle::{CellCycleMetrics, CellCyclePhase};
 use crate::model::collapse::{SpliceosomeCollapseMetrics, SpliceosomeCollapseStatus};
 use crate::model::coupling::CouplingStressMetrics;
 use crate::model::cryptic_risk::CrypticSplicingRiskMetrics;
@@ -51,7 +52,8 @@ struct JsonOutput<'a> {
     collapse: Option<JsonCollapse>,
     timecourse: Option<JsonTimecourse>,
     splicing_instability: JsonSplicingInstabilityStage,
-    cell_cycle_guardrail: Option<JsonCellCycleGuardrail>,
+    /// Cell-cycle confounder annotation (Tirosh 2016 scores, Seurat phase rule).
+    cell_cycle: JsonCellCycleStage,
     /// Input levels available: `["L0"]` or `["L0", "L1"]`.
     input_levels: Vec<&'static str>,
     /// Tier A unspliced metrics (input level L1); absent without layers.
@@ -172,6 +174,7 @@ struct JsonCell<'a> {
     unspliced: Option<JsonCellUnspliced>,
     #[serde(skip_serializing_if = "Option::is_none")]
     intron_retention: Option<JsonCellIntronRetention>,
+    cell_cycle: JsonCellCellCycle,
 }
 
 #[derive(Serialize)]
@@ -345,7 +348,31 @@ struct JsonTimecourse {
 }
 
 #[derive(Serialize)]
-struct JsonCellCycleGuardrail {}
+struct JsonCellCellCycle {
+    s_score_expr: Option<f32>,
+    g2m_score_expr: Option<f32>,
+    phase: &'static str,
+    cycling: bool,
+}
+
+#[derive(Serialize)]
+struct JsonCellCycleStage {
+    s_genes_mapped: usize,
+    g2m_genes_mapped: usize,
+    s_score_expr: Vec<Option<f32>>,
+    g2m_score_expr: Vec<Option<f32>>,
+    phase: Vec<&'static str>,
+    cycling: Vec<bool>,
+    phase_counts: JsonPhaseCounts,
+}
+
+#[derive(Serialize)]
+struct JsonPhaseCounts {
+    g1: usize,
+    s: usize,
+    g2m: usize,
+    unknown: usize,
+}
 
 #[derive(Serialize)]
 struct JsonPanelCoverage {
@@ -458,6 +485,7 @@ pub fn write_json(
     splicing_instability: &SplicingInstabilityMetrics,
     unspliced: Option<&UnsplicedMetrics>,
     intron_retention: Option<&IntronRetentionMetrics>,
+    cell_cycle: &CellCycleMetrics,
     strata: &Strata,
     experimental: bool,
 ) -> Result<(), InputError> {
@@ -609,8 +637,30 @@ pub fn write_json(
                 ir_genes_used: m.ir_genes_used[cell_id],
                 intron_retention_high: m.intron_retention_high[cell_id],
             }),
+            cell_cycle: JsonCellCellCycle {
+                s_score_expr: opt_f32(cell_cycle.s_score[cell_id]),
+                g2m_score_expr: opt_f32(cell_cycle.g2m_score[cell_id]),
+                phase: cell_cycle.phase[cell_id].as_str(),
+                cycling: cell_cycle.cycling[cell_id],
+            },
         });
     }
+
+    let phase_count = |p: CellCyclePhase| cell_cycle.phase.iter().filter(|q| **q == p).count();
+    let cell_cycle_stage = JsonCellCycleStage {
+        s_genes_mapped: cell_cycle.s_genes_mapped,
+        g2m_genes_mapped: cell_cycle.g2m_genes_mapped,
+        s_score_expr: opt_vec(&cell_cycle.s_score),
+        g2m_score_expr: opt_vec(&cell_cycle.g2m_score),
+        phase: cell_cycle.phase.iter().map(|p| p.as_str()).collect(),
+        cycling: cell_cycle.cycling.clone(),
+        phase_counts: JsonPhaseCounts {
+            g1: phase_count(CellCyclePhase::G1),
+            s: phase_count(CellCyclePhase::S),
+            g2m: phase_count(CellCyclePhase::G2M),
+            unknown: phase_count(CellCyclePhase::Unknown),
+        },
+    };
 
     let sis_stage = experimental.then(|| JsonSisStage {
         sis: opt_vec(&sis.sis),
@@ -793,7 +843,7 @@ pub fn write_json(
         collapse: collapse_json,
         timecourse: timecourse_json,
         splicing_instability: splicing_instability_json,
-        cell_cycle_guardrail: None,
+        cell_cycle: cell_cycle_stage,
         input_levels: if unspliced.is_some() { vec!["L0", "L1"] } else { vec!["L0"] },
         unspliced: unspliced.map(|u| JsonUnsplicedStage {
             source: u.source.clone(),

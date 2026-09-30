@@ -120,7 +120,8 @@ fn extended_pipeline_logs_and_json() {
     assert!(v.get("cryptic_risk").is_some());
     assert!(v.get("collapse").is_some());
     assert!(v.get("timecourse").is_some());
-    assert!(v.get("cell_cycle_guardrail").is_some());
+    assert!(v.get("cell_cycle").is_some());
+    assert!(v["cell_cycle"]["phase_counts"].is_object());
 }
 
 #[test]

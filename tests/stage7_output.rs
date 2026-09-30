@@ -1,6 +1,7 @@
 use std::fs;
 
 use kira_spliceqc::model::assembly_phase::AssemblyPhaseImbalanceMetrics;
+use kira_spliceqc::model::cell_cycle::{CellCycleMetrics, CellCyclePhase};
 use kira_spliceqc::model::coupling::CouplingStressMetrics;
 use kira_spliceqc::model::exon_intron_bias::ExonIntronDefinitionMetrics;
 use kira_spliceqc::model::imbalance::SpliceosomeImbalanceMetrics;
@@ -15,6 +16,17 @@ use kira_spliceqc::output::{json, summary, tsv};
 use kira_spliceqc::pipeline::stage7_output::{OutputOptions, run_stage7};
 use kira_spliceqc::reference::Strata;
 use tempfile::tempdir;
+
+fn make_cell_cycle(n: usize) -> CellCycleMetrics {
+    CellCycleMetrics {
+        s_genes_mapped: 0,
+        g2m_genes_mapped: 0,
+        s_score: vec![f32::NAN; n],
+        g2m_score: vec![f32::NAN; n],
+        phase: vec![CellCyclePhase::Unknown; n],
+        cycling: vec![false; n],
+    }
+}
 
 fn make_metrics(
     n: usize,
@@ -191,6 +203,7 @@ fn json_schema_sanity() {
         &splicing_instability,
         None,
         None,
+        &make_cell_cycle(2),
         &Strata::global(2),
         true,
     )
@@ -246,6 +259,7 @@ fn tsv_header_order() {
         &assembly,
         None,
         None,
+        &make_cell_cycle(1),
         true,
     )
     .unwrap();
@@ -267,8 +281,8 @@ fn tsv_header_order() {
 fn summary_formatting_snapshot() {
     let (_cells, _isoform, _missplicing, _imbalance, sis, _coupling, _exon_intron, _assembly, _) =
         make_metrics(3);
-    let text = summary::format_summary(&sis, None, None, None, None, None, &Strata::global(3), true);
-    let expected = "kira-spliceqc summary\n---------------------\nCells analyzed: 3\nInput levels: L0 (no spliced/unspliced layers; Tier A metrics unavailable)\nReference: global (no stratification column)\n\nIntegrity classes:\n  Intact:       0 (0.0%)\n  Stressed:     3 (100.0%)\n  Impaired:     0 (0.0%)\n  Broken:       0 (0.0%)\n\nMedian SIS: 0.75\nFailure fraction (Impaired+Broken): 0.0%\n\nCryptic splicing risk > 0.7: N/A\nSpliceosome collapse: N/A\nCell-cycle confounded: N/A\n";
+    let text = summary::format_summary(&sis, None, None, &make_cell_cycle(3), None, None, &Strata::global(3), true);
+    let expected = "kira-spliceqc summary\n---------------------\nCells analyzed: 3\nInput levels: L0 (no spliced/unspliced layers; Tier A metrics unavailable)\nReference: global (no stratification column)\nCycling (S/G2M, Tirosh 2016): N/A (cell-cycle genes not mapped)\n\nIntegrity classes:\n  Intact:       0 (0.0%)\n  Stressed:     3 (100.0%)\n  Impaired:     0 (0.0%)\n  Broken:       0 (0.0%)\n\nMedian SIS: 0.75\nFailure fraction (Impaired+Broken): 0.0%\n\nCryptic splicing risk > 0.7: N/A\nSpliceosome collapse: N/A\n";
     assert_eq!(text, expected);
 }
 
@@ -306,6 +320,7 @@ fn json_deterministic_bytes() {
         &splicing_instability,
         None,
         None,
+        &make_cell_cycle(2),
         &Strata::global(2),
         false,
     )
@@ -327,6 +342,7 @@ fn json_deterministic_bytes() {
         &splicing_instability,
         None,
         None,
+        &make_cell_cycle(2),
         &Strata::global(2),
         false,
     )
@@ -368,6 +384,7 @@ fn run_stage7_outputs() {
         &splicing_instability,
         None,
         None,
+        &make_cell_cycle(1),
         &Strata::global(1),
         OutputOptions {
             json: false,

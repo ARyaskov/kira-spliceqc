@@ -11,6 +11,7 @@ use crate::expression::ExpressionMatrix;
 use crate::genesets::{Geneset, GenesetCatalog};
 use crate::input::InputDescriptor;
 use crate::input::error::InputError;
+use crate::model::cell_cycle::{CellCycleMetrics, CellCyclePhase};
 use crate::model::coupling::CouplingStressMetrics;
 use crate::model::imbalance::SpliceosomeImbalanceMetrics;
 use crate::model::missplicing::MissplicingMetrics;
@@ -74,6 +75,24 @@ struct SummaryJson {
     intron_retention: Option<IntronRetentionSummaryJson>,
     /// Reference strata used for deviations and flags.
     reference: ReferenceJson,
+    /// Cell-cycle confounder summary.
+    cell_cycle: CellCycleSummaryJson,
+}
+
+#[derive(Serialize)]
+struct CellCycleSummaryJson {
+    s_genes_mapped: usize,
+    g2m_genes_mapped: usize,
+    cycling_fraction: f64,
+    phase_fractions: PhaseFractionsJson,
+}
+
+#[derive(Serialize)]
+struct PhaseFractionsJson {
+    g1: f64,
+    s: f64,
+    g2m: f64,
+    unknown: f64,
 }
 
 #[derive(Serialize)]
@@ -311,11 +330,12 @@ pub fn write_pipeline_contract(
     splicing_instability: &SplicingInstabilityMetrics,
     unspliced: Option<&UnsplicedMetrics>,
     intron_retention: Option<&IntronRetentionMetrics>,
+    cell_cycle: &CellCycleMetrics,
     strata: &Strata,
     catalog: &GenesetCatalog,
 ) -> Result<(), InputError> {
     info!("pipeline contract: building rows");
-    let rows = build_rows(matrix, missplicing, imbalance, sis, coupling)?;
+    let rows = build_rows(matrix, missplicing, imbalance, sis, coupling, cell_cycle)?;
     info!("pipeline contract: writing spliceqc.tsv");
     write_spliceqc_tsv(&out_dir.join("spliceqc.tsv"), &rows)?;
     info!("pipeline contract: writing panels_report.tsv");
@@ -328,6 +348,7 @@ pub fn write_pipeline_contract(
         splicing_instability,
         unspliced,
         intron_retention,
+        cell_cycle,
         strata,
     )?;
     info!("pipeline contract: writing pipeline_step.json");
@@ -341,8 +362,14 @@ fn build_rows(
     imbalance: &SpliceosomeImbalanceMetrics,
     sis: &SpliceIntegrityMetrics,
     coupling: Option<&CouplingStressMetrics>,
+    cell_cycle: &CellCycleMetrics,
 ) -> Result<Vec<PipelineCellRow>, InputError> {
     let n_cells = matrix.n_cells();
+    if cell_cycle.cycling.len() != n_cells {
+        return Err(InputError::LengthMismatch(
+            "pipeline contract cell-cycle length mismatch".to_string(),
+        ));
+    }
     if missplicing.b_u12.len() != n_cells
         || missplicing.burden.len() != n_cells
         || missplicing.burden_star.len() != n_cells
@@ -408,7 +435,7 @@ fn build_rows(
             .iter()
             .any(|v| !v.is_finite());
 
-            let flags = build_flags(confidence, nnz, missing_metrics);
+            let flags = build_flags(confidence, nnz, missing_metrics, cell_cycle.cycling[cell]);
 
             PipelineCellRow {
                 barcode,
@@ -542,6 +569,7 @@ fn panel_quantiles(matrix: &dyn ExpressionMatrix, geneset: &Geneset) -> (f64, f6
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn write_summary_json(
     path: &Path,
     input: &InputDescriptor,
@@ -549,6 +577,7 @@ fn write_summary_json(
     splicing_instability: &SplicingInstabilityMetrics,
     unspliced: Option<&UnsplicedMetrics>,
     intron_retention: Option<&IntronRetentionMetrics>,
+    cell_cycle: &CellCycleMetrics,
     strata: &Strata,
 ) -> Result<(), InputError> {
     let mut fidelity = rows
@@ -694,6 +723,21 @@ fn write_summary_json(
                     n_cells,
                 })
                 .collect(),
+        },
+        cell_cycle: {
+            let total = cell_cycle.phase.len().max(1) as f64;
+            let frac = |p: CellCyclePhase| cell_cycle.phase.iter().filter(|q| **q == p).count() as f64 / total;
+            CellCycleSummaryJson {
+                s_genes_mapped: cell_cycle.s_genes_mapped,
+                g2m_genes_mapped: cell_cycle.g2m_genes_mapped,
+                cycling_fraction: cell_cycle.cycling.iter().filter(|c| **c).count() as f64 / total,
+                phase_fractions: PhaseFractionsJson {
+                    g1: frac(CellCyclePhase::G1),
+                    s: frac(CellCyclePhase::S),
+                    g2m: frac(CellCyclePhase::G2M),
+                    unknown: frac(CellCyclePhase::Unknown),
+                },
+            }
         },
     };
 
@@ -956,7 +1000,7 @@ fn classify_regime(
     }
 }
 
-fn build_flags(confidence: f64, nnz: u64, missing_metrics: bool) -> String {
+fn build_flags(confidence: f64, nnz: u64, missing_metrics: bool, cycling: bool) -> String {
     let mut flags = Vec::new();
     if confidence.is_finite() && confidence < 0.5 {
         flags.push("LOW_CONFIDENCE");
@@ -966,6 +1010,10 @@ fn build_flags(confidence: f64, nnz: u64, missing_metrics: bool) -> String {
     }
     if missing_metrics {
         flags.push("MISSING_METRICS");
+    }
+    if cycling {
+        // Expression signatures of this cell may reflect proliferation.
+        flags.push("CYCLING");
     }
     flags.join(",")
 }
@@ -1021,7 +1069,8 @@ mod tests {
 
     #[test]
     fn missing_metrics_flag_is_set_without_low_confidence() {
-        let flags = build_flags(f64::NAN, 1000, true);
+        let flags = build_flags(f64::NAN, 1000, true, false);
         assert_eq!(flags, "MISSING_METRICS");
+        assert_eq!(build_flags(0.9, 1000, false, true), "CYCLING");
     }
 }

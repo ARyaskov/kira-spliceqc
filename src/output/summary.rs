@@ -1,3 +1,4 @@
+use crate::model::cell_cycle::{CellCycleMetrics, CellCyclePhase};
 use crate::model::collapse::{SpliceosomeCollapseMetrics, SpliceosomeCollapseStatus};
 use crate::model::cryptic_risk::CrypticSplicingRiskMetrics;
 use crate::model::sis::{SpliceIntegrityClass, SpliceIntegrityMetrics};
@@ -11,13 +12,26 @@ pub fn format_summary(
     metrics: &SpliceIntegrityMetrics,
     cryptic: Option<&CrypticSplicingRiskMetrics>,
     collapse: Option<&SpliceosomeCollapseMetrics>,
-    cell_cycle_confounded: Option<&[bool]>,
+    cell_cycle: &CellCycleMetrics,
     unspliced: Option<&UnsplicedMetrics>,
     intron_retention: Option<&IntronRetentionMetrics>,
     strata: &Strata,
     experimental: bool,
 ) -> String {
     let n_cells = metrics.sis.len();
+    let cycling_line = {
+        let known = cell_cycle.phase.iter().filter(|p| **p != CellCyclePhase::Unknown).count();
+        if known == 0 {
+            "Cycling (S/G2M, Tirosh 2016): N/A (cell-cycle genes not mapped)\n".to_string()
+        } else {
+            let cycling = cell_cycle.cycling.iter().filter(|c| **c).count();
+            format!(
+                "Cycling (S/G2M, Tirosh 2016): {} ({:.1}%)\n",
+                cycling,
+                100.0 * cycling as f32 / known as f32
+            )
+        }
+    };
     let reference = match &strata.column {
         Some(col) => format!(
             "Reference: {} by {} ({} strata, {} cells folded into global)\n",
@@ -54,8 +68,8 @@ pub fn format_summary(
     if !experimental {
         let undefined = metrics.sis.iter().filter(|v| !v.is_finite()).count();
         return format!(
-            "kira-spliceqc summary\n---------------------\nCells analyzed: {}\n{}Cells with undefined expression signatures: {}\n\nComposite signatures (SIS classes, SOS/RLR/SII, cryptic risk, collapse) are\nexperimental and not written; pass --experimental-signatures to include them.\n",
-            n_cells, tier_a, undefined
+            "kira-spliceqc summary\n---------------------\nCells analyzed: {}\n{}{}Cells with undefined expression signatures: {}\n\nComposite signatures (SIS classes, SOS/RLR/SII, cryptic risk, collapse) are\nexperimental and not written; pass --experimental-signatures to include them.\n",
+            n_cells, tier_a, cycling_line, undefined
         );
     }
     let mut intact = 0usize;
@@ -118,24 +132,11 @@ pub fn format_summary(
         }
     });
 
-    let cell_cycle_pct = cell_cycle_confounded.map(|flags| {
-        let mut flagged = 0usize;
-        for value in flags {
-            if *value {
-                flagged += 1;
-            }
-        }
-        if flags.is_empty() {
-            None
-        } else {
-            Some((flagged as f32 / flags.len() as f32) * 100.0)
-        }
-    });
-
     format!(
-        "kira-spliceqc summary\n---------------------\nCells analyzed: {}\n{}\nIntegrity classes:\n  Intact:    {:>4} ({:.1}%)\n  Stressed:  {:>4} ({:.1}%)\n  Impaired:  {:>4} ({:.1}%)\n  Broken:    {:>4} ({:.1}%)\n\nMedian SIS: {:.2}\nFailure fraction (Impaired+Broken): {:.1}%\n\nCryptic splicing risk > 0.7: {}\nSpliceosome collapse: {}\nCell-cycle confounded: {}\n",
+        "kira-spliceqc summary\n---------------------\nCells analyzed: {}\n{}{}\nIntegrity classes:\n  Intact:    {:>4} ({:.1}%)\n  Stressed:  {:>4} ({:.1}%)\n  Impaired:  {:>4} ({:.1}%)\n  Broken:    {:>4} ({:.1}%)\n\nMedian SIS: {:.2}\nFailure fraction (Impaired+Broken): {:.1}%\n\nCryptic splicing risk > 0.7: {}\nSpliceosome collapse: {}\n",
         n_cells,
         tier_a,
+        cycling_line,
         intact,
         pct(intact),
         stressed,
@@ -147,8 +148,7 @@ pub fn format_summary(
         med,
         pct(fail),
         fmt_pct(cryptic_pct),
-        fmt_pct(collapse_pct),
-        fmt_pct(cell_cycle_pct)
+        fmt_pct(collapse_pct)
     )
 }
 

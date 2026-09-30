@@ -148,6 +148,13 @@ removes the library-size correlation of the expression signatures (|rho| < 0.1)
 and keeps production flags at or below 1 % of cells. `tests/null_model.rs`
 enforces both.
 
+## Cell-cycle annotation
+
+Every cell gets Tirosh et al. 2016 S and G2/M scores (control-gene corrected),
+a Seurat-rule `cell_cycle_phase` and a `cycling` flag (`CYCLING` in the pipeline
+contract). Spliceosome and R-loop panels are enriched for genes that rise in
+S/G2M, so cycling cells' expression signatures should be read with that in mind.
+
 ## Metric naming
 
 Metrics derived purely from panel expression carry the `_expr` suffix

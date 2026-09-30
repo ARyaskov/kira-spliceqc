@@ -5,6 +5,7 @@ use tracing::{debug, info};
 
 use crate::input::error::InputError;
 use crate::model::assembly_phase::AssemblyPhaseImbalanceMetrics;
+use crate::model::cell_cycle::CellCycleMetrics;
 use crate::model::collapse::SpliceosomeCollapseMetrics;
 use crate::model::coupling::CouplingStressMetrics;
 use crate::model::cryptic_risk::CrypticSplicingRiskMetrics;
@@ -46,9 +47,15 @@ pub fn run_stage7(
     splicing_instability: &SplicingInstabilityMetrics,
     unspliced: Option<&UnsplicedMetrics>,
     intron_retention: Option<&IntronRetentionMetrics>,
+    cell_cycle: &CellCycleMetrics,
     strata: &Strata,
     options: OutputOptions,
 ) -> Result<String, InputError> {
+    if cell_cycle.phase.len() != cell_names.len() {
+        return Err(InputError::LengthMismatch(
+            "cell-cycle metrics length mismatch".to_string(),
+        ));
+    }
     if let Some(u) = unspliced
         && u.unspliced_fraction.len() != cell_names.len()
     {
@@ -102,6 +109,7 @@ pub fn run_stage7(
             splicing_instability,
             unspliced,
             intron_retention,
+            cell_cycle,
             strata,
             options.experimental,
         )?;
@@ -165,6 +173,7 @@ pub fn run_stage7(
             assembly_ref,
             unspliced,
             intron_retention,
+            cell_cycle,
             options.experimental,
         )?;
         info!("wrote {}", path.display());
@@ -174,7 +183,7 @@ pub fn run_stage7(
         sis,
         cryptic_risk,
         collapse,
-        None,
+        cell_cycle,
         unspliced,
         intron_retention,
         strata,

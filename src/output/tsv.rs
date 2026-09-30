@@ -4,6 +4,7 @@ use std::path::Path;
 
 use crate::input::error::InputError;
 use crate::model::assembly_phase::AssemblyPhaseImbalanceMetrics;
+use crate::model::cell_cycle::CellCycleMetrics;
 use crate::model::coupling::CouplingStressMetrics;
 use crate::model::exon_intron_bias::ExonIntronDefinitionMetrics;
 use crate::model::imbalance::SpliceosomeImbalanceMetrics;
@@ -59,6 +60,11 @@ const COLUMNS: &[(&str, bool)] = &[
     ("ir_gene_dispersion", false),
     ("ir_genes_used", false),
     ("intron_retention_high", false),
+    // Cell-cycle confounder annotation (Tirosh 2016 / Seurat rule).
+    ("s_score_expr", false),
+    ("g2m_score_expr", false),
+    ("cell_cycle_phase", false),
+    ("cycling", false),
     ("SOS", true),
     ("RLR", true),
     ("SII", true),
@@ -93,6 +99,7 @@ pub fn write_tsv(
     assembly: &AssemblyPhaseImbalanceMetrics,
     unspliced: Option<&UnsplicedMetrics>,
     intron_retention: Option<&IntronRetentionMetrics>,
+    cell_cycle: &CellCycleMetrics,
     experimental: bool,
 ) -> Result<(), InputError> {
     let file = File::create(path).map_err(|e| InputError::io(path, e))?;
@@ -119,6 +126,7 @@ pub fn write_tsv(
             assembly,
             unspliced,
             intron_retention,
+            cell_cycle,
         );
         debug_assert_eq!(values.len(), COLUMNS.len());
 
@@ -165,6 +173,7 @@ fn cell_values<'a>(
     assembly: &AssemblyPhaseImbalanceMetrics,
     unspliced: Option<&UnsplicedMetrics>,
     ir: Option<&IntronRetentionMetrics>,
+    cc: &CellCycleMetrics,
 ) {
     out.push(Value::Index(cell_id));
     out.push(Value::Str(&cell_names[cell_id]));
@@ -201,6 +210,10 @@ fn cell_values<'a>(
     out.push(Value::F32(ir.map_or(f32::NAN, |m| m.ir_gene_dispersion[cell_id])));
     out.push(Value::OptU64(ir.map(|m| m.ir_genes_used[cell_id] as u64)));
     out.push(Value::OptBool(ir.map(|m| m.intron_retention_high[cell_id])));
+    out.push(Value::F32(cc.s_score[cell_id]));
+    out.push(Value::F32(cc.g2m_score[cell_id]));
+    out.push(Value::Str(cc.phase[cell_id].as_str()));
+    out.push(Value::Bool(cc.cycling[cell_id]));
     out.push(Value::F32(si.sos[cell_id]));
     out.push(Value::F32(si.rlr[cell_id]));
     out.push(Value::F32(si.sii[cell_id]));

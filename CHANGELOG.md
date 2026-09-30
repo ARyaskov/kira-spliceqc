@@ -36,6 +36,12 @@ Phase 1 of the scientific roadmap (Tier A, direct splicing measurements).
   13 and 15. Null-model library-size correlations of the expression
   signatures drop from 0.4-0.7 to below 0.1; a zero MAD in a bin now gives
   undefined z-scores instead of silent zeros.
+- Stage 18 cell-cycle annotation: Tirosh et al. 2016 S / G2M scores
+  (control-gene corrected), Seurat-rule `cell_cycle_phase`, `cycling`
+  flag and the `CYCLING` contract flag; `summary.json.cell_cycle` and
+  `cells.json.cell_cycle` blocks. Cell-cycle genes are excluded from the
+  control pool and `TOP2A` (a G2/M marker) was removed from the
+  conflict-risk panel.
 - Tier A stage 17: `intron_retention_index` (median log2 ratio of per-gene
   unspliced ratios to the stratum's pooled ratio, beta-shrunk with 10
   pseudo-counts), `ir_gene_dispersion`, `ir_genes_used`,

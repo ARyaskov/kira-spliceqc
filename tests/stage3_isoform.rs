@@ -13,6 +13,7 @@ struct MockMatrix {
 impl MockMatrix {
     fn new(genes: Vec<&str>, cells: Vec<&str>, counts: Vec<Vec<u32>>) -> Self {
         let mut libsizes = vec![0u64; cells.len()];
+        #[allow(clippy::needless_range_loop)]
         for g in 0..genes.len() {
             for c in 0..cells.len() {
                 libsizes[c] += counts[g][c] as u64;

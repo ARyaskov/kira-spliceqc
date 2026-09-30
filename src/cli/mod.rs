@@ -4,6 +4,7 @@ pub mod run;
 use crate::expression::{MmapExpressionMatrix, SplicedUnspliced};
 use crate::input::InputDescriptor;
 use crate::model::assembly_phase::AssemblyPhaseImbalanceMetrics;
+use crate::model::cell_cycle::CellCycleMetrics;
 use crate::model::collapse::SpliceosomeCollapseMetrics;
 use crate::model::coupling::CouplingStressMetrics;
 use crate::model::cryptic_risk::CrypticSplicingRiskMetrics;
@@ -41,4 +42,6 @@ pub struct PipelineContext {
     pub stage16: Option<UnsplicedMetrics>,
     /// Tier A intron retention index (only with input level L1).
     pub stage17: Option<IntronRetentionMetrics>,
+    /// Cell-cycle phase scores (confounder annotation).
+    pub stage18: CellCycleMetrics,
 }

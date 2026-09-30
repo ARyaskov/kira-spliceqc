@@ -1,4 +1,5 @@
 pub mod assembly_phase;
+pub mod cell_cycle;
 pub mod collapse;
 pub mod coupling;
 pub mod cryptic_risk;

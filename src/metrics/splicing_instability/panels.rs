@@ -26,7 +26,9 @@ pub const RLOOP_RESOLUTION_PANEL: &[&str] = &[
     "BRCA2",
 ];
 
-pub const CONFLICT_RISK_PANEL: &[&str] = &["TOP1", "TOP2A", "TOP2B", "POLR2A", "SUPT5H", "SUPT6H"];
+/// TOP2A was removed in v0.4: it is a G2/M marker (Tirosh et al. 2016) and
+/// made the conflict-risk core a proliferation readout.
+pub const CONFLICT_RISK_PANEL: &[&str] = &["TOP1", "TOP2B", "POLR2A", "SUPT5H", "SUPT6H"];
 
 pub const NMD_PANEL: &[&str] = &["UPF1", "UPF2", "UPF3B", "SMG1", "SMG5", "SMG6", "SMG7"];
 

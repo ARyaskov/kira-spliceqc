@@ -255,7 +255,7 @@ Panels (human symbols, stable order):
 - R-loop resolution (protective axis):
   - `SETX,DDX5,DDX21,DHX9,RNASEH1,RNASEH2A,RNASEH2B,RNASEH2C,BRCA1,BRCA2`
 - Transcription-replication conflict risk (optional):
-  - `TOP1,TOP2A,TOP2B,POLR2A,SUPT5H,SUPT6H`
+  - `TOP1,TOP2B,POLR2A,SUPT5H,SUPT6H` (`TOP2A` removed in v0.4: G2/M marker)
 - NMD surveillance (optional):
   - `UPF1,UPF2,UPF3B,SMG1,SMG5,SMG6,SMG7`
 
@@ -301,6 +301,26 @@ Optional junction-aware mode (future placeholder):
 - `JE` (junction entropy)
 - `IRB` (intron retention burden)
 - `CSP` (cryptic splicing proxy)
+
+## Cell-Cycle Scores (Stage 18, confounder annotation)
+
+Gene lists: Tirosh et al. 2016 Science S-phase (43 genes) and G2/M (54 genes)
+as in Seurat `cc.genes.updated.2019`; legacy symbols `MLF1IP`, `RPA2`,
+`FAM64A`, `HN1` are recognised.
+
+- `s_score_expr = mean_{g in S}(log1p cp10k) - mean_{g in ctrl(S)}(log1p cp10k)` with the
+  control pool of "Geneset Activity" (cell-cycle genes are excluded from every control set);
+  `g2m_score_expr` likewise
+- undefined when fewer than 10 genes of either list map to the matrix
+- `cell_cycle_phase` (Seurat `CellCycleScoring` rule): `S` if `s > g2m` and `s > 0`, `G2M`
+  if `g2m > s` and `g2m > 0`, else `G1`; empty when undefined
+- `cycling = phase in {S, G2M}`; the pipeline contract adds the `CYCLING` flag
+
+Interpretation: spliceosome, TOP2A/BRCA1/BRCA2 and other panel genes rise in
+S/G2M, so a cycling cell's expression signatures may reflect proliferation
+rather than splicing regulation. The Seurat rule over-calls S/G2M on
+non-cycling tissue (any positive noise counts), so treat the phase as an
+annotation, not a QC verdict; `summary.json.cell_cycle` reports the fractions.
 
 ## Coupling Stress (Stage 8)
 
