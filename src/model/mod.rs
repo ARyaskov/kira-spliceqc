@@ -5,6 +5,7 @@ pub mod cryptic_risk;
 pub mod exon_intron_bias;
 pub mod geneset_activity;
 pub mod imbalance;
+pub mod intron_retention;
 pub mod isoform_dispersion;
 pub mod missplicing;
 pub mod sis;

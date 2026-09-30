@@ -119,6 +119,30 @@ introns as unspliced (La Manno et al. 2018; Muskovic & Powell 2021).
 (round((n-1)q) quantiles over defined cells), `nuclear_fraction_flag_fraction`,
 the layer source and per-stratum median/MAD.
 
+## Tier A: Intron Retention Index (Stage 17, requires input level L1)
+
+Per gene `g`, cell `c`, reference stratum `s = s(c)`:
+- `p_gs` = pooled unspliced ratio `sum_c U_gc / sum_c (S_gc + U_gc)` over the stratum's
+  cells with `S_gc + U_gc >= MIN_GENE_UMIS = 5`; undefined unless at least
+  `MIN_CELLS_PER_GENE = 10` such cells exist; clamped to `[0.5/N, 1 - 0.5/N]`
+- `IR_gc = (U_gc + K p_gs) / (S_gc + U_gc + K p_gs + K (1 - p_gs))` with `K = PRIOR_STRENGTH = 10`
+  pseudo-counts (beta shrinkage toward the stratum ratio; fixed and modest so that outlier
+  cells keep their signal while low-count genes are stabilised)
+- gene set `G_c` = genes with `S_gc + U_gc >= 5` and a defined `p_gs`; the cell is undefined
+  when `|G_c| < MIN_GENES = 20`
+- `intron_retention_index = median_{g in G_c} log2(IR_gc / p_gs)` (log2 units; 0 = at the
+  stratum reference, +1 = twice the reference unspliced ratio)
+- `ir_gene_dispersion = MAD_{g in G_c} log2(IR_gc / p_gs)`: small when every gene shifts
+  together (global retention), large for gene-specific changes
+- `ir_genes_used = |G_c|`
+- `intron_retention_index_dev` = robust z-score within the stratum; `intron_retention_high`
+  = `dev >= 3` and BH-adjusted p < 0.05
+
+Adapted from the IRFinder intron-retention ratio (Middleton et al. 2017 Genome
+Biology) to sparse per-cell counts. 3' libraries confound unspliced signal with
+internal priming; the per-gene reference absorbs gene-specific background, so
+the index measures departure from the stratum, not absolute retention.
+
 ## Geneset Activity (Stage 2)
 
 For each geneset `S` and cell `c`:

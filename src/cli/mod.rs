@@ -10,6 +10,7 @@ use crate::model::cryptic_risk::CrypticSplicingRiskMetrics;
 use crate::model::exon_intron_bias::ExonIntronDefinitionMetrics;
 use crate::model::geneset_activity::GenesetActivityMatrix;
 use crate::model::imbalance::SpliceosomeImbalanceMetrics;
+use crate::model::intron_retention::IntronRetentionMetrics;
 use crate::model::isoform_dispersion::IsoformDispersionMetrics;
 use crate::model::missplicing::MissplicingMetrics;
 use crate::model::sis::SpliceIntegrityMetrics;
@@ -38,4 +39,6 @@ pub struct PipelineContext {
     pub stage15: SplicingInstabilityMetrics,
     /// Tier A unspliced fraction (only with input level L1).
     pub stage16: Option<UnsplicedMetrics>,
+    /// Tier A intron retention index (only with input level L1).
+    pub stage17: Option<IntronRetentionMetrics>,
 }

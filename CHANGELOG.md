@@ -29,6 +29,11 @@ Phase 1 of the scientific roadmap (Tier A, direct splicing measurements).
 - Tier A: `unspliced_fraction_dev` and `nuclear_fraction_flag`
   (damaged-cell candidate, DropletQC-style) per cell; per-stratum reference
   medians in `summary.json` and `cells.json`.
+- Tier A stage 17: `intron_retention_index` (median log2 ratio of per-gene
+  unspliced ratios to the stratum's pooled ratio, beta-shrunk with 10
+  pseudo-counts), `ir_gene_dispersion`, `ir_genes_used`,
+  `intron_retention_index_dev` and `intron_retention_high`; summary block
+  `intron_retention`.
 
 ## [0.3.0] - 2026-10-01
 

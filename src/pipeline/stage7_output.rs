@@ -16,6 +16,7 @@ use crate::model::sis::SpliceIntegrityMetrics;
 use crate::model::splicing_instability::SplicingInstabilityMetrics;
 use crate::model::splicing_noise::SplicingNoiseMetrics;
 use crate::model::timecourse::TimecourseSplicingMetrics;
+use crate::model::intron_retention::IntronRetentionMetrics;
 use crate::model::unspliced::UnsplicedMetrics;
 use crate::reference::Strata;
 use crate::output::{json, summary, tsv};
@@ -44,6 +45,7 @@ pub fn run_stage7(
     timecourse: Option<&TimecourseSplicingMetrics>,
     splicing_instability: &SplicingInstabilityMetrics,
     unspliced: Option<&UnsplicedMetrics>,
+    intron_retention: Option<&IntronRetentionMetrics>,
     strata: &Strata,
     options: OutputOptions,
 ) -> Result<String, InputError> {
@@ -52,6 +54,13 @@ pub fn run_stage7(
     {
         return Err(InputError::LengthMismatch(
             "unspliced metrics length mismatch".to_string(),
+        ));
+    }
+    if let Some(ir) = intron_retention
+        && ir.intron_retention_index.len() != cell_names.len()
+    {
+        return Err(InputError::LengthMismatch(
+            "intron retention metrics length mismatch".to_string(),
         ));
     }
     validate_lengths(
@@ -92,6 +101,7 @@ pub fn run_stage7(
             timecourse,
             splicing_instability,
             unspliced,
+            intron_retention,
             strata,
             options.experimental,
         )?;
@@ -154,6 +164,7 @@ pub fn run_stage7(
             exon_intron_ref,
             assembly_ref,
             unspliced,
+            intron_retention,
             options.experimental,
         )?;
         info!("wrote {}", path.display());
@@ -165,6 +176,7 @@ pub fn run_stage7(
         collapse,
         None,
         unspliced,
+        intron_retention,
         strata,
         options.experimental,
     );

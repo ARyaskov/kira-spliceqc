@@ -122,8 +122,12 @@ With spliced/unspliced layers (input level L1) every cell gets
 for cells with fewer than 100 layer UMIs. `unspliced_fraction_dev` is the
 logit-scale deviation from the cell's reference stratum and
 `nuclear_fraction_flag` marks damaged-cell candidates (fraction far below the
-stratum, FDR 5 %). See METRICS.md for the reference model and interpretation
-caveats (protocol and cell-type dependence).
+stratum, FDR 5 %). `intron_retention_index` is the per-cell median log2 ratio of
+per-gene unspliced ratios to the stratum's pooled ratios (beta-shrunk, 10
+pseudo-counts), with `ir_gene_dispersion`, `ir_genes_used`,
+`intron_retention_index_dev` and an `intron_retention_high` flag. See METRICS.md
+for the reference model and interpretation caveats (protocol and cell-type
+dependence).
 
 ## Splicing instability proxies
 

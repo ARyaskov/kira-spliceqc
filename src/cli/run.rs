@@ -25,6 +25,7 @@ use crate::pipeline::stage12_cryptic_risk::compute as compute_cryptic_risk;
 use crate::pipeline::stage13_collapse::compute as compute_collapse;
 use crate::pipeline::stage15_splicing_instability::compute as compute_splicing_instability;
 use crate::pipeline::stage16_unspliced::run_stage16;
+use crate::pipeline::stage17_intron_retention::run_stage17;
 use crate::reference::Strata;
 
 /// Scratch directory (inside the output directory) for the stage-1 cache.
@@ -123,11 +124,14 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
     let stage5 = run_logged(5, || compute_imbalance(&stage2))?;
     let stage6 = run_logged(6, || run_stage6(&stage3, &stage4, &stage5))?;
     let stage15 = run_logged(15, || Ok(compute_splicing_instability(&stage1)))?;
-    let stage16 = match &stage1_layers {
-        Some(layers) => Some(run_logged(16, || Ok(run_stage16(layers, &strata)))?),
+    let (stage16, stage17) = match &stage1_layers {
+        Some(layers) => (
+            Some(run_logged(16, || Ok(run_stage16(layers, &strata)))?),
+            Some(run_logged(17, || Ok(run_stage17(layers, &strata)))?),
+        ),
         None => {
-            info!(target: "kira_spliceqc::cli::run", "skipping Stage 16 (no spliced/unspliced layers)");
-            None
+            info!(target: "kira_spliceqc::cli::run", "skipping Stages 16-17 (no spliced/unspliced layers)");
+            (None, None)
         }
     };
 
@@ -173,6 +177,7 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
         stage14,
         stage15,
         stage16,
+        stage17,
     };
 
     if config.extended && context.stage14.is_none() {
@@ -196,6 +201,7 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
             context.stage14.as_ref(),
             &context.stage15,
             context.stage16.as_ref(),
+            context.stage17.as_ref(),
             &strata,
             OutputOptions {
                 json: config.output_json,
@@ -220,6 +226,7 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
             context.stage8.as_ref(),
             &context.stage15,
             context.stage16.as_ref(),
+            context.stage17.as_ref(),
             &strata,
             &catalog,
         )?;

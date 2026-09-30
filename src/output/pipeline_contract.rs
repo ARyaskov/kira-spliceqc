@@ -15,6 +15,7 @@ use crate::model::coupling::CouplingStressMetrics;
 use crate::model::imbalance::SpliceosomeImbalanceMetrics;
 use crate::model::missplicing::MissplicingMetrics;
 use crate::model::sis::SpliceIntegrityMetrics;
+use crate::model::intron_retention::IntronRetentionMetrics;
 use crate::model::unspliced::UnsplicedMetrics;
 use crate::reference::{MIN_STRATUM_CELLS, Strata};
 use crate::model::splicing_instability::{
@@ -69,8 +70,23 @@ struct SummaryJson {
     splicing_instability: SplicingInstabilitySummaryJson,
     /// Tier A summary (input level L1); `null` without layers.
     unspliced: Option<UnsplicedSummaryJson>,
+    /// Tier A intron retention summary; `null` without layers.
+    intron_retention: Option<IntronRetentionSummaryJson>,
     /// Reference strata used for deviations and flags.
     reference: ReferenceJson,
+}
+
+#[derive(Serialize)]
+struct IntronRetentionSummaryJson {
+    min_gene_umis: u32,
+    min_genes: usize,
+    genes_with_reference: usize,
+    n_defined_cells: usize,
+    median: Option<f64>,
+    p10: Option<f64>,
+    p90: Option<f64>,
+    high_flag_fraction: f64,
+    strata: Vec<StratumStatJson>,
 }
 
 #[derive(Serialize)]
@@ -294,6 +310,7 @@ pub fn write_pipeline_contract(
     coupling: Option<&CouplingStressMetrics>,
     splicing_instability: &SplicingInstabilityMetrics,
     unspliced: Option<&UnsplicedMetrics>,
+    intron_retention: Option<&IntronRetentionMetrics>,
     strata: &Strata,
     catalog: &GenesetCatalog,
 ) -> Result<(), InputError> {
@@ -310,6 +327,7 @@ pub fn write_pipeline_contract(
         &rows,
         splicing_instability,
         unspliced,
+        intron_retention,
         strata,
     )?;
     info!("pipeline contract: writing pipeline_step.json");
@@ -530,6 +548,7 @@ fn write_summary_json(
     rows: &[PipelineCellRow],
     splicing_instability: &SplicingInstabilityMetrics,
     unspliced: Option<&UnsplicedMetrics>,
+    intron_retention: Option<&IntronRetentionMetrics>,
     strata: &Strata,
 ) -> Result<(), InputError> {
     let mut fidelity = rows
@@ -617,6 +636,37 @@ fn write_summary_json(
                     as f64
                     / u.nuclear_fraction_flag.len().max(1) as f64,
                 strata: u
+                    .reference
+                    .iter()
+                    .map(|s| StratumStatJson {
+                        name: s.name.clone(),
+                        n_cells: s.n_cells,
+                        n_defined: s.n_defined,
+                        median: opt_f32(s.median),
+                        mad: opt_f32(s.mad),
+                    })
+                    .collect(),
+            }
+        }),
+        intron_retention: intron_retention.map(|m| {
+            let mut defined: Vec<f64> = m
+                .intron_retention_index
+                .iter()
+                .filter(|v| v.is_finite())
+                .map(|v| *v as f64)
+                .collect();
+            let opt = |v: f64| if v.is_finite() { Some(v) } else { None };
+            IntronRetentionSummaryJson {
+                min_gene_umis: m.min_gene_umis,
+                min_genes: m.min_genes,
+                genes_with_reference: m.genes_with_reference,
+                n_defined_cells: defined.len(),
+                median: opt(quantile_f64(&mut defined, 0.5)),
+                p10: opt(quantile_f64(&mut defined, 0.1)),
+                p90: opt(quantile_f64(&mut defined, 0.9)),
+                high_flag_fraction: m.intron_retention_high.iter().filter(|f| **f).count() as f64
+                    / m.intron_retention_high.len().max(1) as f64,
+                strata: m
                     .reference
                     .iter()
                     .map(|s| StratumStatJson {

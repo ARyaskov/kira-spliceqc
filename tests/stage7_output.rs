@@ -190,6 +190,7 @@ fn json_schema_sanity() {
         None,
         &splicing_instability,
         None,
+        None,
         &Strata::global(2),
         true,
     )
@@ -244,6 +245,7 @@ fn tsv_header_order() {
         &exon_intron,
         &assembly,
         None,
+        None,
         true,
     )
     .unwrap();
@@ -265,7 +267,7 @@ fn tsv_header_order() {
 fn summary_formatting_snapshot() {
     let (_cells, _isoform, _missplicing, _imbalance, sis, _coupling, _exon_intron, _assembly, _) =
         make_metrics(3);
-    let text = summary::format_summary(&sis, None, None, None, None, &Strata::global(3), true);
+    let text = summary::format_summary(&sis, None, None, None, None, None, &Strata::global(3), true);
     let expected = "kira-spliceqc summary\n---------------------\nCells analyzed: 3\nInput levels: L0 (no spliced/unspliced layers; Tier A metrics unavailable)\nReference: global (no stratification column)\n\nIntegrity classes:\n  Intact:       0 (0.0%)\n  Stressed:     3 (100.0%)\n  Impaired:     0 (0.0%)\n  Broken:       0 (0.0%)\n\nMedian SIS: 0.75\nFailure fraction (Impaired+Broken): 0.0%\n\nCryptic splicing risk > 0.7: N/A\nSpliceosome collapse: N/A\nCell-cycle confounded: N/A\n";
     assert_eq!(text, expected);
 }
@@ -303,6 +305,7 @@ fn json_deterministic_bytes() {
         None,
         &splicing_instability,
         None,
+        None,
         &Strata::global(2),
         false,
     )
@@ -322,6 +325,7 @@ fn json_deterministic_bytes() {
         None,
         None,
         &splicing_instability,
+        None,
         None,
         &Strata::global(2),
         false,
@@ -362,6 +366,7 @@ fn run_stage7_outputs() {
         None,
         None,
         &splicing_instability,
+        None,
         None,
         &Strata::global(1),
         OutputOptions {

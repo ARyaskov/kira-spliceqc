@@ -1,16 +1,19 @@
 use crate::model::collapse::{SpliceosomeCollapseMetrics, SpliceosomeCollapseStatus};
 use crate::model::cryptic_risk::CrypticSplicingRiskMetrics;
 use crate::model::sis::{SpliceIntegrityClass, SpliceIntegrityMetrics};
+use crate::model::intron_retention::IntronRetentionMetrics;
 use crate::model::unspliced::UnsplicedMetrics;
 use crate::reference::Strata;
 use crate::stats::robust::median;
 
+#[allow(clippy::too_many_arguments)]
 pub fn format_summary(
     metrics: &SpliceIntegrityMetrics,
     cryptic: Option<&CrypticSplicingRiskMetrics>,
     collapse: Option<&SpliceosomeCollapseMetrics>,
     cell_cycle_confounded: Option<&[bool]>,
     unspliced: Option<&UnsplicedMetrics>,
+    intron_retention: Option<&IntronRetentionMetrics>,
     strata: &Strata,
     experimental: bool,
 ) -> String {
@@ -29,9 +32,18 @@ pub fn format_summary(
         Some(u) => {
             let med = median(&u.unspliced_fraction);
             let flagged = u.nuclear_fraction_flag.iter().filter(|f| **f).count();
+            let iri = match intron_retention {
+                Some(ir) => format!(
+                    "Intron retention index: median {:.3}, undefined in {} cells, high flags: {}\n",
+                    median(&ir.intron_retention_index),
+                    ir.undefined_cells,
+                    ir.intron_retention_high.iter().filter(|f| **f).count()
+                ),
+                None => String::new(),
+            };
             format!(
-                "Input levels: L0, L1 ({})\n{}Unspliced fraction: median {:.3}, undefined in {} cells, nuclear-fraction flags: {}\n",
-                u.source, reference, med, u.undefined_cells, flagged
+                "Input levels: L0, L1 ({})\n{}Unspliced fraction: median {:.3}, undefined in {} cells, nuclear-fraction flags: {}\n{}",
+                u.source, reference, med, u.undefined_cells, flagged, iri
             )
         }
         None => format!(

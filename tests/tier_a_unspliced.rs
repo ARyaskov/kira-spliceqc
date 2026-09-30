@@ -106,6 +106,13 @@ fn unspliced_fraction_is_written_per_cell() {
         serde_json::from_slice(&fs::read(out.path().join("cells.json")).unwrap()).unwrap();
     assert_eq!(v["input_levels"], serde_json::json!(["L0", "L1"]));
     assert_eq!(v["unspliced"]["undefined_cells"], 1);
+    // 3 cells < MIN_CELLS_PER_GENE (10): no gene has a reference ratio, so
+    // the intron retention index is undefined; the block is still present.
+    assert_eq!(v["intron_retention"]["undefined_cells"], 3);
+    assert_eq!(v["intron_retention"]["genes_with_reference"], 0);
+    assert_eq!(v["cells"][0]["intron_retention"]["ir_genes_used"], 0);
+    let iri = column(header, "intron_retention_index");
+    assert!(tsv.lines().skip(1).all(|l| l.split('\t').nth(iri).unwrap().is_empty()));
     assert!(v["unspliced"]["source"].as_str().unwrap().starts_with("mtx-dir:"));
     assert!(v["cells"][0]["unspliced"]["spliced_umis"].is_number());
 }

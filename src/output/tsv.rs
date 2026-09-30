@@ -11,6 +11,7 @@ use crate::model::isoform_dispersion::IsoformDispersionMetrics;
 use crate::model::missplicing::MissplicingMetrics;
 use crate::model::sis::{SpliceIntegrityClass, SpliceIntegrityMetrics};
 use crate::model::splicing_instability::SplicingInstabilityMetrics;
+use crate::model::intron_retention::IntronRetentionMetrics;
 use crate::model::unspliced::UnsplicedMetrics;
 
 /// Column naming: every metric derived purely from panel expression carries
@@ -53,6 +54,11 @@ const COLUMNS: &[(&str, bool)] = &[
     ("unspliced_fraction_ci_high", false),
     ("unspliced_fraction_dev", false),
     ("nuclear_fraction_flag", false),
+    ("intron_retention_index", false),
+    ("intron_retention_index_dev", false),
+    ("ir_gene_dispersion", false),
+    ("ir_genes_used", false),
+    ("intron_retention_high", false),
     ("SOS", true),
     ("RLR", true),
     ("SII", true),
@@ -86,6 +92,7 @@ pub fn write_tsv(
     exon_intron: &ExonIntronDefinitionMetrics,
     assembly: &AssemblyPhaseImbalanceMetrics,
     unspliced: Option<&UnsplicedMetrics>,
+    intron_retention: Option<&IntronRetentionMetrics>,
     experimental: bool,
 ) -> Result<(), InputError> {
     let file = File::create(path).map_err(|e| InputError::io(path, e))?;
@@ -111,6 +118,7 @@ pub fn write_tsv(
             exon_intron,
             assembly,
             unspliced,
+            intron_retention,
         );
         debug_assert_eq!(values.len(), COLUMNS.len());
 
@@ -156,6 +164,7 @@ fn cell_values<'a>(
     exon_intron: &ExonIntronDefinitionMetrics,
     assembly: &AssemblyPhaseImbalanceMetrics,
     unspliced: Option<&UnsplicedMetrics>,
+    ir: Option<&IntronRetentionMetrics>,
 ) {
     out.push(Value::Index(cell_id));
     out.push(Value::Str(&cell_names[cell_id]));
@@ -187,6 +196,11 @@ fn cell_values<'a>(
     out.push(Value::F32(unspliced.map_or(f32::NAN, |u| u.unspliced_fraction_ci_high[cell_id])));
     out.push(Value::F32(unspliced.map_or(f32::NAN, |u| u.unspliced_fraction_dev[cell_id])));
     out.push(Value::OptBool(unspliced.map(|u| u.nuclear_fraction_flag[cell_id])));
+    out.push(Value::F32(ir.map_or(f32::NAN, |m| m.intron_retention_index[cell_id])));
+    out.push(Value::F32(ir.map_or(f32::NAN, |m| m.intron_retention_index_dev[cell_id])));
+    out.push(Value::F32(ir.map_or(f32::NAN, |m| m.ir_gene_dispersion[cell_id])));
+    out.push(Value::OptU64(ir.map(|m| m.ir_genes_used[cell_id] as u64)));
+    out.push(Value::OptBool(ir.map(|m| m.intron_retention_high[cell_id])));
     out.push(Value::F32(si.sos[cell_id]));
     out.push(Value::F32(si.rlr[cell_id]));
     out.push(Value::F32(si.sii[cell_id]));

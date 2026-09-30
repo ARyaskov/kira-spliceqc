@@ -18,6 +18,7 @@ use crate::model::splicing_instability::{
 };
 use crate::model::splicing_noise::SplicingNoiseMetrics;
 use crate::model::timecourse::{SplicingTrajectoryClass, TimecourseSplicingMetrics};
+use crate::model::intron_retention::IntronRetentionMetrics;
 use crate::model::unspliced::UnsplicedMetrics;
 use crate::reference::{MIN_STRATUM_CELLS, Strata};
 
@@ -56,8 +57,34 @@ struct JsonOutput<'a> {
     /// Tier A unspliced metrics (input level L1); absent without layers.
     #[serde(skip_serializing_if = "Option::is_none")]
     unspliced: Option<JsonUnsplicedStage>,
+    /// Tier A intron retention (input level L1); absent without layers.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    intron_retention: Option<JsonIntronRetentionStage>,
     /// Reference strata used for `_dev` metrics and outlier flags.
     reference: JsonReference,
+}
+
+#[derive(Serialize)]
+struct JsonCellIntronRetention {
+    intron_retention_index: Option<f32>,
+    intron_retention_index_dev: Option<f32>,
+    ir_gene_dispersion: Option<f32>,
+    ir_genes_used: u32,
+    intron_retention_high: bool,
+}
+
+#[derive(Serialize)]
+struct JsonIntronRetentionStage {
+    min_gene_umis: u32,
+    min_genes: usize,
+    genes_with_reference: usize,
+    undefined_cells: usize,
+    intron_retention_index: Vec<Option<f32>>,
+    intron_retention_index_dev: Vec<Option<f32>>,
+    ir_gene_dispersion: Vec<Option<f32>>,
+    ir_genes_used: Vec<u32>,
+    intron_retention_high: Vec<bool>,
+    reference: Vec<JsonStratumStat>,
 }
 
 #[derive(Serialize)]
@@ -143,6 +170,8 @@ struct JsonCell<'a> {
     splicing_instability: JsonCellSplicingInstability,
     #[serde(skip_serializing_if = "Option::is_none")]
     unspliced: Option<JsonCellUnspliced>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    intron_retention: Option<JsonCellIntronRetention>,
 }
 
 #[derive(Serialize)]
@@ -428,6 +457,7 @@ pub fn write_json(
     timecourse: Option<&TimecourseSplicingMetrics>,
     splicing_instability: &SplicingInstabilityMetrics,
     unspliced: Option<&UnsplicedMetrics>,
+    intron_retention: Option<&IntronRetentionMetrics>,
     strata: &Strata,
     experimental: bool,
 ) -> Result<(), InputError> {
@@ -571,6 +601,13 @@ pub fn write_json(
                 unspliced_fraction_ci_high: opt_f32(u.unspliced_fraction_ci_high[cell_id]),
                 unspliced_fraction_dev: opt_f32(u.unspliced_fraction_dev[cell_id]),
                 nuclear_fraction_flag: u.nuclear_fraction_flag[cell_id],
+            }),
+            intron_retention: intron_retention.map(|m| JsonCellIntronRetention {
+                intron_retention_index: opt_f32(m.intron_retention_index[cell_id]),
+                intron_retention_index_dev: opt_f32(m.intron_retention_index_dev[cell_id]),
+                ir_gene_dispersion: opt_f32(m.ir_gene_dispersion[cell_id]),
+                ir_genes_used: m.ir_genes_used[cell_id],
+                intron_retention_high: m.intron_retention_high[cell_id],
             }),
         });
     }
@@ -773,6 +810,28 @@ pub fn write_json(
             unspliced_fraction_dev: opt_vec(&u.unspliced_fraction_dev),
             nuclear_fraction_flag: u.nuclear_fraction_flag.clone(),
             reference: u
+                .reference
+                .iter()
+                .map(|s| JsonStratumStat {
+                    name: s.name.clone(),
+                    n_cells: s.n_cells,
+                    n_defined: s.n_defined,
+                    median: opt_f32(s.median),
+                    mad: opt_f32(s.mad),
+                })
+                .collect(),
+        }),
+        intron_retention: intron_retention.map(|m| JsonIntronRetentionStage {
+            min_gene_umis: m.min_gene_umis,
+            min_genes: m.min_genes,
+            genes_with_reference: m.genes_with_reference,
+            undefined_cells: m.undefined_cells,
+            intron_retention_index: opt_vec(&m.intron_retention_index),
+            intron_retention_index_dev: opt_vec(&m.intron_retention_index_dev),
+            ir_gene_dispersion: opt_vec(&m.ir_gene_dispersion),
+            ir_genes_used: m.ir_genes_used.clone(),
+            intron_retention_high: m.intron_retention_high.clone(),
+            reference: m
                 .reference
                 .iter()
                 .map(|s| JsonStratumStat {

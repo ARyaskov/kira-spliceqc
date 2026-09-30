@@ -71,6 +71,7 @@ Runtime order in `run_pipeline`:
 - Stage 6: SIS (splice integrity score)
 - Stage 15: splicing instability proxies (SOS/RLR/SII, expression-only mode)
 - Stage 16: Tier A unspliced fraction, stratum deviation and nuclear-fraction flag (only when spliced/unspliced layers were loaded)
+- Stage 17: Tier A intron retention index (same condition)
 - Stages 8-13: only when `--extended`
   - 8 coupling stress
   - 9 exon/intron bias
@@ -95,7 +96,7 @@ Outputs from stage 7:
   - experimental composites: `sis`, `class`, `p_*`
   - expression signatures: `regulator_entropy_expr`, `regulator_dispersion_expr`, `missplicing_burden_expr`, `spliceosome_imbalance_expr`, `coupling_stress_expr`, `exon_definition_bias_expr`, `ea_phase_imbalance_expr`, `b_phase_imbalance_expr`, `catalytic_phase_imbalance_expr`
   - panel cores: `spliceosome_core_expr`, `splicing_rbp_expr`, `rloop_resolution_expr`, `conflict_risk_expr`, `nmd_factor_expr`
-  - Tier A (empty without layers): `spliced_umis`, `unspliced_umis`, `ambiguous_umis`, `unspliced_fraction`, `unspliced_fraction_ci_low`, `unspliced_fraction_ci_high`, `unspliced_fraction_dev`, `nuclear_fraction_flag`
+  - Tier A (empty without layers): `spliced_umis`, `unspliced_umis`, `ambiguous_umis`, `unspliced_fraction`, `unspliced_fraction_ci_low`, `unspliced_fraction_ci_high`, `unspliced_fraction_dev`, `nuclear_fraction_flag`, `intron_retention_index`, `intron_retention_index_dev`, `ir_gene_dispersion`, `ir_genes_used`, `intron_retention_high`
   - experimental scores: `SOS`, `RLR`, `SII`
   - experimental flags: `splice_overload_high`, `rloop_risk_high`, `splicing_instability_high`, `genome_instability_splicing_flag`
 
