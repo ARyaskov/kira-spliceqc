@@ -65,6 +65,28 @@ Let:
 - `relu(x) = max(x, 0)`.
 - `sigmoid(x) = 1 / (1 + exp(-x))`.
 
+## Tier A: Unspliced Fraction (Stage 16, requires input level L1)
+
+Direct measurement from spliced/unspliced count layers (see README "Input
+levels"). Not an expression signature: no `_expr` suffix.
+
+Per cell `c`, with `S_c`, `U_c`, `A_c` the spliced, unspliced and ambiguous
+UMI totals:
+- `spliced_umis = S_c`, `unspliced_umis = U_c`, `ambiguous_umis = A_c` (0 without an ambiguous layer)
+- `unspliced_fraction = U_c / (S_c + U_c)`; ambiguous UMIs are excluded from both terms
+- `unspliced_fraction_ci_low/high`: Wilson 95 % interval of `U_c / (S_c + U_c)`
+- undefined (empty) when `S_c + U_c < MIN_LAYER_UMIS = 100`
+- cells absent from a barcode-matched layer directory have `S = U = 0` and are
+  counted in `cells_without_layers`
+
+Interpretation: the expected level depends on the protocol (single-nucleus
+0.5-0.7, whole-cell 3' 0.1-0.3) and on cell type; compare within a protocol
+and a reference stratum. 3' libraries also count internal priming on A-rich
+introns as unspliced (La Manno et al. 2018; Muskovic & Powell 2021).
+
+`summary.json.unspliced` reports `n_defined_cells`, `median`, `p10`, `p90`
+(R type 7 quantiles over defined cells) and the layer source.
+
 ## Geneset Activity (Stage 2)
 
 For each geneset `S` and cell `c`:

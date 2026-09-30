@@ -16,6 +16,7 @@ use crate::model::sis::SpliceIntegrityMetrics;
 use crate::model::splicing_instability::SplicingInstabilityMetrics;
 use crate::model::splicing_noise::SplicingNoiseMetrics;
 use crate::model::timecourse::TimecourseSplicingMetrics;
+use crate::model::unspliced::UnsplicedMetrics;
 
 pub struct PipelineContext {
     pub stage0: InputDescriptor,
@@ -35,4 +36,6 @@ pub struct PipelineContext {
     pub stage13: Option<SpliceosomeCollapseMetrics>,
     pub stage14: Option<TimecourseSplicingMetrics>,
     pub stage15: SplicingInstabilityMetrics,
+    /// Tier A unspliced fraction (only with input level L1).
+    pub stage16: Option<UnsplicedMetrics>,
 }

@@ -16,6 +16,7 @@ use crate::model::sis::SpliceIntegrityMetrics;
 use crate::model::splicing_instability::SplicingInstabilityMetrics;
 use crate::model::splicing_noise::SplicingNoiseMetrics;
 use crate::model::timecourse::TimecourseSplicingMetrics;
+use crate::model::unspliced::UnsplicedMetrics;
 use crate::output::{json, summary, tsv};
 
 pub struct OutputOptions {
@@ -41,8 +42,16 @@ pub fn run_stage7(
     collapse: Option<&SpliceosomeCollapseMetrics>,
     timecourse: Option<&TimecourseSplicingMetrics>,
     splicing_instability: &SplicingInstabilityMetrics,
+    unspliced: Option<&UnsplicedMetrics>,
     options: OutputOptions,
 ) -> Result<String, InputError> {
+    if let Some(u) = unspliced
+        && u.unspliced_fraction.len() != cell_names.len()
+    {
+        return Err(InputError::LengthMismatch(
+            "unspliced metrics length mismatch".to_string(),
+        ));
+    }
     validate_lengths(
         cell_names,
         isoform,
@@ -80,6 +89,7 @@ pub fn run_stage7(
             collapse,
             timecourse,
             splicing_instability,
+            unspliced,
             options.experimental,
         )?;
         info!("wrote {}", path.display());
@@ -140,6 +150,7 @@ pub fn run_stage7(
             coupling_ref,
             exon_intron_ref,
             assembly_ref,
+            unspliced,
             options.experimental,
         )?;
         info!("wrote {}", path.display());
@@ -150,6 +161,7 @@ pub fn run_stage7(
         cryptic_risk,
         collapse,
         None,
+        unspliced,
         options.experimental,
     );
     debug!(

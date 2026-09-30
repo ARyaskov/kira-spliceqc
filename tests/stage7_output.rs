@@ -188,6 +188,7 @@ fn json_schema_sanity() {
         None,
         None,
         &splicing_instability,
+        None,
         true,
     )
     .unwrap();
@@ -240,6 +241,7 @@ fn tsv_header_order() {
         &coupling,
         &exon_intron,
         &assembly,
+        None,
         true,
     )
     .unwrap();
@@ -261,8 +263,8 @@ fn tsv_header_order() {
 fn summary_formatting_snapshot() {
     let (_cells, _isoform, _missplicing, _imbalance, sis, _coupling, _exon_intron, _assembly, _) =
         make_metrics(3);
-    let text = summary::format_summary(&sis, None, None, None, true);
-    let expected = "kira-spliceqc summary\n---------------------\nCells analyzed: 3\n\nIntegrity classes:\n  Intact:       0 (0.0%)\n  Stressed:     3 (100.0%)\n  Impaired:     0 (0.0%)\n  Broken:       0 (0.0%)\n\nMedian SIS: 0.75\nFailure fraction (Impaired+Broken): 0.0%\n\nCryptic splicing risk > 0.7: N/A\nSpliceosome collapse: N/A\nCell-cycle confounded: N/A\n";
+    let text = summary::format_summary(&sis, None, None, None, None, true);
+    let expected = "kira-spliceqc summary\n---------------------\nCells analyzed: 3\nInput levels: L0 (no spliced/unspliced layers; Tier A metrics unavailable)\n\nIntegrity classes:\n  Intact:       0 (0.0%)\n  Stressed:     3 (100.0%)\n  Impaired:     0 (0.0%)\n  Broken:       0 (0.0%)\n\nMedian SIS: 0.75\nFailure fraction (Impaired+Broken): 0.0%\n\nCryptic splicing risk > 0.7: N/A\nSpliceosome collapse: N/A\nCell-cycle confounded: N/A\n";
     assert_eq!(text, expected);
 }
 
@@ -298,6 +300,7 @@ fn json_deterministic_bytes() {
         None,
         None,
         &splicing_instability,
+        None,
         false,
     )
     .unwrap();
@@ -316,6 +319,7 @@ fn json_deterministic_bytes() {
         None,
         None,
         &splicing_instability,
+        None,
         false,
     )
     .unwrap();
@@ -354,6 +358,7 @@ fn run_stage7_outputs() {
         None,
         None,
         &splicing_instability,
+        None,
         OutputOptions {
             json: false,
             tsv: false,

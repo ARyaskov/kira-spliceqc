@@ -11,6 +11,7 @@ use crate::model::isoform_dispersion::IsoformDispersionMetrics;
 use crate::model::missplicing::MissplicingMetrics;
 use crate::model::sis::{SpliceIntegrityClass, SpliceIntegrityMetrics};
 use crate::model::splicing_instability::SplicingInstabilityMetrics;
+use crate::model::unspliced::UnsplicedMetrics;
 
 /// Column naming: every metric derived purely from panel expression carries
 /// the `_expr` suffix (it is an expression signature, not a measurement of
@@ -43,6 +44,13 @@ const COLUMNS: &[(&str, bool)] = &[
     ("rloop_resolution_expr", false),
     ("conflict_risk_expr", false),
     ("nmd_factor_expr", false),
+    // Tier A (input level L1); empty when no layers were loaded.
+    ("spliced_umis", false),
+    ("unspliced_umis", false),
+    ("ambiguous_umis", false),
+    ("unspliced_fraction", false),
+    ("unspliced_fraction_ci_low", false),
+    ("unspliced_fraction_ci_high", false),
     ("SOS", true),
     ("RLR", true),
     ("SII", true),
@@ -57,6 +65,8 @@ enum Value<'a> {
     Str(&'a str),
     F32(f32),
     Bool(bool),
+    /// Optional integer count (empty field when None).
+    OptU64(Option<u64>),
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -71,6 +81,7 @@ pub fn write_tsv(
     coupling: &CouplingStressMetrics,
     exon_intron: &ExonIntronDefinitionMetrics,
     assembly: &AssemblyPhaseImbalanceMetrics,
+    unspliced: Option<&UnsplicedMetrics>,
     experimental: bool,
 ) -> Result<(), InputError> {
     let file = File::create(path).map_err(|e| InputError::io(path, e))?;
@@ -95,6 +106,7 @@ pub fn write_tsv(
             coupling,
             exon_intron,
             assembly,
+            unspliced,
         );
         debug_assert_eq!(values.len(), COLUMNS.len());
 
@@ -139,6 +151,7 @@ fn cell_values<'a>(
     coupling: &CouplingStressMetrics,
     exon_intron: &ExonIntronDefinitionMetrics,
     assembly: &AssemblyPhaseImbalanceMetrics,
+    unspliced: Option<&UnsplicedMetrics>,
 ) {
     out.push(Value::Index(cell_id));
     out.push(Value::Str(&cell_names[cell_id]));
@@ -162,6 +175,12 @@ fn cell_values<'a>(
     out.push(Value::F32(si.rloop_resolve_core[cell_id]));
     out.push(Value::F32(si.conflict_risk_core[cell_id]));
     out.push(Value::F32(si.nmd_core[cell_id]));
+    out.push(Value::OptU64(unspliced.map(|u| u.spliced_umis[cell_id])));
+    out.push(Value::OptU64(unspliced.map(|u| u.unspliced_umis[cell_id])));
+    out.push(Value::OptU64(unspliced.map(|u| u.ambiguous_umis[cell_id])));
+    out.push(Value::F32(unspliced.map_or(f32::NAN, |u| u.unspliced_fraction[cell_id])));
+    out.push(Value::F32(unspliced.map_or(f32::NAN, |u| u.unspliced_fraction_ci_low[cell_id])));
+    out.push(Value::F32(unspliced.map_or(f32::NAN, |u| u.unspliced_fraction_ci_high[cell_id])));
     out.push(Value::F32(si.sos[cell_id]));
     out.push(Value::F32(si.rlr[cell_id]));
     out.push(Value::F32(si.sii[cell_id]));
@@ -203,6 +222,10 @@ fn write_value<W: Write>(
             }
         }
         Value::Bool(b) => buf.push_str(if *b { "true" } else { "false" }),
+        Value::OptU64(Some(v)) => {
+            let _ = write!(buf, "{v}");
+        }
+        Value::OptU64(None) => {}
     }
     w.write_all(buf.as_bytes()).map_err(|e| InputError::io(path, e))
 }

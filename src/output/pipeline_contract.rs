@@ -15,6 +15,7 @@ use crate::model::coupling::CouplingStressMetrics;
 use crate::model::imbalance::SpliceosomeImbalanceMetrics;
 use crate::model::missplicing::MissplicingMetrics;
 use crate::model::sis::SpliceIntegrityMetrics;
+use crate::model::unspliced::UnsplicedMetrics;
 use crate::model::splicing_instability::{
     RLOOP_RISK_HIGH_THRESHOLD, SPLICE_OVERLOAD_HIGH_THRESHOLD, SPLICING_INSTABILITY_HIGH_THRESHOLD,
     SplicingInstabilityMetrics,
@@ -65,6 +66,8 @@ struct SummaryJson {
     regimes: RegimesJson,
     qc: QcJson,
     splicing_instability: SplicingInstabilitySummaryJson,
+    /// Tier A summary (input level L1); `null` without layers.
+    unspliced: Option<UnsplicedSummaryJson>,
 }
 
 #[derive(Serialize)]
@@ -80,6 +83,19 @@ struct ToolJson {
 struct InputJson {
     n_cells: usize,
     species: &'static str,
+    /// Input levels available: `["L0"]` or `["L0", "L1"]`.
+    levels: Vec<&'static str>,
+}
+
+#[derive(Serialize)]
+struct UnsplicedSummaryJson {
+    source: String,
+    min_layer_umis: u64,
+    n_defined_cells: usize,
+    cells_without_layers: usize,
+    median: Option<f64>,
+    p10: Option<f64>,
+    p90: Option<f64>,
 }
 
 #[derive(Serialize)]
@@ -246,6 +262,7 @@ pub fn write_pipeline_contract(
     sis: &SpliceIntegrityMetrics,
     coupling: Option<&CouplingStressMetrics>,
     splicing_instability: &SplicingInstabilityMetrics,
+    unspliced: Option<&UnsplicedMetrics>,
     catalog: &GenesetCatalog,
 ) -> Result<(), InputError> {
     info!("pipeline contract: building rows");
@@ -260,6 +277,7 @@ pub fn write_pipeline_contract(
         input,
         &rows,
         splicing_instability,
+        unspliced,
     )?;
     info!("pipeline contract: writing pipeline_step.json");
     write_pipeline_step_json(&out_dir.join("pipeline_step.json"))?;
@@ -478,6 +496,7 @@ fn write_summary_json(
     input: &InputDescriptor,
     rows: &[PipelineCellRow],
     splicing_instability: &SplicingInstabilityMetrics,
+    unspliced: Option<&UnsplicedMetrics>,
 ) -> Result<(), InputError> {
     let mut fidelity = rows
         .iter()
@@ -524,6 +543,7 @@ fn write_summary_json(
         input: InputJson {
             n_cells: input.n_cells,
             species: "unknown",
+            levels: if unspliced.is_some() { vec!["L0", "L1"] } else { vec!["L0"] },
         },
         distributions: DistributionsJson {
             splice_fidelity_index: DistributionJson {
@@ -543,6 +563,24 @@ fn write_summary_json(
             high_splice_noise_fraction: high_noise,
         },
         splicing_instability: build_splicing_instability_summary(splicing_instability),
+        unspliced: unspliced.map(|u| {
+            let mut defined: Vec<f64> = u
+                .unspliced_fraction
+                .iter()
+                .filter(|v| v.is_finite())
+                .map(|v| *v as f64)
+                .collect();
+            let opt = |v: f64| if v.is_finite() { Some(v) } else { None };
+            UnsplicedSummaryJson {
+                source: u.source.clone(),
+                min_layer_umis: u.min_layer_umis,
+                n_defined_cells: defined.len(),
+                cells_without_layers: u.cells_without_layers,
+                median: opt(quantile_f64(&mut defined, 0.5)),
+                p10: opt(quantile_f64(&mut defined, 0.1)),
+                p90: opt(quantile_f64(&mut defined, 0.9)),
+            }
+        }),
     };
 
     let file = File::create(path).map_err(|e| InputError::io(path, e))?;

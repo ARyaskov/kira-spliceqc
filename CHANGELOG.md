@@ -14,6 +14,10 @@ Phase 1 of the scientific roadmap (Tier A, direct splicing measurements).
   next to a 10x directory, in the STARsolo `Velocyto/` sibling of `Gene/`,
   or inside an `.h5ad` (`layers/`), and can be pointed at with `--layers`.
   Layers are reindexed with the main matrix (`SplicedUnspliced`).
+- Tier A stage 16: per-cell `unspliced_fraction` with a Wilson 95 % interval
+  and raw spliced/unspliced/ambiguous UMI totals in `cells.tsv`/`cells.json`;
+  `summary.json` gains `input.levels` and an `unspliced` block. Undefined
+  below 100 layer UMIs.
 
 ## [0.3.0] - 2026-10-01
 

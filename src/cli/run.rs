@@ -24,6 +24,7 @@ use crate::pipeline::stage11_splicing_noise::compute as compute_splicing_noise;
 use crate::pipeline::stage12_cryptic_risk::compute as compute_cryptic_risk;
 use crate::pipeline::stage13_collapse::compute as compute_collapse;
 use crate::pipeline::stage15_splicing_instability::compute as compute_splicing_instability;
+use crate::pipeline::stage16_unspliced::run_stage16;
 
 /// Scratch directory (inside the output directory) for the stage-1 cache.
 const EXPR_CACHE_DIR: &str = ".kira-spliceqc-cache";
@@ -111,6 +112,13 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
     let stage5 = run_logged(5, || compute_imbalance(&stage2))?;
     let stage6 = run_logged(6, || run_stage6(&stage3, &stage4, &stage5))?;
     let stage15 = run_logged(15, || Ok(compute_splicing_instability(&stage1)))?;
+    let stage16 = match &stage1_layers {
+        Some(layers) => Some(run_logged(16, || Ok(run_stage16(layers)))?),
+        None => {
+            info!(target: "kira_spliceqc::cli::run", "skipping Stage 16 (no spliced/unspliced layers)");
+            None
+        }
+    };
 
     let (stage8, stage9, stage10, stage11, stage12, stage13, stage14) = if config.extended {
         let stage8 = run_logged(8, || compute_coupling(&stage2))?;
@@ -153,6 +161,7 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
         stage13,
         stage14,
         stage15,
+        stage16,
     };
 
     if config.extended && context.stage14.is_none() {
@@ -175,6 +184,7 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
             context.stage13.as_ref(),
             context.stage14.as_ref(),
             &context.stage15,
+            context.stage16.as_ref(),
             OutputOptions {
                 json: config.output_json,
                 tsv: config.output_tsv,
@@ -197,6 +207,7 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
             &context.stage6,
             context.stage8.as_ref(),
             &context.stage15,
+            context.stage16.as_ref(),
             &catalog,
         )?;
         info!(

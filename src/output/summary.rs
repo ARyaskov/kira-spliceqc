@@ -1,6 +1,7 @@
 use crate::model::collapse::{SpliceosomeCollapseMetrics, SpliceosomeCollapseStatus};
 use crate::model::cryptic_risk::CrypticSplicingRiskMetrics;
 use crate::model::sis::{SpliceIntegrityClass, SpliceIntegrityMetrics};
+use crate::model::unspliced::UnsplicedMetrics;
 use crate::stats::robust::median;
 
 pub fn format_summary(
@@ -8,14 +9,25 @@ pub fn format_summary(
     cryptic: Option<&CrypticSplicingRiskMetrics>,
     collapse: Option<&SpliceosomeCollapseMetrics>,
     cell_cycle_confounded: Option<&[bool]>,
+    unspliced: Option<&UnsplicedMetrics>,
     experimental: bool,
 ) -> String {
     let n_cells = metrics.sis.len();
+    let tier_a = match unspliced {
+        Some(u) => {
+            let med = median(&u.unspliced_fraction);
+            format!(
+                "Input levels: L0, L1 ({})\nUnspliced fraction: median {:.3}, undefined in {} cells\n",
+                u.source, med, u.undefined_cells
+            )
+        }
+        None => "Input levels: L0 (no spliced/unspliced layers; Tier A metrics unavailable)\n".to_string(),
+    };
     if !experimental {
         let undefined = metrics.sis.iter().filter(|v| !v.is_finite()).count();
         return format!(
-            "kira-spliceqc summary\n---------------------\nCells analyzed: {}\nCells with undefined expression signatures: {}\n\nComposite signatures (SIS classes, SOS/RLR/SII, cryptic risk, collapse) are\nexperimental and not written; pass --experimental-signatures to include them.\n",
-            n_cells, undefined
+            "kira-spliceqc summary\n---------------------\nCells analyzed: {}\n{}Cells with undefined expression signatures: {}\n\nComposite signatures (SIS classes, SOS/RLR/SII, cryptic risk, collapse) are\nexperimental and not written; pass --experimental-signatures to include them.\n",
+            n_cells, tier_a, undefined
         );
     }
     let mut intact = 0usize;
@@ -93,8 +105,9 @@ pub fn format_summary(
     });
 
     format!(
-        "kira-spliceqc summary\n---------------------\nCells analyzed: {}\n\nIntegrity classes:\n  Intact:    {:>4} ({:.1}%)\n  Stressed:  {:>4} ({:.1}%)\n  Impaired:  {:>4} ({:.1}%)\n  Broken:    {:>4} ({:.1}%)\n\nMedian SIS: {:.2}\nFailure fraction (Impaired+Broken): {:.1}%\n\nCryptic splicing risk > 0.7: {}\nSpliceosome collapse: {}\nCell-cycle confounded: {}\n",
+        "kira-spliceqc summary\n---------------------\nCells analyzed: {}\n{}\nIntegrity classes:\n  Intact:    {:>4} ({:.1}%)\n  Stressed:  {:>4} ({:.1}%)\n  Impaired:  {:>4} ({:.1}%)\n  Broken:    {:>4} ({:.1}%)\n\nMedian SIS: {:.2}\nFailure fraction (Impaired+Broken): {:.1}%\n\nCryptic splicing risk > 0.7: {}\nSpliceosome collapse: {}\nCell-cycle confounded: {}\n",
         n_cells,
+        tier_a,
         intact,
         pct(intact),
         stressed,

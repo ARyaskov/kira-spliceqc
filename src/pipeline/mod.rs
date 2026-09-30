@@ -5,6 +5,7 @@ pub mod stage12_cryptic_risk;
 pub mod stage13_collapse;
 pub mod stage14_timecourse;
 pub mod stage15_splicing_instability;
+pub mod stage16_unspliced;
 pub mod stage1_expression;
 pub mod stage2_genesets;
 pub mod stage3_isoform;

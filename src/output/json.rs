@@ -18,6 +18,7 @@ use crate::model::splicing_instability::{
 };
 use crate::model::splicing_noise::SplicingNoiseMetrics;
 use crate::model::timecourse::{SplicingTrajectoryClass, TimecourseSplicingMetrics};
+use crate::model::unspliced::UnsplicedMetrics;
 
 /// Bumped to 2.0 in v0.3: expression-signature keys carry the `_expr`
 /// suffix (`regulator_expr`, `missplicing_expr`, `imbalance_expr`,
@@ -49,6 +50,36 @@ struct JsonOutput<'a> {
     timecourse: Option<JsonTimecourse>,
     splicing_instability: JsonSplicingInstabilityStage,
     cell_cycle_guardrail: Option<JsonCellCycleGuardrail>,
+    /// Input levels available: `["L0"]` or `["L0", "L1"]`.
+    input_levels: Vec<&'static str>,
+    /// Tier A unspliced metrics (input level L1); absent without layers.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    unspliced: Option<JsonUnsplicedStage>,
+}
+
+#[derive(Serialize)]
+struct JsonCellUnspliced {
+    spliced_umis: u64,
+    unspliced_umis: u64,
+    ambiguous_umis: u64,
+    unspliced_fraction: Option<f32>,
+    unspliced_fraction_ci_low: Option<f32>,
+    unspliced_fraction_ci_high: Option<f32>,
+}
+
+#[derive(Serialize)]
+struct JsonUnsplicedStage {
+    source: String,
+    min_layer_umis: u64,
+    has_ambiguous: bool,
+    cells_without_layers: usize,
+    undefined_cells: usize,
+    spliced_umis: Vec<u64>,
+    unspliced_umis: Vec<u64>,
+    ambiguous_umis: Vec<u64>,
+    unspliced_fraction: Vec<Option<f32>>,
+    unspliced_fraction_ci_low: Vec<Option<f32>>,
+    unspliced_fraction_ci_high: Vec<Option<f32>>,
 }
 
 #[derive(Serialize)]
@@ -74,6 +105,8 @@ struct JsonCell<'a> {
     #[serde(rename = "assembly_phase_expr")]
     assembly_phase: JsonAssemblyPhase,
     splicing_instability: JsonCellSplicingInstability,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    unspliced: Option<JsonCellUnspliced>,
 }
 
 #[derive(Serialize)]
@@ -358,6 +391,7 @@ pub fn write_json(
     collapse: Option<&SpliceosomeCollapseMetrics>,
     timecourse: Option<&TimecourseSplicingMetrics>,
     splicing_instability: &SplicingInstabilityMetrics,
+    unspliced: Option<&UnsplicedMetrics>,
     experimental: bool,
 ) -> Result<(), InputError> {
     let n_cells = cell_names.len();
@@ -491,6 +525,14 @@ pub fn write_json(
                         .genome_instability_splicing_flag[cell_id],
                 }),
             },
+            unspliced: unspliced.map(|u| JsonCellUnspliced {
+                spliced_umis: u.spliced_umis[cell_id],
+                unspliced_umis: u.unspliced_umis[cell_id],
+                ambiguous_umis: u.ambiguous_umis[cell_id],
+                unspliced_fraction: opt_f32(u.unspliced_fraction[cell_id]),
+                unspliced_fraction_ci_low: opt_f32(u.unspliced_fraction_ci_low[cell_id]),
+                unspliced_fraction_ci_high: opt_f32(u.unspliced_fraction_ci_high[cell_id]),
+            }),
         });
     }
 
@@ -676,6 +718,20 @@ pub fn write_json(
         timecourse: timecourse_json,
         splicing_instability: splicing_instability_json,
         cell_cycle_guardrail: None,
+        input_levels: if unspliced.is_some() { vec!["L0", "L1"] } else { vec!["L0"] },
+        unspliced: unspliced.map(|u| JsonUnsplicedStage {
+            source: u.source.clone(),
+            min_layer_umis: u.min_layer_umis,
+            has_ambiguous: u.has_ambiguous,
+            cells_without_layers: u.cells_without_layers,
+            undefined_cells: u.undefined_cells,
+            spliced_umis: u.spliced_umis.clone(),
+            unspliced_umis: u.unspliced_umis.clone(),
+            ambiguous_umis: u.ambiguous_umis.clone(),
+            unspliced_fraction: opt_vec(&u.unspliced_fraction),
+            unspliced_fraction_ci_low: opt_vec(&u.unspliced_fraction_ci_low),
+            unspliced_fraction_ci_high: opt_vec(&u.unspliced_fraction_ci_high),
+        }),
     };
 
     let file = std::fs::File::create(path).map_err(|e| InputError::io(path, e))?;

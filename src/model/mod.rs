@@ -11,3 +11,4 @@ pub mod sis;
 pub mod splicing_instability;
 pub mod splicing_noise;
 pub mod timecourse;
+pub mod unspliced;

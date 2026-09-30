@@ -112,6 +112,14 @@ Pipeline mode (`--run-mode pipeline`), output directory: `<OUT>/kira-spliceqc`:
 Before v0.3 the per-cell stage-7 table was also named `spliceqc.tsv` and was
 overwritten by the pipeline contract table in pipeline mode.
 
+## Tier A: unspliced fraction
+
+With spliced/unspliced layers (input level L1) every cell gets
+`unspliced_fraction = U / (S + U)` with a Wilson 95 % interval, plus the raw
+`spliced_umis`, `unspliced_umis` and `ambiguous_umis`. Fractions are undefined
+for cells with fewer than 100 layer UMIs. See METRICS.md for interpretation
+caveats (protocol and cell-type dependence).
+
 ## Splicing instability proxies
 
 `kira-spliceqc` now emits additive, single-sample-compatible transcriptional proxies for genome/nuclear instability interpretation:
