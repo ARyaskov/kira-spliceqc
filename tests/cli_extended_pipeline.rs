@@ -82,6 +82,7 @@ fn extended_pipeline_logs_and_json() {
         output_tsv: false,
         extended: true,
         threads: None,
+        experimental_signatures: true,
     };
 
     let buffer = Arc::new(Mutex::new(Vec::new()));
@@ -135,6 +136,7 @@ fn extended_pipeline_deterministic_hash() {
         output_tsv: false,
         extended: true,
         threads: None,
+        experimental_signatures: true,
     };
     let config2 = RunConfig {
         input: input_dir.path().to_path_buf(),
@@ -146,6 +148,7 @@ fn extended_pipeline_deterministic_hash() {
         output_tsv: false,
         extended: true,
         threads: None,
+        experimental_signatures: true,
     };
 
     run_pipeline(config1).unwrap();

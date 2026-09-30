@@ -58,6 +58,17 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
         "compute backend selected"
     );
 
+    // The pipeline contract (regimes, fidelity, confidence) is built entirely
+    // on the composite signatures, so pipeline mode implies them.
+    let experimental = config.experimental_signatures || config.run_mode == RunMode::Pipeline;
+    if experimental {
+        info!(
+            target: "kira_spliceqc::cli::run",
+            implied_by_pipeline_mode = !config.experimental_signatures,
+            "experimental composite signatures enabled (unvalidated; see METRICS.md)"
+        );
+    }
+
     let effective_out_dir = if config.run_mode == RunMode::Pipeline {
         pipeline_contract::pipeline_out_dir(&config.out_dir)
     } else {
@@ -151,6 +162,7 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
             OutputOptions {
                 json: config.output_json,
                 tsv: config.output_tsv,
+                experimental,
             },
         )
     })?;

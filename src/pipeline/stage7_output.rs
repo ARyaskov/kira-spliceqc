@@ -21,6 +21,8 @@ use crate::output::{json, summary, tsv};
 pub struct OutputOptions {
     pub json: bool,
     pub tsv: bool,
+    /// Include experimental composite signatures in the per-cell outputs.
+    pub experimental: bool,
 }
 
 pub fn run_stage7(
@@ -77,6 +79,7 @@ pub fn run_stage7(
             collapse,
             timecourse,
             splicing_instability,
+            options.experimental,
         )?;
         info!("wrote {}", path.display());
     }
@@ -136,11 +139,18 @@ pub fn run_stage7(
             coupling_ref,
             exon_intron_ref,
             assembly_ref,
+            options.experimental,
         )?;
         info!("wrote {}", path.display());
     }
 
-    let summary_text = summary::format_summary(sis, cryptic_risk, collapse, None);
+    let summary_text = summary::format_summary(
+        sis,
+        cryptic_risk,
+        collapse,
+        None,
+        options.experimental,
+    );
     debug!(
         elapsed_ms = start.elapsed().as_millis(),
         "output serialization complete"

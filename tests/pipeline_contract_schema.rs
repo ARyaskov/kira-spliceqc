@@ -29,6 +29,7 @@ fn run_pipeline_contract(input: &Path, out: &Path) {
         output_tsv: false,
         extended: false,
         threads: None,
+        experimental_signatures: false,
     };
     run_pipeline(config).unwrap();
 }

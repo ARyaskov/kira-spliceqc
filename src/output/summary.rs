@@ -8,8 +8,16 @@ pub fn format_summary(
     cryptic: Option<&CrypticSplicingRiskMetrics>,
     collapse: Option<&SpliceosomeCollapseMetrics>,
     cell_cycle_confounded: Option<&[bool]>,
+    experimental: bool,
 ) -> String {
     let n_cells = metrics.sis.len();
+    if !experimental {
+        let undefined = metrics.sis.iter().filter(|v| !v.is_finite()).count();
+        return format!(
+            "kira-spliceqc summary\n---------------------\nCells analyzed: {}\nCells with undefined expression signatures: {}\n\nComposite signatures (SIS classes, SOS/RLR/SII, cryptic risk, collapse) are\nexperimental and not written; pass --experimental-signatures to include them.\n",
+            n_cells, undefined
+        );
+    }
     let mut intact = 0usize;
     let mut stressed = 0usize;
     let mut impaired = 0usize;

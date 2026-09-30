@@ -14,10 +14,52 @@ use crate::model::splicing_instability::SplicingInstabilityMetrics;
 
 /// Column naming: every metric derived purely from panel expression carries
 /// the `_expr` suffix (it is an expression signature, not a measurement of
-/// splicing). Composite indices (`sis`, `SOS`, `RLR`, `SII`) and their flags
-/// are experimental (see METRICS.md).
-const HEADER: &str = "cell_id\tcell_name\tsis\tclass\tp_missplicing\tp_imbalance\tp_entropy_z\tp_entropy_abs\tregulator_entropy_expr\tregulator_dispersion_expr\tmissplicing_burden_expr\tspliceosome_imbalance_expr\tcoupling_stress_expr\texon_definition_bias_expr\tea_phase_imbalance_expr\tb_phase_imbalance_expr\tcatalytic_phase_imbalance_expr\tspliceosome_core_expr\tsplicing_rbp_expr\trloop_resolution_expr\tconflict_risk_expr\tnmd_factor_expr\tSOS\tRLR\tSII\tsplice_overload_high\trloop_risk_high\tsplicing_instability_high\tgenome_instability_splicing_flag";
+/// splicing). Composite indices (`sis`, `class`, `p_*`, `SOS`, `RLR`, `SII`)
+/// and their flags are experimental (see METRICS.md) and are only written
+/// when `experimental` is set.
+///
+/// `(name, experimental)` in output order. `cell_values` must produce values
+/// in exactly this order.
+const COLUMNS: &[(&str, bool)] = &[
+    ("cell_id", false),
+    ("cell_name", false),
+    ("sis", true),
+    ("class", true),
+    ("p_missplicing", true),
+    ("p_imbalance", true),
+    ("p_entropy_z", true),
+    ("p_entropy_abs", true),
+    ("regulator_entropy_expr", false),
+    ("regulator_dispersion_expr", false),
+    ("missplicing_burden_expr", false),
+    ("spliceosome_imbalance_expr", false),
+    ("coupling_stress_expr", false),
+    ("exon_definition_bias_expr", false),
+    ("ea_phase_imbalance_expr", false),
+    ("b_phase_imbalance_expr", false),
+    ("catalytic_phase_imbalance_expr", false),
+    ("spliceosome_core_expr", false),
+    ("splicing_rbp_expr", false),
+    ("rloop_resolution_expr", false),
+    ("conflict_risk_expr", false),
+    ("nmd_factor_expr", false),
+    ("SOS", true),
+    ("RLR", true),
+    ("SII", true),
+    ("splice_overload_high", true),
+    ("rloop_risk_high", true),
+    ("splicing_instability_high", true),
+    ("genome_instability_splicing_flag", true),
+];
 
+enum Value<'a> {
+    Index(usize),
+    Str(&'a str),
+    F32(f32),
+    Bool(bool),
+}
+
+#[allow(clippy::too_many_arguments)]
 pub fn write_tsv(
     path: &Path,
     cell_names: &[String],
@@ -29,56 +71,43 @@ pub fn write_tsv(
     coupling: &CouplingStressMetrics,
     exon_intron: &ExonIntronDefinitionMetrics,
     assembly: &AssemblyPhaseImbalanceMetrics,
+    experimental: bool,
 ) -> Result<(), InputError> {
     let file = File::create(path).map_err(|e| InputError::io(path, e))?;
     let mut w = BufWriter::with_capacity(1 << 16, file);
 
-    writeln!(w, "{}", HEADER).map_err(|e| InputError::io(path, e))?;
+    writeln!(w, "{}", header(experimental)).map_err(|e| InputError::io(path, e))?;
 
     let n_cells = cell_names.len();
-    let mut buf = ryu_buf();
+    let mut buf = String::with_capacity(32);
+    let mut values: Vec<Value> = Vec::with_capacity(COLUMNS.len());
     for cell_id in 0..n_cells {
-        write!(w, "{}\t{}\t", cell_id, cell_names[cell_id])
-            .map_err(|e| InputError::io(path, e))?;
-        write_f32(&mut w, sis.sis[cell_id], &mut buf, path)?;
-        w.write_all(b"\t").map_err(|e| InputError::io(path, e))?;
-        write!(w, "{}", class_str(sis.class[cell_id]))
-            .map_err(|e| InputError::io(path, e))?;
-        for v in [
-            sis.p_missplicing[cell_id],
-            sis.p_imbalance[cell_id],
-            sis.p_entropy_z[cell_id],
-            sis.p_entropy_abs[cell_id],
-            isoform.entropy[cell_id],
-            isoform.dispersion[cell_id],
-            missplicing.burden[cell_id],
-            imbalance.imbalance[cell_id],
-            coupling.coupling_stress[cell_id],
-            exon_intron.exon_definition_bias[cell_id],
-            assembly.ea_imbalance[cell_id],
-            assembly.b_imbalance[cell_id],
-            assembly.cat_imbalance[cell_id],
-            splicing_instability.splice_core[cell_id],
-            splicing_instability.rbp_core[cell_id],
-            splicing_instability.rloop_resolve_core[cell_id],
-            splicing_instability.conflict_risk_core[cell_id],
-            splicing_instability.nmd_core[cell_id],
-            splicing_instability.sos[cell_id],
-            splicing_instability.rlr[cell_id],
-            splicing_instability.sii[cell_id],
-        ] {
-            w.write_all(b"\t").map_err(|e| InputError::io(path, e))?;
-            write_f32(&mut w, v, &mut buf, path)?;
-        }
-        for v in [
-            splicing_instability.splice_overload_high[cell_id],
-            splicing_instability.rloop_risk_high[cell_id],
-            splicing_instability.splicing_instability_high[cell_id],
-            splicing_instability.genome_instability_splicing_flag[cell_id],
-        ] {
-            w.write_all(b"\t").map_err(|e| InputError::io(path, e))?;
-            w.write_all(if v { b"true" } else { b"false" })
-                .map_err(|e| InputError::io(path, e))?;
+        values.clear();
+        cell_values(
+            &mut values,
+            cell_id,
+            cell_names,
+            isoform,
+            missplicing,
+            imbalance,
+            sis,
+            splicing_instability,
+            coupling,
+            exon_intron,
+            assembly,
+        );
+        debug_assert_eq!(values.len(), COLUMNS.len());
+
+        let mut first = true;
+        for ((_, is_experimental), value) in COLUMNS.iter().zip(values.iter()) {
+            if *is_experimental && !experimental {
+                continue;
+            }
+            if !first {
+                w.write_all(b"\t").map_err(|e| InputError::io(path, e))?;
+            }
+            first = false;
+            write_value(&mut w, value, &mut buf, path)?;
         }
         w.write_all(b"\n").map_err(|e| InputError::io(path, e))?;
     }
@@ -87,8 +116,59 @@ pub fn write_tsv(
     Ok(())
 }
 
-pub fn header() -> &'static str {
-    HEADER
+/// Header line for the given mode (composite columns only when `experimental`).
+pub fn header(experimental: bool) -> String {
+    COLUMNS
+        .iter()
+        .filter(|(_, is_experimental)| experimental || !*is_experimental)
+        .map(|(name, _)| *name)
+        .collect::<Vec<_>>()
+        .join("\t")
+}
+
+#[allow(clippy::too_many_arguments)]
+fn cell_values<'a>(
+    out: &mut Vec<Value<'a>>,
+    cell_id: usize,
+    cell_names: &'a [String],
+    isoform: &IsoformDispersionMetrics,
+    missplicing: &MissplicingMetrics,
+    imbalance: &SpliceosomeImbalanceMetrics,
+    sis: &SpliceIntegrityMetrics,
+    si: &SplicingInstabilityMetrics,
+    coupling: &CouplingStressMetrics,
+    exon_intron: &ExonIntronDefinitionMetrics,
+    assembly: &AssemblyPhaseImbalanceMetrics,
+) {
+    out.push(Value::Index(cell_id));
+    out.push(Value::Str(&cell_names[cell_id]));
+    out.push(Value::F32(sis.sis[cell_id]));
+    out.push(Value::Str(class_str(sis.class[cell_id])));
+    out.push(Value::F32(sis.p_missplicing[cell_id]));
+    out.push(Value::F32(sis.p_imbalance[cell_id]));
+    out.push(Value::F32(sis.p_entropy_z[cell_id]));
+    out.push(Value::F32(sis.p_entropy_abs[cell_id]));
+    out.push(Value::F32(isoform.entropy[cell_id]));
+    out.push(Value::F32(isoform.dispersion[cell_id]));
+    out.push(Value::F32(missplicing.burden[cell_id]));
+    out.push(Value::F32(imbalance.imbalance[cell_id]));
+    out.push(Value::F32(coupling.coupling_stress[cell_id]));
+    out.push(Value::F32(exon_intron.exon_definition_bias[cell_id]));
+    out.push(Value::F32(assembly.ea_imbalance[cell_id]));
+    out.push(Value::F32(assembly.b_imbalance[cell_id]));
+    out.push(Value::F32(assembly.cat_imbalance[cell_id]));
+    out.push(Value::F32(si.splice_core[cell_id]));
+    out.push(Value::F32(si.rbp_core[cell_id]));
+    out.push(Value::F32(si.rloop_resolve_core[cell_id]));
+    out.push(Value::F32(si.conflict_risk_core[cell_id]));
+    out.push(Value::F32(si.nmd_core[cell_id]));
+    out.push(Value::F32(si.sos[cell_id]));
+    out.push(Value::F32(si.rlr[cell_id]));
+    out.push(Value::F32(si.sii[cell_id]));
+    out.push(Value::Bool(si.splice_overload_high[cell_id]));
+    out.push(Value::Bool(si.rloop_risk_high[cell_id]));
+    out.push(Value::Bool(si.splicing_instability_high[cell_id]));
+    out.push(Value::Bool(si.genome_instability_splicing_flag[cell_id]));
 }
 
 #[inline]
@@ -101,27 +181,28 @@ fn class_str(class: SpliceIntegrityClass) -> &'static str {
     }
 }
 
-/// Scratch buffer for float→ascii formatting. Reused across the row loop to
-/// avoid per-field String allocations (was ~29 × n_cells `format!()` calls).
 #[inline]
-fn ryu_buf() -> String {
-    String::with_capacity(32)
-}
-
-#[inline]
-fn write_f32<W: Write>(
+fn write_value<W: Write>(
     w: &mut W,
-    value: f32,
+    value: &Value<'_>,
     buf: &mut String,
     path: &Path,
 ) -> Result<(), InputError> {
     use std::fmt::Write as _;
     buf.clear();
-    if value.is_finite() {
-        // Preserves f32 round-trip; matches `value.to_string()` from previous impl
-        // to keep the deterministic_output_hash test stable.
-        let _ = write!(buf, "{}", value);
+    match value {
+        Value::Index(i) => {
+            let _ = write!(buf, "{i}");
+        }
+        Value::Str(s) => buf.push_str(s),
+        // Non-finite values are written as empty fields. `{}` on f32 is the
+        // shortest round-trip representation, kept for output determinism.
+        Value::F32(v) => {
+            if v.is_finite() {
+                let _ = write!(buf, "{v}");
+            }
+        }
+        Value::Bool(b) => buf.push_str(if *b { "true" } else { "false" }),
     }
-    w.write_all(buf.as_bytes()).map_err(|e| InputError::io(path, e))?;
-    Ok(())
+    w.write_all(buf.as_bytes()).map_err(|e| InputError::io(path, e))
 }

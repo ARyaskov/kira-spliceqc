@@ -265,6 +265,7 @@ fn pipeline_mode_uses_cache_when_present() {
         output_tsv: false,
         extended: false,
         threads: None,
+        experimental_signatures: false,
     };
 
     run_pipeline(config).unwrap();
@@ -305,6 +306,7 @@ fn pipeline_mode_missing_cache_falls_back_with_warn() {
         output_tsv: false,
         extended: false,
         threads: None,
+        experimental_signatures: false,
     };
 
     let buffer = Arc::new(Mutex::new(Vec::new()));
@@ -347,6 +349,7 @@ fn pipeline_mode_invalid_cache_is_hard_error() {
         output_tsv: false,
         extended: false,
         threads: None,
+        experimental_signatures: false,
     };
 
     let err = run_pipeline(config).unwrap_err();

@@ -188,6 +188,7 @@ fn json_schema_sanity() {
         None,
         None,
         &splicing_instability,
+        true,
     )
     .unwrap();
 
@@ -239,19 +240,28 @@ fn tsv_header_order() {
         &coupling,
         &exon_intron,
         &assembly,
+        true,
     )
     .unwrap();
 
     let data = fs::read_to_string(&path).unwrap();
     let header = data.lines().next().unwrap();
-    assert_eq!(header, tsv::header());
+    assert_eq!(header, tsv::header(true));
+    assert!(header.contains("\tsis\t"));
+    assert!(header.contains("\tSOS\t"));
+
+    // Without the experimental flag the composite columns are absent.
+    let plain = tsv::header(false);
+    assert!(!plain.contains("sis"));
+    assert!(!plain.contains("SOS"));
+    assert!(plain.contains("spliceosome_core_expr"));
 }
 
 #[test]
 fn summary_formatting_snapshot() {
     let (_cells, _isoform, _missplicing, _imbalance, sis, _coupling, _exon_intron, _assembly, _) =
         make_metrics(3);
-    let text = summary::format_summary(&sis, None, None, None);
+    let text = summary::format_summary(&sis, None, None, None, true);
     let expected = "kira-spliceqc summary\n---------------------\nCells analyzed: 3\n\nIntegrity classes:\n  Intact:       0 (0.0%)\n  Stressed:     3 (100.0%)\n  Impaired:     0 (0.0%)\n  Broken:       0 (0.0%)\n\nMedian SIS: 0.75\nFailure fraction (Impaired+Broken): 0.0%\n\nCryptic splicing risk > 0.7: N/A\nSpliceosome collapse: N/A\nCell-cycle confounded: N/A\n";
     assert_eq!(text, expected);
 }
@@ -288,6 +298,7 @@ fn json_deterministic_bytes() {
         None,
         None,
         &splicing_instability,
+        false,
     )
     .unwrap();
     json::write_json(
@@ -305,6 +316,7 @@ fn json_deterministic_bytes() {
         None,
         None,
         &splicing_instability,
+        false,
     )
     .unwrap();
 
@@ -345,6 +357,7 @@ fn run_stage7_outputs() {
         OutputOptions {
             json: false,
             tsv: false,
+            experimental: false,
         },
     )
     .unwrap();

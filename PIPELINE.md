@@ -9,6 +9,7 @@ Relevant flags:
 - `--mode cell|sample` (currently implemented: only `cell`; `sample` returns an error)
 - `--extended` enables stages 8-13 (stage 14 is currently not wired in runtime context)
 - `--json`, `--tsv` control stage-7 outputs (`both` by default if neither flag is passed)
+- `--experimental-signatures` includes composite signatures in stage-7 outputs (implied by `--run-mode pipeline`; `pipeline_step.json` carries `signature_status: "experimental"` and `contract_version`)
 
 ## Input resolution (Stage 0)
 

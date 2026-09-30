@@ -31,8 +31,12 @@ struct JsonOutput<'a> {
     tool: &'static str,
     mode: &'static str,
     n_cells: usize,
+    /// Whether experimental composite signatures (sis/class, SOS/RLR/SII,
+    /// flags, cryptic risk, collapse) are included.
+    experimental_signatures: bool,
     cells: Vec<JsonCell<'a>>,
-    sis: JsonSisStage<'a>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sis: Option<JsonSisStage<'a>>,
     #[serde(rename = "regulator_expr")]
     isoform: JsonIsoformStage,
     #[serde(rename = "missplicing_expr")]
@@ -51,9 +55,12 @@ struct JsonOutput<'a> {
 struct JsonCell<'a> {
     cell_id: usize,
     cell_name: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
     sis: Option<f32>,
-    class: &'a str,
-    penalties: JsonPenalties,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    class: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    penalties: Option<JsonPenalties>,
     #[serde(rename = "regulator_expr")]
     isoform: JsonIsoform,
     #[serde(rename = "missplicing_expr")]
@@ -144,6 +151,13 @@ struct JsonCellSplicingInstability {
     conflict_risk_core: Option<f32>,
     #[serde(rename = "nmd_factor_expr")]
     nmd_core: Option<f32>,
+    #[serde(flatten, skip_serializing_if = "Option::is_none")]
+    composites: Option<JsonCellSplicingComposites>,
+}
+
+/// Experimental composite scores and flags (only with `experimental`).
+#[derive(Serialize)]
+struct JsonCellSplicingComposites {
     sos: Option<f32>,
     rlr: Option<f32>,
     sii: Option<f32>,
@@ -298,7 +312,6 @@ struct JsonSplicingInstabilityStage {
     min_genes_per_panel_cell: usize,
     conflict_panel_enabled: bool,
     nmd_panel_enabled: bool,
-    thresholds: JsonSplicingInstabilityThresholds,
     #[serde(rename = "spliceosome_core_expr")]
     splice_core: Vec<Option<f32>>,
     #[serde(rename = "splicing_rbp_expr")]
@@ -309,6 +322,16 @@ struct JsonSplicingInstabilityStage {
     conflict_risk_core: Vec<Option<f32>>,
     #[serde(rename = "nmd_factor_expr")]
     nmd_core: Vec<Option<f32>>,
+    z_reference: JsonSplicingInstabilityZReference,
+    missingness: JsonSplicingInstabilityMissingness,
+    #[serde(flatten, skip_serializing_if = "Option::is_none")]
+    composites: Option<JsonSplicingInstabilityComposites>,
+}
+
+/// Experimental composite arrays, thresholds and their percentiles.
+#[derive(Serialize)]
+struct JsonSplicingInstabilityComposites {
+    thresholds: JsonSplicingInstabilityThresholds,
     sos: Vec<Option<f32>>,
     rlr: Vec<Option<f32>>,
     sii: Vec<Option<f32>>,
@@ -316,9 +339,7 @@ struct JsonSplicingInstabilityStage {
     rloop_risk_high: Vec<bool>,
     splicing_instability_high: Vec<bool>,
     genome_instability_splicing_flag: Vec<bool>,
-    z_reference: JsonSplicingInstabilityZReference,
     global_stats: JsonSplicingInstabilityGlobalStats,
-    missingness: JsonSplicingInstabilityMissingness,
 }
 
 pub fn write_json(
@@ -336,9 +357,14 @@ pub fn write_json(
     collapse: Option<&SpliceosomeCollapseMetrics>,
     timecourse: Option<&TimecourseSplicingMetrics>,
     splicing_instability: &SplicingInstabilityMetrics,
+    experimental: bool,
 ) -> Result<(), InputError> {
     let n_cells = cell_names.len();
     let mut cells = Vec::with_capacity(n_cells);
+
+    // Composite stages are experimental: dropped from the output unless asked for.
+    let cryptic_risk = if experimental { cryptic_risk } else { None };
+    let collapse = if experimental { collapse } else { None };
 
     let coupling_default;
     let exon_intron_default;
@@ -383,18 +409,26 @@ pub fn write_json(
     };
 
     for cell_id in 0..n_cells {
-        let class = class_str(sis.class[cell_id]);
+        let (sis_value, class, penalties) = if experimental {
+            (
+                opt_f32(sis.sis[cell_id]),
+                Some(class_str(sis.class[cell_id])),
+                Some(JsonPenalties {
+                    missplicing: opt_f32(sis.p_missplicing[cell_id]),
+                    imbalance: opt_f32(sis.p_imbalance[cell_id]),
+                    entropy_z: opt_f32(sis.p_entropy_z[cell_id]),
+                    entropy_abs: opt_f32(sis.p_entropy_abs[cell_id]),
+                }),
+            )
+        } else {
+            (None, None, None)
+        };
         cells.push(JsonCell {
             cell_id,
             cell_name: &cell_names[cell_id],
-            sis: opt_f32(sis.sis[cell_id]),
+            sis: sis_value,
             class,
-            penalties: JsonPenalties {
-                missplicing: opt_f32(sis.p_missplicing[cell_id]),
-                imbalance: opt_f32(sis.p_imbalance[cell_id]),
-                entropy_z: opt_f32(sis.p_entropy_z[cell_id]),
-                entropy_abs: opt_f32(sis.p_entropy_abs[cell_id]),
-            },
+            penalties,
             isoform: JsonIsoform {
                 entropy: opt_f32(isoform.entropy[cell_id]),
                 dispersion: opt_f32(isoform.dispersion[cell_id]),
@@ -444,26 +478,29 @@ pub fn write_json(
                 rloop_resolve_core: opt_f32(splicing_instability.rloop_resolve_core[cell_id]),
                 conflict_risk_core: opt_f32(splicing_instability.conflict_risk_core[cell_id]),
                 nmd_core: opt_f32(splicing_instability.nmd_core[cell_id]),
-                sos: opt_f32(splicing_instability.sos[cell_id]),
-                rlr: opt_f32(splicing_instability.rlr[cell_id]),
-                sii: opt_f32(splicing_instability.sii[cell_id]),
-                splice_overload_high: splicing_instability.splice_overload_high[cell_id],
-                rloop_risk_high: splicing_instability.rloop_risk_high[cell_id],
-                splicing_instability_high: splicing_instability.splicing_instability_high[cell_id],
-                genome_instability_splicing_flag: splicing_instability
-                    .genome_instability_splicing_flag[cell_id],
+                composites: experimental.then(|| JsonCellSplicingComposites {
+                    sos: opt_f32(splicing_instability.sos[cell_id]),
+                    rlr: opt_f32(splicing_instability.rlr[cell_id]),
+                    sii: opt_f32(splicing_instability.sii[cell_id]),
+                    splice_overload_high: splicing_instability.splice_overload_high[cell_id],
+                    rloop_risk_high: splicing_instability.rloop_risk_high[cell_id],
+                    splicing_instability_high: splicing_instability.splicing_instability_high
+                        [cell_id],
+                    genome_instability_splicing_flag: splicing_instability
+                        .genome_instability_splicing_flag[cell_id],
+                }),
             },
         });
     }
 
-    let sis_stage = JsonSisStage {
+    let sis_stage = experimental.then(|| JsonSisStage {
         sis: opt_vec(&sis.sis),
         class: sis.class.iter().map(|c| class_str(*c)).collect(),
         p_missplicing: opt_vec(&sis.p_missplicing),
         p_imbalance: opt_vec(&sis.p_imbalance),
         p_entropy_z: opt_vec(&sis.p_entropy_z),
         p_entropy_abs: opt_vec(&sis.p_entropy_abs),
-    };
+    });
 
     let isoform_stage = JsonIsoformStage {
         entropy: opt_vec(&isoform.entropy),
@@ -538,25 +575,35 @@ pub fn write_json(
             min_genes_per_panel_cell: splicing_instability.min_genes,
             conflict_panel_enabled: splicing_instability.conflict_panel_enabled,
             nmd_panel_enabled: splicing_instability.nmd_panel_enabled,
-            thresholds: JsonSplicingInstabilityThresholds {
-                splice_overload_high: SPLICE_OVERLOAD_HIGH_THRESHOLD,
-                rloop_risk_high: RLOOP_RISK_HIGH_THRESHOLD,
-                splicing_instability_high: SPLICING_INSTABILITY_HIGH_THRESHOLD,
-            },
             splice_core: opt_vec(&splicing_instability.splice_core),
             rbp_core: opt_vec(&splicing_instability.rbp_core),
             rloop_resolve_core: opt_vec(&splicing_instability.rloop_resolve_core),
             conflict_risk_core: opt_vec(&splicing_instability.conflict_risk_core),
             nmd_core: opt_vec(&splicing_instability.nmd_core),
-            sos: opt_vec(&splicing_instability.sos),
-            rlr: opt_vec(&splicing_instability.rlr),
-            sii: opt_vec(&splicing_instability.sii),
-            splice_overload_high: splicing_instability.splice_overload_high.clone(),
-            rloop_risk_high: splicing_instability.rloop_risk_high.clone(),
-            splicing_instability_high: splicing_instability.splicing_instability_high.clone(),
-            genome_instability_splicing_flag: splicing_instability
-                .genome_instability_splicing_flag
-                .clone(),
+            composites: experimental.then(|| JsonSplicingInstabilityComposites {
+                thresholds: JsonSplicingInstabilityThresholds {
+                    splice_overload_high: SPLICE_OVERLOAD_HIGH_THRESHOLD,
+                    rloop_risk_high: RLOOP_RISK_HIGH_THRESHOLD,
+                    splicing_instability_high: SPLICING_INSTABILITY_HIGH_THRESHOLD,
+                },
+                sos: opt_vec(&splicing_instability.sos),
+                rlr: opt_vec(&splicing_instability.rlr),
+                sii: opt_vec(&splicing_instability.sii),
+                splice_overload_high: splicing_instability.splice_overload_high.clone(),
+                rloop_risk_high: splicing_instability.rloop_risk_high.clone(),
+                splicing_instability_high: splicing_instability.splicing_instability_high.clone(),
+                genome_instability_splicing_flag: splicing_instability
+                    .genome_instability_splicing_flag
+                    .clone(),
+                global_stats: JsonSplicingInstabilityGlobalStats {
+                    sos_p50: opt_f32(splicing_instability.global_stats.sos_p50),
+                    sos_p90: opt_f32(splicing_instability.global_stats.sos_p90),
+                    rlr_p50: opt_f32(splicing_instability.global_stats.rlr_p50),
+                    rlr_p90: opt_f32(splicing_instability.global_stats.rlr_p90),
+                    sii_p50: opt_f32(splicing_instability.global_stats.sii_p50),
+                    sii_p90: opt_f32(splicing_instability.global_stats.sii_p90),
+                },
+            }),
             z_reference: JsonSplicingInstabilityZReference {
                 splice_core: JsonRobustRef {
                     median: opt_f32(splicing_instability.z_reference.splice_core.median),
@@ -584,14 +631,6 @@ pub fn write_json(
                         mad: opt_f32(r.mad),
                     }
                 }),
-            },
-            global_stats: JsonSplicingInstabilityGlobalStats {
-                sos_p50: opt_f32(splicing_instability.global_stats.sos_p50),
-                sos_p90: opt_f32(splicing_instability.global_stats.sos_p90),
-                rlr_p50: opt_f32(splicing_instability.global_stats.rlr_p50),
-                rlr_p90: opt_f32(splicing_instability.global_stats.rlr_p90),
-                sii_p50: opt_f32(splicing_instability.global_stats.sii_p50),
-                sii_p90: opt_f32(splicing_instability.global_stats.sii_p90),
             },
             missingness: JsonSplicingInstabilityMissingness {
                 splice_core_nan_cells: splicing_instability.missingness.splice_core_nan_cells,
@@ -624,6 +663,7 @@ pub fn write_json(
         tool: "kira-spliceqc",
         mode: "cell",
         n_cells,
+        experimental_signatures: experimental,
         cells,
         sis: sis_stage,
         isoform: isoform_stage,

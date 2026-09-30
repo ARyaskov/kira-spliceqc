@@ -49,6 +49,11 @@ pub struct RunArgs {
     pub extended: bool,
     #[arg(long)]
     pub threads: Option<usize>,
+    /// Write experimental composite signatures (sis/class, SOS/RLR/SII, flags,
+    /// cryptic risk, collapse) to the per-cell outputs. Implied by
+    /// `--run-mode pipeline`.
+    #[arg(long)]
+    pub experimental_signatures: bool,
     #[arg(long, value_enum, default_value = "standalone")]
     pub run_mode: RunModeArg,
 }
@@ -115,6 +120,7 @@ fn execute_run(args: RunArgs) -> Result<(), SpliceQcError> {
         output_tsv: args.tsv,
         extended: args.extended,
         threads: args.threads,
+        experimental_signatures: args.experimental_signatures,
     };
     run_pipeline(config)
 }

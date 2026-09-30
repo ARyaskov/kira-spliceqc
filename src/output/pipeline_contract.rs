@@ -23,6 +23,9 @@ use crate::stats::robust::quantile_f64;
 
 const PIPELINE_DIR: &str = "kira-spliceqc";
 
+/// Version of the spliceqc.tsv / summary.json contract consumed by kira-organelle.
+pub const PIPELINE_CONTRACT_VERSION: &str = "0.3";
+
 const SPLICEQC_HEADER: &str = "barcode\tsample\tcondition\tspecies\tlibsize\tnnz\texpressed_genes\tsplice_fidelity_index\tintron_retention_rate\texon_skipping_rate\talt_splice_burden\tsplice_junction_noise\tstress_splicing_index\tregime\tflags\tconfidence";
 
 const REGIMES: [&str; 6] = [
@@ -69,6 +72,8 @@ struct ToolJson {
     name: &'static str,
     version: &'static str,
     simd: &'static str,
+    /// The contract metrics are built on experimental composite signatures.
+    experimental_signatures: bool,
 }
 
 #[derive(Serialize)]
@@ -206,6 +211,9 @@ struct PipelineToolJson {
     name: &'static str,
     stage: &'static str,
     version: &'static str,
+    contract_version: &'static str,
+    /// "experimental": regime/fidelity/confidence are unvalidated composites.
+    signature_status: &'static str,
 }
 
 #[derive(Serialize)]
@@ -510,6 +518,7 @@ fn write_summary_json(
             name: "kira-spliceqc",
             version: env!("CARGO_PKG_VERSION"),
             simd: crate::simd::backend(),
+            experimental_signatures: true,
         },
         input: InputJson {
             n_cells: input.n_cells,
@@ -673,6 +682,8 @@ fn write_pipeline_step_json(path: &Path) -> Result<(), InputError> {
             name: "kira-spliceqc",
             stage: "splicing",
             version: env!("CARGO_PKG_VERSION"),
+            contract_version: PIPELINE_CONTRACT_VERSION,
+            signature_status: "experimental",
         },
         artifacts: PipelineArtifactsJson {
             summary: "summary.json",

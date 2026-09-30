@@ -33,6 +33,7 @@ fn end_to_end_json_produced() {
         output_tsv: false,
         extended: false,
         threads: None,
+        experimental_signatures: false,
     };
 
     run_pipeline(config).unwrap();
@@ -55,6 +56,7 @@ fn json_tsv_flag_behavior() {
         output_tsv: false,
         extended: false,
         threads: None,
+        experimental_signatures: false,
     };
 
     run_pipeline(config).unwrap();
@@ -80,6 +82,7 @@ fn deterministic_output_hash() {
         output_tsv: false,
         extended: false,
         threads: None,
+        experimental_signatures: false,
     };
     let config2 = RunConfig {
         input: input_dir.path().to_path_buf(),
@@ -91,6 +94,7 @@ fn deterministic_output_hash() {
         output_tsv: false,
         extended: false,
         threads: None,
+        experimental_signatures: false,
     };
 
     run_pipeline(config1).unwrap();
@@ -126,6 +130,7 @@ fn expression_cache_is_not_left_in_output_directory() {
         output_tsv: true,
         extended: false,
         threads: None,
+        experimental_signatures: false,
     };
 
     run_pipeline(config).unwrap();
