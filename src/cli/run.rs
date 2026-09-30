@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::cli::PipelineContext;
 use crate::cli::config::{AnalysisMode, RunConfig, RunMode};
@@ -24,6 +24,9 @@ use crate::pipeline::stage11_splicing_noise::compute as compute_splicing_noise;
 use crate::pipeline::stage12_cryptic_risk::compute as compute_cryptic_risk;
 use crate::pipeline::stage13_collapse::compute as compute_collapse;
 use crate::pipeline::stage15_splicing_instability::compute as compute_splicing_instability;
+
+/// Scratch directory (inside the output directory) for the stage-1 cache.
+const EXPR_CACHE_DIR: &str = ".kira-spliceqc-cache";
 
 #[derive(Debug, thiserror::Error)]
 pub enum SpliceQcError {
@@ -65,7 +68,11 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
     let stage0 = run_logged(0, || {
         run_stage0(&config.input, config.run_mode, config.cache_path.as_deref())
     })?;
-    let stage1 = run_logged(1, || run_stage1(&stage0, &effective_out_dir))?;
+    // Stage 1 materialises an internal expression cache (expr.bin). It is an
+    // implementation detail, so it lives in a hidden scratch directory that is
+    // removed once the run completes instead of polluting the output directory.
+    let cache_dir = effective_out_dir.join(EXPR_CACHE_DIR);
+    let stage1 = run_logged(1, || run_stage1(&stage0, &cache_dir))?;
 
     // Load catalog ONCE and pass &GenesetCatalog to all downstream consumers
     // (previously stages 2, 3 and pipeline contract each reloaded it).
@@ -171,6 +178,19 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
     }
 
     print!("{summary}");
+
+    // Drop the mmap before removing the scratch directory it points at.
+    drop(context);
+    if cache_dir.is_dir()
+        && let Err(err) = std::fs::remove_dir_all(&cache_dir)
+    {
+        warn!(
+            target: "kira_spliceqc::cli::run",
+            path = %cache_dir.display(),
+            error = %err,
+            "failed to remove expression cache directory"
+        );
+    }
     Ok(())
 }
 

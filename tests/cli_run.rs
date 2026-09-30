@@ -109,3 +109,28 @@ fn deterministic_output_hash() {
 
     assert_eq!(hash1[..], hash2[..]);
 }
+
+#[test]
+fn expression_cache_is_not_left_in_output_directory() {
+    let input_dir = tempdir().unwrap();
+    write_tenx(input_dir.path());
+
+    let out_dir = tempdir().unwrap();
+    let config = RunConfig {
+        input: input_dir.path().to_path_buf(),
+        out_dir: out_dir.path().to_path_buf(),
+        cache_path: None,
+        mode: AnalysisMode::Cell,
+        run_mode: RunMode::Standalone,
+        output_json: true,
+        output_tsv: true,
+        extended: false,
+        threads: None,
+    };
+
+    run_pipeline(config).unwrap();
+    assert!(!out_dir.path().join("expr.bin").exists());
+    assert!(!out_dir.path().join(".kira-spliceqc-cache").exists());
+    assert!(out_dir.path().join("cells.json").exists());
+    assert!(out_dir.path().join("cells.tsv").exists());
+}

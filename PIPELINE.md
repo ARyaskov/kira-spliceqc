@@ -86,7 +86,9 @@ Note: the contract table `spliceqc.tsv` and the per-cell table `cells.tsv` have 
 
 ## Stage 1 internal cache: `expr.bin`
 
-`expr.bin` is an internal stage-1 binary cache used when input comes from 10x/H5AD.  
+`expr.bin` is an internal stage-1 binary cache used when input comes from 10x/H5AD.
+It is written to `<effective out dir>/.kira-spliceqc-cache/expr.bin` and the
+directory is removed when the run finishes; it is not an output artifact.
 When stage-0 selected shared-cache input (`kira-organelle.bin`), stage-1 opens that shared cache directly and does not create `expr.bin`.
 
 Format (little-endian, mmap-friendly):
