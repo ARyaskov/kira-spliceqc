@@ -193,14 +193,19 @@ fn json_schema_sanity() {
 
     let data = fs::read_to_string(&path).unwrap();
     let v: serde_json::Value = serde_json::from_str(&data).unwrap();
-    assert_eq!(v["schema_version"], "1.0");
+    assert_eq!(v["schema_version"], "2.0");
     assert_eq!(v["tool"], "kira-spliceqc");
     assert_eq!(v["mode"], "cell");
     assert_eq!(v["n_cells"], 2);
     assert!(v["cells"].is_array());
-    assert!(v["cells"][0]["coupling"]["coupling_stress"].is_number());
-    assert!(v["cells"][0]["exon_intron_bias"]["exon_definition_bias"].is_number());
-    assert!(v["cells"][0]["assembly_phase"]["ea_imbalance"].is_number());
+    assert!(v["cells"][0]["coupling_expr"]["coupling_stress"].is_number());
+    assert!(v["cells"][0]["exon_intron_bias_expr"]["exon_definition_bias"].is_number());
+    assert!(v["cells"][0]["assembly_phase_expr"]["ea_imbalance"].is_number());
+    assert!(v["cells"][0]["regulator_expr"]["entropy"].is_number());
+    assert!(v["cells"][0]["splicing_instability"]["spliceosome_core_expr"].is_number());
+    assert!(v["regulator_expr"]["entropy"].is_array());
+    assert!(v["missplicing_expr"]["burden"].is_array());
+    assert!(v["imbalance_expr"]["imbalance"].is_array());
     assert!(v["cells"][0]["splicing_instability"]["sos"].is_number());
     assert_eq!(
         v["splicing_instability"]["panel_version"],

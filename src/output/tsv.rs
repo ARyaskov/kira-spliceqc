@@ -12,7 +12,11 @@ use crate::model::missplicing::MissplicingMetrics;
 use crate::model::sis::{SpliceIntegrityClass, SpliceIntegrityMetrics};
 use crate::model::splicing_instability::SplicingInstabilityMetrics;
 
-const HEADER: &str = "cell_id\tcell_name\tsis\tclass\tp_missplicing\tp_imbalance\tp_entropy_z\tp_entropy_abs\tiso_entropy\tiso_dispersion\tmissplicing_burden\timbalance\tcoupling_stress\texon_definition_bias\tea_imbalance\tb_imbalance\tcat_imbalance\tsplice_core\trbp_core\trloop_resolve_core\tconflict_risk_core\tnmd_core\tSOS\tRLR\tSII\tsplice_overload_high\trloop_risk_high\tsplicing_instability_high\tgenome_instability_splicing_flag";
+/// Column naming: every metric derived purely from panel expression carries
+/// the `_expr` suffix (it is an expression signature, not a measurement of
+/// splicing). Composite indices (`sis`, `SOS`, `RLR`, `SII`) and their flags
+/// are experimental (see METRICS.md).
+const HEADER: &str = "cell_id\tcell_name\tsis\tclass\tp_missplicing\tp_imbalance\tp_entropy_z\tp_entropy_abs\tregulator_entropy_expr\tregulator_dispersion_expr\tmissplicing_burden_expr\tspliceosome_imbalance_expr\tcoupling_stress_expr\texon_definition_bias_expr\tea_phase_imbalance_expr\tb_phase_imbalance_expr\tcatalytic_phase_imbalance_expr\tspliceosome_core_expr\tsplicing_rbp_expr\trloop_resolution_expr\tconflict_risk_expr\tnmd_factor_expr\tSOS\tRLR\tSII\tsplice_overload_high\trloop_risk_high\tsplicing_instability_high\tgenome_instability_splicing_flag";
 
 pub fn write_tsv(
     path: &Path,

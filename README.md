@@ -108,6 +108,14 @@ overwritten by the pipeline contract table in pipeline mode.
 
 These are deterministic expression-only metrics (no timepoints, no ML). Per-cell values and flags are appended to stage-7 TSV/JSON outputs, and pipeline `summary.json` includes a `splicing_instability` block with thresholds, robust z-score references, quantiles, and missingness.
 
+## Metric naming
+
+Metrics derived purely from panel expression carry the `_expr` suffix
+(`spliceosome_imbalance_expr`, `nmd_factor_expr`, ...). They are expression
+signatures, not measurements of splicing. Composite indices (`sis`, `SOS`,
+`RLR`, `SII`, regimes) are experimental until validated; see METRICS.md for the
+full mapping from v0.2 names.
+
 ## Shared cache specification
 
 - Cache format specification: [kira-shared-sc-cache/CACHE_FILE.md](https://github.com/ARyaskov/kira-shared-sc-cache/blob/main/CACHE_FILE.md)

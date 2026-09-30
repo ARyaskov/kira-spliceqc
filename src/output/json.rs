@@ -19,6 +19,12 @@ use crate::model::splicing_instability::{
 use crate::model::splicing_noise::SplicingNoiseMetrics;
 use crate::model::timecourse::{SplicingTrajectoryClass, TimecourseSplicingMetrics};
 
+/// Bumped to 2.0 in v0.3: expression-signature keys carry the `_expr`
+/// suffix (`regulator_expr`, `missplicing_expr`, `imbalance_expr`,
+/// `coupling_expr`, `exon_intron_bias_expr`, `assembly_phase_expr`, and the
+/// panel cores inside `splicing_instability`).
+pub const JSON_SCHEMA_VERSION: &str = "2.0";
+
 #[derive(Serialize)]
 struct JsonOutput<'a> {
     schema_version: &'static str,
@@ -27,8 +33,11 @@ struct JsonOutput<'a> {
     n_cells: usize,
     cells: Vec<JsonCell<'a>>,
     sis: JsonSisStage<'a>,
+    #[serde(rename = "regulator_expr")]
     isoform: JsonIsoformStage,
+    #[serde(rename = "missplicing_expr")]
     missplicing: JsonMissplicingStage,
+    #[serde(rename = "imbalance_expr")]
     imbalance: JsonImbalanceStage,
     splicing_noise: Option<JsonSplicingNoise>,
     cryptic_risk: Option<JsonCrypticRisk>,
@@ -45,11 +54,17 @@ struct JsonCell<'a> {
     sis: Option<f32>,
     class: &'a str,
     penalties: JsonPenalties,
+    #[serde(rename = "regulator_expr")]
     isoform: JsonIsoform,
+    #[serde(rename = "missplicing_expr")]
     missplicing: JsonMissplicing,
+    #[serde(rename = "imbalance_expr")]
     imbalance: JsonImbalance,
+    #[serde(rename = "coupling_expr")]
     coupling: JsonCoupling,
+    #[serde(rename = "exon_intron_bias_expr")]
     exon_intron_bias: JsonExonIntronBias,
+    #[serde(rename = "assembly_phase_expr")]
     assembly_phase: JsonAssemblyPhase,
     splicing_instability: JsonCellSplicingInstability,
 }
@@ -119,10 +134,15 @@ struct JsonAssemblyPhase {
 
 #[derive(Serialize)]
 struct JsonCellSplicingInstability {
+    #[serde(rename = "spliceosome_core_expr")]
     splice_core: Option<f32>,
+    #[serde(rename = "splicing_rbp_expr")]
     rbp_core: Option<f32>,
+    #[serde(rename = "rloop_resolution_expr")]
     rloop_resolve_core: Option<f32>,
+    #[serde(rename = "conflict_risk_expr")]
     conflict_risk_core: Option<f32>,
+    #[serde(rename = "nmd_factor_expr")]
     nmd_core: Option<f32>,
     sos: Option<f32>,
     rlr: Option<f32>,
@@ -243,10 +263,15 @@ struct JsonRobustRef {
 
 #[derive(Serialize)]
 struct JsonSplicingInstabilityZReference {
+    #[serde(rename = "spliceosome_core_expr")]
     splice_core: JsonRobustRef,
+    #[serde(rename = "splicing_rbp_expr")]
     rbp_core: JsonRobustRef,
+    #[serde(rename = "rloop_resolution_expr")]
     rloop_resolve_core: JsonRobustRef,
+    #[serde(rename = "conflict_risk_expr")]
     conflict_risk_core: Option<JsonRobustRef>,
+    #[serde(rename = "nmd_factor_expr")]
     nmd_core: Option<JsonRobustRef>,
 }
 
@@ -274,10 +299,15 @@ struct JsonSplicingInstabilityStage {
     conflict_panel_enabled: bool,
     nmd_panel_enabled: bool,
     thresholds: JsonSplicingInstabilityThresholds,
+    #[serde(rename = "spliceosome_core_expr")]
     splice_core: Vec<Option<f32>>,
+    #[serde(rename = "splicing_rbp_expr")]
     rbp_core: Vec<Option<f32>>,
+    #[serde(rename = "rloop_resolution_expr")]
     rloop_resolve_core: Vec<Option<f32>>,
+    #[serde(rename = "conflict_risk_expr")]
     conflict_risk_core: Vec<Option<f32>>,
+    #[serde(rename = "nmd_factor_expr")]
     nmd_core: Vec<Option<f32>>,
     sos: Vec<Option<f32>>,
     rlr: Vec<Option<f32>>,
@@ -590,7 +620,7 @@ pub fn write_json(
         };
 
     let output = JsonOutput {
-        schema_version: "1.0",
+        schema_version: JSON_SCHEMA_VERSION,
         tool: "kira-spliceqc",
         mode: "cell",
         n_cells,

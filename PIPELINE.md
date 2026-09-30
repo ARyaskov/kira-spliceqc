@@ -63,10 +63,12 @@ Runtime order in `run_pipeline`:
 Outputs from stage 7:
 - `cells.json` (if `--json` or no explicit format flags)
 - `cells.tsv` (if `--tsv` or no explicit format flags)
-- `cells.tsv` includes additive per-cell columns for:
-  - panel cores: `splice_core`, `rbp_core`, `rloop_resolve_core`, `conflict_risk_core`, `nmd_core`
-  - scores: `SOS`, `RLR`, `SII`
-  - flags: `splice_overload_high`, `rloop_risk_high`, `splicing_instability_high`, `genome_instability_splicing_flag`
+- `cells.tsv` columns (see the naming convention in METRICS.md):
+  - experimental composites: `sis`, `class`, `p_*`
+  - expression signatures: `regulator_entropy_expr`, `regulator_dispersion_expr`, `missplicing_burden_expr`, `spliceosome_imbalance_expr`, `coupling_stress_expr`, `exon_definition_bias_expr`, `ea_phase_imbalance_expr`, `b_phase_imbalance_expr`, `catalytic_phase_imbalance_expr`
+  - panel cores: `spliceosome_core_expr`, `splicing_rbp_expr`, `rloop_resolution_expr`, `conflict_risk_expr`, `nmd_factor_expr`
+  - experimental scores: `SOS`, `RLR`, `SII`
+  - experimental flags: `splice_overload_high`, `rloop_risk_high`, `splicing_instability_high`, `genome_instability_splicing_flag`
 
 ### Pipeline mode
 

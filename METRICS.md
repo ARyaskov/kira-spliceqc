@@ -25,6 +25,36 @@ Scope:
   - `MAD(x) = median(|x - median(x)|)` over finite values only.
   - `robust_z(x) = (x - median) / (MAD * 1.4826 + EPS)`.
 
+## Naming Convention (v0.3)
+
+Every per-cell metric that is derived purely from the expression of a gene
+panel carries the `_expr` suffix. These are expression signatures: they do not
+observe junctions, introns or isoforms and must not be read as splicing
+measurements. Composite indices built on top of them (`sis`, `class`, `SOS`,
+`RLR`, `SII`, `cryptic_risk`, `collapse_status`, contract `regime`) are
+experimental until validated on datasets with known splicing defects.
+
+Column / key mapping from v0.2:
+
+| v0.2 name | v0.3 name (cells.tsv) | cells.json location |
+| --- | --- | --- |
+| `iso_entropy` | `regulator_entropy_expr` | `regulator_expr.entropy` |
+| `iso_dispersion` | `regulator_dispersion_expr` | `regulator_expr.dispersion` |
+| `missplicing_burden` | `missplicing_burden_expr` | `missplicing_expr.burden` |
+| `imbalance` | `spliceosome_imbalance_expr` | `imbalance_expr.imbalance` |
+| `coupling_stress` | `coupling_stress_expr` | `coupling_expr.coupling_stress` |
+| `exon_definition_bias` | `exon_definition_bias_expr` | `exon_intron_bias_expr.exon_definition_bias` |
+| `ea_imbalance` / `b_imbalance` / `cat_imbalance` | `ea_phase_imbalance_expr` / `b_phase_imbalance_expr` / `catalytic_phase_imbalance_expr` | `assembly_phase_expr.*` |
+| `splice_core` | `spliceosome_core_expr` | `splicing_instability.spliceosome_core_expr` |
+| `rbp_core` | `splicing_rbp_expr` | `splicing_instability.splicing_rbp_expr` |
+| `rloop_resolve_core` | `rloop_resolution_expr` | `splicing_instability.rloop_resolution_expr` |
+| `conflict_risk_core` | `conflict_risk_expr` | `splicing_instability.conflict_risk_expr` |
+| `nmd_core` | `nmd_factor_expr` | `splicing_instability.nmd_factor_expr` |
+
+The formulas below keep their internal symbol names (`iso_entropy`, `imbalance`,
+...) for readability; output columns follow the table above. `cells.json`
+`schema_version` is `2.0`.
+
 ## Notation
 
 Let:
