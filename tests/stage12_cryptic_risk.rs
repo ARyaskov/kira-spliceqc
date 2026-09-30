@@ -42,8 +42,9 @@ fn synthetic_signal_combinations() {
     let single = risk(&metrics, 0);
     let double = risk(&metrics, 1);
 
-    assert!(single > 0.30 && single < 0.45);
-    assert!(double > 0.55);
+    // One saturated component out of three -> 1/3; all three -> 1.0.
+    assert!((single - 1.0 / 3.0).abs() < 1e-5);
+    assert!((double - 1.0).abs() < 1e-5);
 }
 
 #[test]
@@ -68,8 +69,9 @@ fn boundary_behavior() {
     let low = risk(&metrics, 0);
     let high = risk(&metrics, 1);
 
-    assert!((low - 0.182425).abs() < 1e-3);
-    assert!((high - 0.817574).abs() < 1e-3);
+    // Full unit range: no signal -> 0, every component saturated -> 1.
+    assert!(low.abs() < 1e-6);
+    assert!((high - 1.0).abs() < 1e-6);
 }
 
 #[test]

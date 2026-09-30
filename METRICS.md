@@ -211,7 +211,8 @@ Saturation normalization with `SAT = 6`:
 - where `sat01(v) = 0 if v<=0; v/6 if 0<v<6; 1 if v>=6`
 
 Risk:
-- `cryptic_risk = sigmoid((x_sr_hnrnp + x_entropy + x_nmd) - 1.5)`
+- `cryptic_risk = (x_sr_hnrnp + x_entropy + x_nmd) / 3` (spans the full `[0, 1]` range;
+  the summary flags cells with `cryptic_risk > 0.7`)
 
 ## Spliceosome Collapse (Stage 13)
 

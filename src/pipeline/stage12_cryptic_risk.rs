@@ -39,8 +39,11 @@ pub fn compute(
                 let x1 = clamp01_sat(axis.abs());
                 let x2 = clamp01_sat(z_ent);
                 let x3 = clamp01_sat(z_nmd);
-                let raw = x1 + x2 + x3;
-                (sigmoid(raw - 1.5), x1, x2, x3)
+                // Mean of the three saturated components, spanning the full
+                // [0, 1] range. The previous sigmoid(sum - 1.5) compressed the
+                // risk into [0.18, 0.82] and made the summary's "> 0.7"
+                // threshold practically unreachable.
+                ((x1 + x2 + x3) / 3.0, x1, x2, x3)
             } else {
                 (f32::NAN, f32::NAN, f32::NAN, f32::NAN)
             }
@@ -104,11 +107,6 @@ fn clamp01_sat(value: f32) -> f32 {
     } else {
         value / SAT
     }
-}
-
-#[inline]
-fn sigmoid(value: f32) -> f32 {
-    1.0 / (1.0 + (-value).exp())
 }
 
 fn finite_min_max(values: &[f32]) -> (f32, f32) {
