@@ -34,6 +34,9 @@ splicing measurements).
   `cryptic_3ss_fraction_dev`, `exon_skip_fraction_dev`,
   `splice_site_shift_dev`) as documented; they were excluded from the
   norms but still received a deviation.
+- `reference build` leaves out norms of a stratum without defined cells
+  (an empty `global` stratum) instead of writing NaN, which made the file
+  unreadable.
 - `splice_site_shift_dev` is standardized within stratum and
   junction-depth bin (the raw score rises with junction depth); false
   `splice_site_shift_high` calls on the simulation drop from 7 % to 1 %.

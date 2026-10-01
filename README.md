@@ -78,8 +78,9 @@ kira-spliceqc run \
 ## External reference
 
 Build a reference from a control dataset with spliced/unspliced layers and
-apply it to other runs; Tier A deviations and flags are then relative to the
-control's strata instead of the dataset's own:
+apply it to other runs; Tier A deviations and flags, and the expression
+signatures (geneset activity, regulator entropy, stage-15 cores), are then
+relative to the control's strata and depth bins instead of the dataset's own:
 
 ```bash
 kira-spliceqc reference build --input ./control --out ./ref.json --stratify-by cell_type

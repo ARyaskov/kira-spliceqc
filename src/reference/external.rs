@@ -23,7 +23,9 @@ use crate::input::error::InputError;
 use crate::input::metadata::CellMetadata;
 use crate::model::intron_retention::IntronRetentionMetrics;
 use crate::model::unspliced::UnsplicedMetrics;
-use crate::reference::{ContinuousNorm, GLOBAL_STRATUM, ProportionNorm, ReferenceMode, Strata};
+use crate::reference::{
+    ContinuousNorm, DepthBinNorms, GLOBAL_STRATUM, ProportionNorm, ReferenceMode, Strata,
+};
 
 pub const REFERENCE_FORMAT: &str = "kira-spliceqc-reference";
 pub const REFERENCE_VERSION: u32 = 1;
@@ -52,7 +54,15 @@ pub struct ReferenceStratum {
     /// Pooled unspliced ratio per gene symbol (genes with a defined reference).
     #[serde(default)]
     pub gene_unspliced_ratio: BTreeMap<String, f32>,
+    /// Depth-binned norms of the control-corrected expression signatures
+    /// (catalog geneset ids, stage-15 cores, `regulator_entropy`).
+    #[serde(default)]
+    pub expression: BTreeMap<String, DepthBinNorms>,
 }
+
+/// Expression norms collected on the reference dataset: panel name ->
+/// one `DepthBinNorms` per stratum (label order).
+pub type ExpressionNormsBundle = BTreeMap<String, Vec<DepthBinNorms>>;
 
 impl ReferenceFile {
     pub fn read(path: &Path) -> Result<Self, InputError> {
@@ -159,6 +169,18 @@ impl ReferenceFile {
             .collect()
     }
 
+    /// Per-stratum expression norms of `panel`, `None` where the file has none.
+    pub fn expression_norms(&self, panel: &str) -> Vec<Option<&DepthBinNorms>> {
+        self.strata
+            .iter()
+            .map(|s| s.expression.get(panel))
+            .collect()
+    }
+
+    pub fn has_expression_norms(&self) -> bool {
+        self.strata.iter().any(|s| !s.expression.is_empty())
+    }
+
     /// Per-stratum pooled unspliced ratio per gene id of `matrix` (NaN where
     /// the reference has no ratio for the gene).
     pub fn gene_ratios_for(&self, matrix: &dyn ExpressionMatrix) -> Vec<Vec<f64>> {
@@ -185,14 +207,26 @@ pub fn build_reference(
     unspliced: Option<&UnsplicedMetrics>,
     intron_retention: Option<&IntronRetentionMetrics>,
     gene_symbols: &[String],
+    expression: Option<&ExpressionNormsBundle>,
 ) -> ReferenceFile {
     let sizes = strata.sizes();
+    // A stratum without defined cells (an empty global stratum when every
+    // cell type is large enough, for instance) has NaN norms; they are
+    // stored as absent so the file stays plain JSON.
     let unspliced_norms: Vec<Option<ProportionNorm>> = match unspliced {
-        Some(u) => u.norms.iter().map(|n| Some(*n)).collect(),
+        Some(u) => u
+            .norms
+            .iter()
+            .map(|n| (n.n_defined > 0 && n.median_logit.is_finite()).then_some(*n))
+            .collect(),
         None => vec![None; strata.n_strata()],
     };
     let ir_norms: Vec<Option<ContinuousNorm>> = match intron_retention {
-        Some(ir) => ir.norms.iter().map(|n| Some(*n)).collect(),
+        Some(ir) => ir
+            .norms
+            .iter()
+            .map(|n| (n.n_defined > 0 && n.median.is_finite()).then_some(*n))
+            .collect(),
         None => vec![None; strata.n_strata()],
     };
     let strata_out = strata
@@ -210,12 +244,24 @@ pub fn build_reference(
                         .collect()
                 })
                 .unwrap_or_default();
+            let expression_norms = expression
+                .map(|bundle| {
+                    bundle
+                        .iter()
+                        .filter_map(|(panel, per_stratum)| {
+                            per_stratum.get(label).map(|n| (panel.clone(), n.clone()))
+                        })
+                        .filter(|(_, n): &(String, DepthBinNorms)| !n.norms.is_empty())
+                        .collect()
+                })
+                .unwrap_or_default();
             ReferenceStratum {
                 name: name.clone(),
                 n_cells: sizes[label],
                 unspliced_fraction: unspliced_norms[label],
                 intron_retention_index: ir_norms[label],
                 gene_unspliced_ratio,
+                expression: expression_norms,
             }
         })
         .collect();

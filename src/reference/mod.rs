@@ -281,6 +281,90 @@ pub fn robust_z_by_stratum_and_depth(
     (z, bins_used)
 }
 
+/// Median / MAD of one depth bin.
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+pub struct RobustNorm {
+    pub median: f32,
+    pub mad: f32,
+    pub n: usize,
+}
+
+/// Depth-binned norms of one stratum: `edges[i]` is the largest library size
+/// of bin `i` (ascending); a cell belongs to the first bin whose edge is at
+/// or above its library size (the last bin takes everything beyond).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct DepthBinNorms {
+    pub edges: Vec<u64>,
+    pub norms: Vec<RobustNorm>,
+}
+
+/// Per-stratum depth-binned norms of `values` (same binning as
+/// `robust_z_by_stratum_and_depth`); what an external reference stores for
+/// expression signatures.
+pub fn depth_bin_norms(values: &[f32], strata: &Strata, libsize: &[u64]) -> Vec<DepthBinNorms> {
+    strata
+        .members()
+        .iter()
+        .map(|members| {
+            let n_bins = (members.len() / MIN_STRATUM_CELLS).clamp(1, MAX_DEPTH_BINS);
+            let mut order = members.clone();
+            order.sort_by_key(|&c| (libsize[c], c));
+            let mut edges = Vec::new();
+            let mut norms = Vec::new();
+            for bin in order.chunks((order.len() / n_bins).max(1)) {
+                let sample: Vec<f32> = bin.iter().map(|&c| values[c]).collect();
+                let med = median(&sample);
+                let mad = mad(&sample, med);
+                // An undefined bin (no finite values, or a constant value)
+                // cannot standardize anything; it is left out so the file
+                // stays plain JSON (no NaN) and the stratum falls back to
+                // NaN for cells that land in it.
+                if !med.is_finite() || !mad.is_finite() {
+                    continue;
+                }
+                edges.push(bin.iter().map(|&c| libsize[c]).max().unwrap_or(0));
+                norms.push(RobustNorm {
+                    median: med,
+                    mad,
+                    n: sample.iter().filter(|v| v.is_finite()).count(),
+                });
+            }
+            DepthBinNorms { edges, norms }
+        })
+        .collect()
+}
+
+/// Robust z of every cell against the norm of its label's depth bin
+/// (`None` label norms or zero MAD -> NaN).
+pub fn apply_depth_bin_norms(
+    values: &[f32],
+    labels: &[u32],
+    libsize: &[u64],
+    per_stratum: &[Option<&DepthBinNorms>],
+) -> Vec<f32> {
+    (0..values.len())
+        .map(|c| {
+            let Some(norms) = per_stratum[labels[c] as usize] else {
+                return f32::NAN;
+            };
+            if norms.norms.is_empty() || !values[c].is_finite() {
+                return f32::NAN;
+            }
+            let bin = norms
+                .edges
+                .iter()
+                .position(|&e| libsize[c] <= e)
+                .unwrap_or(norms.norms.len() - 1);
+            let n = norms.norms[bin];
+            if n.median.is_finite() && n.mad > 0.0 {
+                (values[c] - n.median) / (1.4826 * n.mad + ROBUST_EPS)
+            } else {
+                f32::NAN
+            }
+        })
+        .collect()
+}
+
 /// Deviation of a value with a known per-cell standard error from its
 /// stratum-and-depth bin: `d = (v - median_bin) / sqrt(se^2 + tau2_bin)`,
 /// `tau2_bin = max(0, (1.4826 MAD_bin)^2 - mean_bin(se^2))` (method-of-moments

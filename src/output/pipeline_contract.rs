@@ -785,10 +785,14 @@ fn write_summary_json(
             mode: strata.mode.as_str(),
             column: strata.column.clone(),
             external_file: reference_file.map(str::to_string),
-            external_metrics: if reference_file.is_some() {
-                vec!["unspliced_fraction", "intron_retention_index"]
-            } else {
-                Vec::new()
+            external_metrics: match reference_file {
+                Some(_) if provenance.reference.external_expression_norms => vec![
+                    "unspliced_fraction",
+                    "intron_retention_index",
+                    "expression_signatures",
+                ],
+                Some(_) => vec!["unspliced_fraction", "intron_retention_index"],
+                None => Vec::new(),
             },
             n_strata: strata.n_strata(),
             min_stratum_cells: MIN_STRATUM_CELLS,

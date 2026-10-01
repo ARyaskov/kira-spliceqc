@@ -11,14 +11,19 @@ use kira_spliceqc::cli::run::{build_reference_file, run_pipeline};
 use kira_spliceqc::reference::external::ReferenceFile;
 use tempfile::tempdir;
 
-/// 25 genes (5 splicing-panel genes + 20 fillers) x 120 cells: 60 "Neuron"
-/// cells at unspliced fraction 0.6 and 60 "Glia" cells at `glia_uf`.
-fn write_dataset(dir: &Path, glia_uf: f64) {
+/// 34 genes (14 splicing-panel genes + 20 fillers) x 120 cells: 60 "Neuron"
+/// cells at unspliced fraction 0.6 and 60 "Glia" cells at `glia_uf`; the
+/// panel genes of glia cells are scaled by `glia_panel_fold`.
+fn write_dataset(dir: &Path, glia_uf: f64, glia_panel_fold: u32) {
     fs::create_dir_all(dir).unwrap();
-    let mut genes: Vec<String> = ["SNRPC", "SF3A1", "SF3B1", "SRSF1", "HNRNPA1"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
+    let mut genes: Vec<String> = [
+        "SNRPC", "SF3A1", "SF3B1", "SRSF1", "HNRNPA1", "SNRNP35", "UPF1", "POLR2A", "U2AF1",
+        "PRPF3", "PRPF8", "SNRPB", "SNRPD1", "HNRNPC",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    let n_panel = genes.len();
     genes.extend((0..20).map(|i| format!("FILLER{i:02}")));
     let n_cells = 120;
     let (mut m, mut s, mut u, mut barcodes, mut metadata) = (
@@ -39,7 +44,12 @@ fn write_dataset(dir: &Path, glia_uf: f64) {
         ));
         let uf = if neuron { 0.6 } else { glia_uf } + (c % 5) as f64 * 0.01;
         for g in 1..=genes.len() {
-            let total = 200 + ((c * 11 + g * 7) % 9) as u32;
+            let fold = if !neuron && g <= n_panel {
+                glia_panel_fold
+            } else {
+                1
+            };
+            let total = (200 + ((c * 11 + g * 7) % 9) as u32) * fold;
             let un = (total as f64 * uf).round() as u32;
             let sp = total - un;
             m.push_str(&format!("{g} {} {total}\n", c + 1));
@@ -87,7 +97,7 @@ fn config(input: &Path, out: &Path, reference: Option<&Path>) -> RunConfig {
         run_mode: RunMode::Pipeline,
         output_json: true,
         output_tsv: true,
-        extended: false,
+        extended: true,
         threads: None,
         experimental_signatures: false,
     }
@@ -147,21 +157,35 @@ fn neuron(name: &str) -> bool {
 fn reference_build_then_apply_reveals_a_shifted_stratum() {
     let dir = tempdir().unwrap();
     let control = dir.path().join("control");
-    write_dataset(&control, 0.2);
+    write_dataset(&control, 0.2, 1);
     let ref_path = dir.path().join("ref.json");
     build_reference_file(config(&control, dir.path(), None), &ref_path).unwrap();
 
     let file = ReferenceFile::read(&ref_path).unwrap();
     assert_eq!(file.stratify_by.as_deref(), Some("cell_type"));
     assert_eq!(file.strata.len(), 3);
+    // The global stratum is empty (both cell types are large enough) and
+    // carries no norms rather than NaN ones.
+    let global = file.strata.iter().find(|s| s.name == "global").unwrap();
+    assert_eq!(global.n_cells, 0);
+    assert!(global.unspliced_fraction.is_none() && global.intron_retention_index.is_none());
+    assert!(global.expression.is_empty());
     let glia_ref = file.strata.iter().find(|s| s.name == "Glia").unwrap();
     assert!((glia_ref.unspliced_fraction.unwrap().median - 0.22).abs() < 0.03);
-    assert_eq!(glia_ref.gene_unspliced_ratio.len(), 25);
+    assert_eq!(glia_ref.gene_unspliced_ratio.len(), 34);
     assert!(glia_ref.intron_retention_index.is_some());
+    assert!(file.has_expression_norms());
+    for name in ["splice_core", "rbp_core", "regulator_entropy", "U2_CORE"] {
+        let norms = glia_ref
+            .expression
+            .get(name)
+            .unwrap_or_else(|| panic!("no {name} norms"));
+        assert!(!norms.norms.is_empty(), "{name}: empty norms");
+    }
 
     // Target: glia shifted to UF 0.4 (every gene), neurons unchanged.
     let target = dir.path().join("target");
-    write_dataset(&target, 0.4);
+    write_dataset(&target, 0.4, 1);
 
     let out_ext = tempdir().unwrap();
     run_pipeline(config(&target, out_ext.path(), Some(&ref_path))).unwrap();
@@ -178,7 +202,15 @@ fn reference_build_then_apply_reveals_a_shifted_stratum() {
     );
     assert_eq!(
         summary["reference"]["external_metrics"],
-        serde_json::json!(["unspliced_fraction", "intron_retention_index"])
+        serde_json::json!([
+            "unspliced_fraction",
+            "intron_retention_index",
+            "expression_signatures"
+        ])
+    );
+    assert_eq!(
+        summary["provenance"]["reference"]["external_expression_norms"],
+        true
     );
     let ext = Cells::read(&base.join("cells.tsv"));
     let glia_uf_dev = ext.median("unspliced_fraction_dev", glia);
@@ -212,6 +244,70 @@ fn reference_build_then_apply_reveals_a_shifted_stratum() {
     assert_eq!(int.count("intron_retention_high", "true", glia), 0);
 }
 
+/// Expression signatures: a stratum whose whole splicing panel is up relative
+/// to the control is invisible to the internal reference (its own median is
+/// the new normal) and obvious under the external norms.
+#[test]
+fn expression_norms_reveal_a_shifted_panel() {
+    let dir = tempdir().unwrap();
+    let control = dir.path().join("control");
+    write_dataset(&control, 0.2, 1);
+    let ref_path = dir.path().join("ref.json");
+    build_reference_file(config(&control, dir.path(), None), &ref_path).unwrap();
+
+    let target = dir.path().join("target");
+    write_dataset(&target, 0.2, 4);
+
+    let out_ext = tempdir().unwrap();
+    run_pipeline(config(&target, out_ext.path(), Some(&ref_path))).unwrap();
+    // The raw core is a difference of log expressions and is the same under
+    // either reference; the splice overload score (SOS) is built from the
+    // standardized cores and carries the reference.
+    let ext = Cells::read(&out_ext.path().join("kira-spliceqc").join("cells.tsv"));
+    let glia_core = ext.median("spliceosome_core_expr", glia);
+    assert!(glia_core > 1.0, "glia raw spliceosome core: {glia_core}");
+    let glia_sos = ext.median("SOS", glia);
+    let neuron_sos = ext.median("SOS", neuron);
+    assert!(
+        glia_sos > 3.0,
+        "glia SOS under external reference: {glia_sos}"
+    );
+    assert!(
+        neuron_sos.abs() < 1.5,
+        "neuron SOS under external reference: {neuron_sos}"
+    );
+
+    let out_int = tempdir().unwrap();
+    run_pipeline(config(&target, out_int.path(), None)).unwrap();
+    let int = Cells::read(&out_int.path().join("kira-spliceqc").join("cells.tsv"));
+    let glia_int = int.median("SOS", glia);
+    assert!(
+        glia_int.abs() < 1.0,
+        "glia SOS under internal reference: {glia_int}"
+    );
+
+    // A reference without expression norms (older file) still applies to
+    // Tier A and leaves the signatures on the internal reference.
+    let mut json: serde_json::Value =
+        serde_json::from_slice(&fs::read(&ref_path).unwrap()).unwrap();
+    for stratum in json["strata"].as_array_mut().unwrap() {
+        stratum.as_object_mut().unwrap().remove("expression");
+    }
+    let old_path = dir.path().join("old.json");
+    fs::write(&old_path, serde_json::to_vec(&json).unwrap()).unwrap();
+    let out_old = tempdir().unwrap();
+    run_pipeline(config(&target, out_old.path(), Some(&old_path))).unwrap();
+    let base = out_old.path().join("kira-spliceqc");
+    let summary: serde_json::Value =
+        serde_json::from_slice(&fs::read(base.join("summary.json")).unwrap()).unwrap();
+    assert_eq!(
+        summary["reference"]["external_metrics"],
+        serde_json::json!(["unspliced_fraction", "intron_retention_index"])
+    );
+    let old = Cells::read(&base.join("cells.tsv"));
+    assert!(old.median("SOS", glia).abs() < 1.0);
+}
+
 #[test]
 fn reference_file_is_validated() {
     let dir = tempdir().unwrap();
@@ -228,7 +324,7 @@ fn reference_file_is_validated() {
 fn reference_build_requires_layers() {
     let dir = tempdir().unwrap();
     let input = dir.path().join("nolayers");
-    write_dataset(&input, 0.2);
+    write_dataset(&input, 0.2, 1);
     fs::remove_file(input.join("spliced.mtx")).unwrap();
     fs::remove_file(input.join("unspliced.mtx")).unwrap();
     let err = build_reference_file(

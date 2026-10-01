@@ -14,15 +14,16 @@ use crate::input::error::InputError;
 use crate::input::metadata::{CellMetadata, DOUBLET_ALIASES, is_doublet_value};
 use crate::metrics::cell_cycle::cell_cycle_gene_ids;
 use crate::metrics::splicing_instability::panel_gene_ids as instability_panel_gene_ids;
+use crate::metrics::splicing_instability::{CORE_NORM_NAMES, raw_cores};
 use crate::model::cell_qc::CellQc;
 use crate::output::pipeline_contract;
 use crate::output::provenance::{self, FileInfo};
 use crate::pipeline::stage0_input::{run_stage0_full, run_stage0_with_layers};
 use crate::pipeline::stage1_expression::{Stage1Output, run_stage1_full};
 use crate::pipeline::stage2_genesets::{
-    aggregate_with_controls as run_stage2, standardize_activity,
+    activity_norms, aggregate_with_controls as run_stage2, standardize_activity_with,
 };
-use crate::pipeline::stage3_isoform::compute as run_stage3;
+use crate::pipeline::stage3_isoform::{ENTROPY_NORM_NAME, compute_with as run_stage3};
 use crate::pipeline::stage4_missplicing::compute as compute_missplicing;
 use crate::pipeline::stage5_imbalance::compute as compute_imbalance;
 use crate::pipeline::stage6_sis::run_stage6;
@@ -33,12 +34,13 @@ use crate::pipeline::stage10_assembly_phase::compute as compute_assembly;
 use crate::pipeline::stage11_splicing_noise::compute as compute_splicing_noise;
 use crate::pipeline::stage12_cryptic_risk::compute as compute_cryptic_risk;
 use crate::pipeline::stage13_collapse::compute as compute_collapse;
-use crate::pipeline::stage15_splicing_instability::compute as compute_splicing_instability;
+use crate::pipeline::stage15_splicing_instability::compute_with as compute_splicing_instability;
 use crate::pipeline::stage16_unspliced::run_stage16;
 use crate::pipeline::stage17_intron_retention::run_stage17;
 use crate::pipeline::stage18_cell_cycle::run_stage18;
 use crate::pipeline::stage19_junctions::run_stage19;
 use crate::reference::Strata;
+use crate::reference::depth_bin_norms;
 use crate::reference::external::{ReferenceFile, build_reference};
 
 /// Scratch directory (inside the output directory) for the stage-1 cache.
@@ -208,8 +210,11 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
 
     let libsizes: Vec<u64> = (0..stage1.n_cells()).map(|c| stage1.libsize(c)).collect();
     let stage2_raw = run_logged(2, || run_stage2(&stage1, &catalog, Some(&controls)))?;
-    let stage2 = standardize_activity(&stage2_raw, &strata, Some(&libsizes));
-    let stage3 = run_logged(3, || run_stage3(&stage1, &catalog, &strata))?;
+    let stage2 =
+        standardize_activity_with(&stage2_raw, &strata, Some(&libsizes), external.as_ref());
+    let stage3 = run_logged(3, || {
+        run_stage3(&stage1, &catalog, &strata, external.as_ref())
+    })?;
     let stage4 = run_logged(4, || compute_missplicing(&stage2))?;
     let stage5 = run_logged(5, || compute_imbalance(&stage2))?;
     let stage6 = run_logged(6, || run_stage6(&stage3, &stage4, &stage5))?;
@@ -218,6 +223,7 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
             &stage1,
             Some(&controls),
             &strata,
+            external.as_ref(),
         ))
     })?;
     let stage18 = run_logged(18, || Ok(run_stage18(&stage1, Some(&controls))))?;
@@ -299,6 +305,7 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
         &config,
         catalog_info,
         config.reference.as_deref().and_then(FileInfo::of_path),
+        external.as_ref().is_some_and(|f| f.has_expression_norms()),
         context.stage1_layers.is_some(),
         context.stage19.as_ref(),
         &strata,
@@ -424,6 +431,43 @@ pub fn build_reference_file(config: RunConfig, out: &Path) -> Result<(), SpliceQ
     strata.exclude(cell_qc(&matrix, &metadata, config.min_counts, config.min_genes).excluded());
     let stage16 = run_logged(16, || Ok(run_stage16(&layers, &strata, None)))?;
     let stage17 = run_logged(17, || Ok(run_stage17(&matrix, &layers, &strata, None)))?;
+
+    // Expression-signature norms: catalog genesets, entropy, stage-15 cores.
+    let catalog_path = config.catalog.clone().unwrap_or_else(default_catalog_path);
+    let catalog = load_catalog(&catalog_path, &matrix)?;
+    let controls = {
+        let mut exclude: Vec<u32> = catalog
+            .genesets
+            .iter()
+            .flat_map(|g| g.gene_ids.iter().copied())
+            .collect();
+        exclude.extend(instability_panel_gene_ids(&matrix));
+        exclude.extend(cell_cycle_gene_ids(&matrix));
+        ControlPool::new(matrix.gene_mean_log_cp10k(), &exclude)
+    };
+    let libsizes: Vec<u64> = (0..matrix.n_cells()).map(|c| matrix.libsize(c)).collect();
+    let activity = run_logged(2, || run_stage2(&matrix, &catalog, Some(&controls)))?;
+    let mut expression = activity_norms(&activity, &strata, &libsizes);
+    let entropy = run_logged(3, || run_stage3(&matrix, &catalog, &strata, None))?;
+    expression.insert(
+        ENTROPY_NORM_NAME.to_string(),
+        depth_bin_norms(&entropy.entropy, &strata, &libsizes),
+    );
+    let instability = run_logged(15, || {
+        Ok(compute_splicing_instability(
+            &matrix,
+            Some(&controls),
+            &strata,
+            None,
+        ))
+    })?;
+    for (name, values) in CORE_NORM_NAMES.iter().zip(raw_cores(&instability)) {
+        expression.insert(
+            name.to_string(),
+            depth_bin_norms(values, &strata, &libsizes),
+        );
+    }
+
     let symbols: Vec<String> = (0..matrix.n_genes())
         .map(|g| matrix.gene_symbol(g).to_string())
         .collect();
@@ -433,6 +477,7 @@ pub fn build_reference_file(config: RunConfig, out: &Path) -> Result<(), SpliceQ
         Some(&stage16),
         Some(&stage17),
         &symbols,
+        Some(&expression),
     );
     drop(matrix);
     let _ = std::fs::remove_dir_all(&scratch);

@@ -53,6 +53,7 @@ fn make_provenance(
         FileInfo::of_bytes("test", b"catalog"),
         None,
         false,
+        false,
         None,
         strata,
         &CellQc::none(strata.n_cells()),

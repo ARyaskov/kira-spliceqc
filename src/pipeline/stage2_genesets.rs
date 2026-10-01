@@ -9,7 +9,11 @@ use crate::genesets::controls::ControlPool;
 use crate::genesets::{GenesetCatalog, load_catalog};
 use crate::input::error::InputError;
 use crate::model::geneset_activity::GenesetActivityMatrix;
-use crate::reference::{Strata, robust_z_by_stratum, robust_z_by_stratum_and_depth};
+use crate::reference::external::{ExpressionNormsBundle, ReferenceFile};
+use crate::reference::{
+    Strata, apply_depth_bin_norms, depth_bin_norms, robust_z_by_stratum,
+    robust_z_by_stratum_and_depth,
+};
 
 /// Depth-adaptive, stratified standardization of a raw activity matrix:
 /// every panel score becomes a robust z-score against the cells of the same
@@ -22,13 +26,29 @@ pub fn standardize_activity(
     strata: &Strata,
     libsize: Option<&[u64]>,
 ) -> GenesetActivityMatrix {
+    standardize_activity_with(activity, strata, libsize, None)
+}
+
+/// `standardize_activity` taking the norms from an external reference for
+/// every geneset the file knows (others fall back to the dataset's own).
+pub fn standardize_activity_with(
+    activity: &GenesetActivityMatrix,
+    strata: &Strata,
+    libsize: Option<&[u64]>,
+    external: Option<&ReferenceFile>,
+) -> GenesetActivityMatrix {
     let n_cells = activity.n_cells;
     let mut values = vec![f32::NAN; activity.values.len()];
     for (idx, id) in activity.genesets.iter().enumerate() {
         let slice = &activity.values[idx * n_cells..(idx + 1) * n_cells];
-        let z = match libsize {
-            Some(l) => robust_z_by_stratum_and_depth(slice, strata, l).0,
-            None => robust_z_by_stratum(slice, strata).0,
+        let external_norms = external.and_then(|f| {
+            let norms = f.expression_norms(id);
+            norms.iter().any(|n| n.is_some()).then_some(norms)
+        });
+        let z = match (external_norms, libsize) {
+            (Some(norms), Some(l)) => apply_depth_bin_norms(slice, &strata.labels, l, &norms),
+            (Some(_), None) | (None, None) => robust_z_by_stratum(slice, strata).0,
+            (None, Some(l)) => robust_z_by_stratum_and_depth(slice, strata, l).0,
         };
         let finite_in = slice.iter().filter(|v| v.is_finite()).count();
         let finite_out = z.iter().filter(|v| v.is_finite()).count();
@@ -47,6 +67,26 @@ pub fn standardize_activity(
         values,
         n_cells,
     }
+}
+
+/// Per-stratum depth-binned norms of a raw activity matrix keyed by geneset
+/// id (what `reference build` stores).
+pub fn activity_norms(
+    activity: &GenesetActivityMatrix,
+    strata: &Strata,
+    libsize: &[u64],
+) -> ExpressionNormsBundle {
+    let n_cells = activity.n_cells;
+    activity
+        .genesets
+        .iter()
+        .enumerate()
+        .map(|(idx, id)| {
+            let slice = &activity.values[idx * n_cells..(idx + 1) * n_cells];
+            (id.clone(), depth_bin_norms(slice, strata, libsize))
+        })
+        .filter(|(_, norms)| norms.iter().any(|n| !n.norms.is_empty()))
+        .collect()
 }
 
 pub fn run_stage2(matrix: &dyn ExpressionMatrix) -> Result<GenesetActivityMatrix, InputError> {

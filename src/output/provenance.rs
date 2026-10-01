@@ -74,6 +74,8 @@ pub struct ReferenceInfo {
     /// Cells excluded from norm computation (low depth or doublet).
     pub excluded_cells: usize,
     pub doublet_column: Option<String>,
+    /// The external reference also provided expression-signature norms.
+    pub external_expression_norms: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -139,6 +141,7 @@ pub fn build(
     config: &RunConfig,
     geneset_catalog: FileInfo,
     reference_file: Option<FileInfo>,
+    external_expression_norms: bool,
     has_layers: bool,
     junctions: Option<&JunctionMetrics>,
     strata: &Strata,
@@ -182,6 +185,7 @@ pub fn build(
             folded_cells: strata.folded_cells,
             excluded_cells: strata.n_excluded(),
             doublet_column: cell_qc.doublet_column.clone(),
+            external_expression_norms,
         },
         parameters: Parameters {
             min_junction_umis: MIN_JUNCTION_UMIS,

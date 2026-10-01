@@ -74,7 +74,7 @@ the cell's own stratum. `summary.json.reference.mode` records which mode ran:
 | --- | --- | --- |
 | `stratified` | metadata column found (`--stratify-by`, else the first of `cell_type`, `celltype`, `cell_type_annotation`, `annotation`, ..., then `cluster`, `leiden`, `louvain`, `seurat_clusters`, ...) | per stratum; strata with fewer than `MIN_STRATUM_CELLS = 50` cells (and cells with an empty value) fold into the `global` stratum |
 | `global` | no usable column | one stratum, the whole dataset |
-| `external` | `--reference ref.json` (built by `kira-spliceqc reference build` on a control dataset) | cells are assigned to the reference strata by the reference's metadata column (unmatched -> `global`); Tier A deviations (`unspliced_fraction_dev`, `intron_retention_index_dev`) and the per-gene intron-retention ratios use the file's norms; expression signatures stay dataset-relative |
+| `external` | `--reference ref.json` (built by `kira-spliceqc reference build` on a control dataset) | cells are assigned to the reference strata by the reference's metadata column (unmatched -> `global`); Tier A deviations (`unspliced_fraction_dev`, `intron_retention_index_dev`) and the per-gene intron-retention ratios use the file's norms; expression signatures (geneset activity, regulator entropy, stage-15 cores) are standardized against the file's depth-binned norms when it has them (`expression_signatures` in `summary.json.reference.external_metrics`), otherwise they stay dataset-relative |
 
 Metadata sources: `metadata.tsv[.gz]` next to a 10x directory (header line,
 first column = barcode) or `--metadata PATH`; `obs` string and categorical
@@ -95,7 +95,15 @@ is therefore below 1 %.
 Reference file (`ref.json`, `format = kira-spliceqc-reference`, `version = 1`):
 per stratum `unspliced_fraction {median_logit, tau2, median, n_defined}`,
 `intron_retention_index {median, tau2, n_defined}` and
-`gene_unspliced_ratio {symbol: p_gs}`; the first stratum is always `global`.
+`gene_unspliced_ratio {symbol: p_gs}` and `expression {name: {edges, norms}}`,
+the per-depth-bin median / MAD (`norms[i] = {median, mad, n}`; a cell takes
+the first bin whose `edges[i]` is at or above its library size) of every
+catalog geneset's raw activity, of the regulator entropy (`regulator_entropy`)
+and of the stage-15 cores (`splice_core`, `rbp_core`, `rloop_resolve_core`,
+`conflict_risk_core`, `nmd_core`), keyed by the same names the internal
+standardization uses; the first stratum is always `global`. A stratum with no
+defined cells, or a depth bin whose value is undefined or constant, is left
+out rather than stored as NaN; cells landing there get NaN.
 With an external reference the target run's own norms are still computed and
 reported (`summary.json.unspliced.strata`), while `_dev` values and flags use the
 file's norms, so a whole stratum that shifted relative to the control shows up

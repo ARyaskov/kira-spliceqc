@@ -9,7 +9,8 @@ use crate::genesets::catalog::default_catalog_path;
 use crate::genesets::{GenesetCatalog, load_catalog};
 use crate::input::error::InputError;
 use crate::model::isoform_dispersion::IsoformDispersionMetrics;
-use crate::reference::{Strata, robust_z_by_stratum_and_depth};
+use crate::reference::external::ReferenceFile;
+use crate::reference::{Strata, apply_depth_bin_norms, robust_z_by_stratum_and_depth};
 
 const EPS: f32 = 1e-12;
 
@@ -30,10 +31,23 @@ pub fn run_stage3(matrix: &dyn ExpressionMatrix) -> Result<IsoformDispersionMetr
 
 /// `z_entropy` is standardized within the cell's reference stratum and
 /// library-size bin (the raw entropy rises with depth on sparse data).
+/// Name under which the raw entropy norms are stored in a reference file.
+pub const ENTROPY_NORM_NAME: &str = "regulator_entropy";
+
 pub fn compute(
     matrix: &dyn ExpressionMatrix,
     catalog: &GenesetCatalog,
     strata: &Strata,
+) -> Result<IsoformDispersionMetrics, InputError> {
+    compute_with(matrix, catalog, strata, None)
+}
+
+/// `compute` with the entropy norms taken from an external reference when it has them.
+pub fn compute_with(
+    matrix: &dyn ExpressionMatrix,
+    catalog: &GenesetCatalog,
+    strata: &Strata,
+    external: Option<&ReferenceFile>,
 ) -> Result<IsoformDispersionMetrics, InputError> {
     let regulator_genes = build_regulator_union(catalog)?;
     let n_reg = regulator_genes.len();
@@ -95,7 +109,17 @@ pub fn compute(
     }
 
     let libsize: Vec<u64> = (0..n_cells).map(|c| matrix.libsize(c)).collect();
-    let (z_entropy, depth_bins) = robust_z_by_stratum_and_depth(&entropy, strata, &libsize);
+    let external_norms = external.and_then(|f| {
+        let norms = f.expression_norms(ENTROPY_NORM_NAME);
+        norms.iter().any(|n| n.is_some()).then_some(norms)
+    });
+    let (z_entropy, depth_bins) = match external_norms {
+        Some(norms) => (
+            apply_depth_bin_norms(&entropy, &strata.labels, &libsize, &norms),
+            Vec::new(),
+        ),
+        None => robust_z_by_stratum_and_depth(&entropy, strata, &libsize),
+    };
     let undefined = z_entropy.iter().filter(|v| !v.is_finite()).count() - zero_count;
     if undefined > 0 {
         warn!(

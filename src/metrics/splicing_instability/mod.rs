@@ -15,7 +15,11 @@ use self::panels::{
     SPLICEOSOME_PANEL, SPLICEQC_INSTABILITY_PANEL_V1, SPLICING_RBP_PANEL,
 };
 use self::scores::{panel_trimmed_mean, percentile};
-use crate::reference::{Strata, flag_outliers, robust_z_by_stratum, robust_z_by_stratum_and_depth};
+use crate::reference::external::ReferenceFile;
+use crate::reference::{
+    Strata, apply_depth_bin_norms, flag_outliers, robust_z_by_stratum,
+    robust_z_by_stratum_and_depth,
+};
 use crate::stats::robust::{RobustRef, robust_z_logged};
 
 pub mod aggregate;
@@ -33,10 +37,41 @@ struct ResolvedPanel {
 
 /// Panel cores are trimmed means of `log1p(cp10k)`; with a `ControlPool` the
 /// mean of each panel's control set is subtracted (depth correction).
+/// Names under which the five raw cores are stored in a reference file.
+pub const CORE_NORM_NAMES: [&str; 5] = [
+    "splice_core",
+    "rbp_core",
+    "rloop_resolve_core",
+    "conflict_risk_core",
+    "nmd_core",
+];
+
 pub fn compute(
     matrix: &dyn ExpressionMatrix,
     controls: Option<&ControlPool>,
     strata: &Strata,
+) -> SplicingInstabilityMetrics {
+    compute_with(matrix, controls, strata, None)
+}
+
+/// Raw (control-corrected, unstandardized) cores in `CORE_NORM_NAMES` order;
+/// what `reference build` turns into expression norms.
+pub fn raw_cores(metrics: &SplicingInstabilityMetrics) -> [&[f32]; 5] {
+    [
+        &metrics.splice_core,
+        &metrics.rbp_core,
+        &metrics.rloop_resolve_core,
+        &metrics.conflict_risk_core,
+        &metrics.nmd_core,
+    ]
+}
+
+/// `compute` with core norms from an external reference when it has them.
+pub fn compute_with(
+    matrix: &dyn ExpressionMatrix,
+    controls: Option<&ControlPool>,
+    strata: &Strata,
+    external: Option<&ReferenceFile>,
 ) -> SplicingInstabilityMetrics {
     let n_cells = matrix.n_cells();
 
@@ -156,7 +191,14 @@ pub fn compute(
     let libsize: Vec<u64> = (0..n_cells).map(|c| matrix.libsize(c)).collect();
     let standardize = |values: &[f32], name: &str| -> (Vec<f32>, RobustRef) {
         let (_, r) = robust_z_logged(values, name);
-        let (z, _) = robust_z_by_stratum_and_depth(values, strata, &libsize);
+        let external_norms = external.and_then(|f| {
+            let norms = f.expression_norms(name);
+            norms.iter().any(|n| n.is_some()).then_some(norms)
+        });
+        let z = match external_norms {
+            Some(norms) => apply_depth_bin_norms(values, &strata.labels, &libsize, &norms),
+            None => robust_z_by_stratum_and_depth(values, strata, &libsize).0,
+        };
         (z, r)
     };
     let (z_splice, ref_splice) = standardize(&splice_core, "splice_core");
