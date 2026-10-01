@@ -1,0 +1,8 @@
+target/
+out/
+data/
+generated/
+.git/
+.idea/
+.claude/
+.cursor/

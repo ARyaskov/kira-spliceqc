@@ -1,0 +1,57 @@
+# Bioconda recipe for kira-spliceqc. To submit: copy this directory to
+# bioconda-recipes/recipes/kira-spliceqc, set `version` and `sha256` to the
+# tagged crates.io tarball, and open a pull request.
+{% set name = "kira-spliceqc" %}
+{% set version = "0.3.0" %}
+
+package:
+  name: {{ name }}
+  version: {{ version }}
+
+source:
+  url: https://github.com/ARyaskov/kira-spliceqc/archive/refs/tags/v{{ version }}.tar.gz
+  sha256: 0000000000000000000000000000000000000000000000000000000000000000
+
+build:
+  number: 0
+  run_exports:
+    - {{ pin_subpackage(name, max_pin="x.x") }}
+
+requirements:
+  build:
+    - {{ compiler('c') }}
+    - {{ compiler('cxx') }}
+    - {{ compiler('rust') }}
+    - cmake
+    - make
+  host:
+    - openssl
+  run: []
+
+test:
+  commands:
+    - kira-spliceqc --version
+    - kira-spliceqc simulate --out sim --n-cells 300 --seed 1
+    - kira-spliceqc run --input sim --junctions sim/sj --out run --run-mode pipeline
+    - kira-spliceqc validate --run run --truth sim/truth.tsv --out validation.json
+
+about:
+  home: https://github.com/ARyaskov/kira-spliceqc
+  license: MIT
+  license_family: MIT
+  license_file: LICENSE
+  summary: Deterministic, explainable splicing QC for single-cell RNA-seq
+  description: |
+    Per-cell splicing quality control from gene counts (expression
+    signatures), spliced/unspliced layers (unspliced fraction, intron
+    retention) and STARsolo junction matrices (cryptic 3' splice sites,
+    exon skipping, splice-site shift), with stratified depth-corrected
+    references, calibrated flags and a simulation-based validation suite.
+  doc_url: https://aryaskov.github.io/kira-spliceqc/
+  dev_url: https://github.com/ARyaskov/kira-spliceqc
+
+extra:
+  recipe-maintainers:
+    - ARyaskov
+  identifiers:
+    - doi:10.5281/zenodo.0000000
