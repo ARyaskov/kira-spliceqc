@@ -14,9 +14,11 @@
 //! - **exon skipping**: annotated junctions `D -> A1` and `D2 -> A` exist
 //!   with `A1` before `D2`, i.e. the junction `D -> A` skips at least one
 //!   annotated exon (annotated skip junctions count too). Inclusion UMIs are
-//!   those of all such partner junctions; the per-cell fraction is
-//!   skip / (skip + inclusion), the usual PSI complement (Shen et al. 2014
-//!   PNAS, rMATS event definition).
+//!   those of all such partner junctions; since an included exon is
+//!   supported by two junctions and a skipped one by a single junction, the
+//!   per-cell fraction is skip / (skip + inclusion / 2), the complement of
+//!   the junction-count PSI (Shen et al. 2014 PNAS, rMATS event
+//!   definition).
 //! - everything else unannotated is **novel**.
 //!
 //! `splice_site_shift` follows the idea of SpliZ (Olivieri et al. 2022
@@ -375,7 +377,10 @@ pub fn compute(set: &JunctionSet, strata: &Strata) -> JunctionMetrics {
         });
         cryptic_trials.push(ct);
         skip_umis.push(s.skip);
-        let st = s.skip + s.inclusion;
+        // Two inclusion junctions per included exon versus one skip
+        // junction per skipped exon: inclusion counts are halved (rMATS
+        // junction-count PSI).
+        let st = s.skip + s.inclusion.div_ceil(2);
         skip_fraction.push(if defined { ratio(s.skip, st) } else { f32::NAN });
         skip_trials.push(st);
     }

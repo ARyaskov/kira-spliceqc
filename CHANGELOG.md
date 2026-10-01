@@ -24,6 +24,11 @@ splicing measurements).
 
 ### Changed
 
+- `exon_skip_fraction` halves the inclusion UMIs (`skip / (skip +
+  inclusion / 2)`): an included exon is supported by two junctions and a
+  skipped one by a single junction, so the previous `skip / (skip +
+  inclusion)` understated skipping by up to a factor of two relative to the
+  rMATS junction-count PSI complement it cites.
 - `splice_site_shift_dev` is standardized within stratum and
   junction-depth bin (the raw score rises with junction depth); false
   `splice_site_shift_high` calls on the simulation drop from 7 % to 1 %.
@@ -89,7 +94,13 @@ splicing measurements).
   the intron retention index, pooled per-gene unspliced ratios);
   `run --reference ref.json` assigns cells to the reference strata and
   computes Tier A deviations and flags against them, so a whole stratum
-  shifted relative to the control is detected.
+  shifted relative to the control is detected. The file also stores
+  per-stratum depth-binned median / MAD norms of every catalog geneset's
+  raw activity, of the regulator entropy and of the stage-15 cores, and a
+  run with `--reference` standardizes the expression signatures against
+  them (`expression_signatures` in `summary.json.reference.external_metrics`,
+  `provenance.reference.external_expression_norms`); a file without them
+  leaves the signatures dataset-relative.
 - Gene ids (Ensembl) are carried through the expression cache (format
   version 2) and indexed next to the symbols; catalogs may carry a fourth
   `ensembl_id` column and are selected with `--catalog`; the species is

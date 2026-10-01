@@ -153,7 +153,10 @@ Per cell `c` (undefined when `junction_umis < MIN_JUNCTION_UMIS = 200`):
 - `unannotated_junction_fraction = (junction_umis - annotated_umis) / junction_umis`
 - `cryptic_3ss_fraction = cryptic / (cryptic + canonical_partner)`; undefined when the
   denominator is below `MIN_RATIO_UMIS = 20`
-- `exon_skip_fraction = skip / (skip + inclusion_partner)`; same floor
+- `exon_skip_fraction = skip / (skip + inclusion_partner / 2)`; same floor. An
+  included exon is supported by two junctions and a skipped one by a single
+  junction, so inclusion UMIs are halved (the complement of the rMATS
+  junction-count PSI)
 - `splice_site_shift` (after SpliZ, Olivieri et al. 2022 Nature Methods): for every
   donor with >= 2 acceptors and every acceptor with >= 2 donors, each UMI carries the
   rank of its partner site in transcript direction; with `r_c` the cell's mean rank at

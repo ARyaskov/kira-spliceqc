@@ -179,7 +179,8 @@ fn cryptic_and_skip_cells_are_flagged() {
     assert_eq!(j["n_annotated"], N_GENES * 2);
     assert_eq!(j["n_cryptic_acceptor_junctions"], N_GENES);
     assert_eq!(j["n_skip_junctions"], N_GENES);
-    assert_eq!(j["undefined_cells"], 0);
+    assert_eq!(j["n_defined_cells"], N_CELLS);
+    assert_eq!(j["cells_without_junctions"], 0);
     assert_eq!(
         summary["provenance"]["input_levels"],
         serde_json::json!(["L0", "L2"])
