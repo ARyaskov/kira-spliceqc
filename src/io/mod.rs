@@ -13,6 +13,7 @@ pub struct RawMatrix {
 }
 
 pub mod h5ad;
+pub mod junctions;
 pub mod layers;
 pub mod mtx;
 

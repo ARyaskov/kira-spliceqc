@@ -7,6 +7,8 @@ use crate::expression::index::build_index;
 use crate::expression::ExpressionMatrix;
 use crate::expression::layers::{LayerMatrix, SplicedUnspliced};
 use crate::expression::mmap::MmapExpressionMatrix;
+use crate::expression::junctions::JunctionSet;
+use crate::io::junctions::{RawJunctions, read_junctions};
 use crate::io::layers::{RawLayer, RawLayers, read_layers};
 use crate::input::error::InputError;
 use crate::input::metadata::{CellMetadata, read_metadata_h5ad, read_metadata_tsv};
@@ -19,6 +21,8 @@ use crate::io::{h5ad, mtx};
 pub struct Stage1Output {
     pub matrix: MmapExpressionMatrix,
     pub layers: Option<SplicedUnspliced>,
+    /// Junction counts (input level L2), when the input carries them.
+    pub junctions: Option<JunctionSet>,
     /// Per-cell metadata aligned to the matrix's cell order (may be empty).
     pub metadata: CellMetadata,
 }
@@ -61,10 +65,15 @@ pub fn run_stage1_full(
                 }
                 None => None,
             };
+            let junctions = match &input.junctions {
+                Some(location) => Some(build_junctions(read_junctions(location, &cells)?, cells.len(), None)),
+                None => None,
+            };
             let metadata = load_tsv_metadata(&shared.root, metadata_override, &cells)?;
             return Ok(Stage1Output {
                 matrix,
                 layers,
+                junctions,
                 metadata,
             });
         }
@@ -78,6 +87,10 @@ pub fn run_stage1_full(
     // as the main matrix below.
     let raw_layers = match &input.layers {
         Some(location) => Some(read_layers(location, &raw.genes, &raw.cells)?),
+        None => None,
+    };
+    let raw_junctions = match &input.junctions {
+        Some(location) => Some(read_junctions(location, &raw.cells)?),
         None => None,
     };
 
@@ -105,6 +118,7 @@ pub fn run_stage1_full(
             Some(&cell_index.old_to_new),
         )
     });
+    let junctions = raw_junctions.map(|rj| build_junctions(rj, input.n_cells, Some(&cell_index.old_to_new)));
 
     let mut triplets: Vec<(u32, u32, u32)> = raw
         .triplets
@@ -144,8 +158,33 @@ pub fn run_stage1_full(
     Ok(Stage1Output {
         matrix,
         layers,
+        junctions,
         metadata,
     })
+}
+
+/// Reindexes raw junction triplets to the canonical cell order.
+fn build_junctions(raw: RawJunctions, n_cells: usize, cell_map: Option<&[u32]>) -> JunctionSet {
+    let n_junctions = raw.junctions.len();
+    let triplets: Vec<(u32, u32, u32)> = raw
+        .triplets
+        .into_iter()
+        .map(|(j, c, k)| (j, cell_map.map_or(c, |m| m[c as usize]), k))
+        .collect();
+    let counts = LayerMatrix::from_triplets(n_junctions, n_cells, triplets);
+    info!(
+        source = raw.source.as_str(),
+        junctions = n_junctions,
+        nnz = counts.nnz(),
+        cells_without_junctions = raw.cells_without_junctions,
+        "junction matrix indexed"
+    );
+    JunctionSet {
+        junctions: raw.junctions,
+        counts,
+        source: raw.source,
+        cells_without_junctions: raw.cells_without_junctions,
+    }
 }
 
 /// `metadata.tsv[.gz]` next to a 10x directory (or an explicit path); empty

@@ -56,6 +56,7 @@ fn config(input: &Path, out: &Path, run_mode: RunMode) -> RunConfig {
         out_dir: out.to_path_buf(),
         cache_path: None,
         layers: None,
+        junctions: None,
         metadata: None,
         stratify_by: None,
         reference: None,

@@ -13,6 +13,7 @@ use crate::model::cryptic_risk::CrypticSplicingRiskMetrics;
 use crate::model::exon_intron_bias::ExonIntronDefinitionMetrics;
 use crate::model::imbalance::SpliceosomeImbalanceMetrics;
 use crate::model::isoform_dispersion::IsoformDispersionMetrics;
+use crate::model::junctions::JunctionMetrics;
 use crate::model::missplicing::MissplicingMetrics;
 use crate::model::sis::SpliceIntegrityMetrics;
 use crate::model::splicing_instability::SplicingInstabilityMetrics;
@@ -50,11 +51,17 @@ pub fn run_stage7(
     unspliced: Option<&UnsplicedMetrics>,
     intron_retention: Option<&IntronRetentionMetrics>,
     cell_cycle: &CellCycleMetrics,
+    junctions: Option<&JunctionMetrics>,
     cell_qc: &CellQc,
     strata: &Strata,
     provenance: &Provenance,
     options: OutputOptions,
 ) -> Result<String, InputError> {
+    if let Some(j) = junctions
+        && j.junction_umis.len() != cell_names.len()
+    {
+        return Err(InputError::LengthMismatch("junction metrics length mismatch".to_string()));
+    }
     if cell_qc.n_cells() != cell_names.len() {
         return Err(InputError::LengthMismatch("cell QC length mismatch".to_string()));
     }
@@ -117,6 +124,7 @@ pub fn run_stage7(
             unspliced,
             intron_retention,
             cell_cycle,
+            junctions,
             cell_qc,
             strata,
             provenance,
@@ -183,6 +191,7 @@ pub fn run_stage7(
             unspliced,
             intron_retention,
             cell_cycle,
+            junctions,
             cell_qc,
             options.experimental,
         )?;
@@ -197,6 +206,7 @@ pub fn run_stage7(
         cell_qc,
         unspliced,
         intron_retention,
+        junctions,
         strata,
         options.experimental,
     );

@@ -231,7 +231,7 @@ fn read_lines(path: &Path) -> Result<Vec<String>, InputError> {
 /// `(n_rows, n_cols, (row, col, count) triplets)` of a parsed MatrixMarket file.
 type ParsedCounts = (usize, usize, Vec<(u32, u32, u32)>);
 
-fn parse_mtx_counts(path: &Path) -> Result<ParsedCounts, InputError> {
+pub(crate) fn parse_mtx_counts(path: &Path) -> Result<ParsedCounts, InputError> {
     const FRAC_TOL: f64 = 1e-4;
     let reader = kira_scio::open_maybe_gz_existing(path)
         .map_err(|e| InputError::UnsupportedInput(e.message))?;

@@ -94,8 +94,10 @@ pub trait ExpressionMatrix: Sync {
 
 pub mod cache_writer;
 pub mod index;
+pub mod junctions;
 pub mod layers;
 pub mod mmap;
 
+pub use junctions::JunctionSet;
 pub use layers::{LayerMatrix, SplicedUnspliced};
 pub use mmap::MmapExpressionMatrix;

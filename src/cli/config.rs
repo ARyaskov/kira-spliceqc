@@ -9,6 +9,9 @@ pub struct RunConfig {
     /// `spliced.mtx`/`unspliced.mtx`, or an AnnData file with `layers/`).
     /// Auto-detected when absent.
     pub layers: Option<PathBuf>,
+    /// Explicit junction count matrix directory (STARsolo `SJ/<subset>`).
+    /// Auto-detected as the `SJ/` sibling of a STARsolo `Gene/` directory.
+    pub junctions: Option<PathBuf>,
     /// Explicit `metadata.tsv[.gz]` (barcode + columns). Auto-detected next
     /// to a 10x directory; AnnData inputs use `obs`.
     pub metadata: Option<PathBuf>,

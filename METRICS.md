@@ -128,6 +128,45 @@ introns as unspliced (La Manno et al. 2018; Muskovic & Powell 2021).
 (round((n-1)q) quantiles over defined cells), `nuclear_fraction_flag_fraction`,
 the layer source and per-stratum median/MAD.
 
+## Tier B: Junction Metrics (Stage 19, requires input level L2)
+
+Annotation is derived from the junction matrix itself: every junction the
+aligner marked `annotated` defines an annotated donor and acceptor (strand-aware,
+STAR coordinates = 1-based intron bounds). Junctions with unknown strand are
+counted but never classified.
+
+Classification of a junction `D -> A`:
+- **cryptic 3' splice site**: unannotated, `D` is an annotated donor, and an annotated
+  acceptor `A*` of the same donor lies `CRYPTIC_MIN..=CRYPTIC_MAX = 10..=50` nt
+  downstream of `A` in transcript direction (i.e. `A` is 10-50 nt upstream of `A*`).
+  The canonical partner is `D -> A*`. SF3B1 hotspot mutants (K700E, K666N, ...) shift
+  branch-point recognition and select exactly such acceptors
+  (Darman et al. 2015 Cell Reports; Alsafadi et al. 2016 Nature Communications).
+- **exon skipping**: annotated `D -> A1` and `D2 -> A` exist with `A1` before `D2`
+  (the junction skips at least one annotated exon; annotated skip junctions count).
+  Inclusion partners are all such `D -> A1` and `D2 -> A` junctions
+  (rMATS skipped-exon event definition, Shen et al. 2014 PNAS).
+- **novel** otherwise.
+
+Per cell `c` (undefined when `junction_umis < MIN_JUNCTION_UMIS = 200`):
+- `junction_umis`, `annotated_umis`
+- `unannotated_junction_fraction = (junction_umis - annotated_umis) / junction_umis`
+- `cryptic_3ss_fraction = cryptic / (cryptic + canonical_partner)`; undefined when the
+  denominator is below `MIN_RATIO_UMIS = 20`
+- `exon_skip_fraction = skip / (skip + inclusion_partner)`; same floor
+- `splice_site_shift` (after SpliZ, Olivieri et al. 2022 Nature Methods): for every
+  donor with >= 2 acceptors and every acceptor with >= 2 donors, each UMI carries the
+  rank of its partner site in transcript direction; with `r_c` the cell's mean rank at
+  the site (>= `MIN_SITE_UMIS = 3` UMIs) and `r_s`, `v_s` the per-UMI mean and variance
+  of the reference stratum, `z = (r_c - r_s) / sqrt(v_s / n_c)`; the score is
+  `median_sites |z| / 0.6745` over >= `MIN_SITE_GROUPS = 5` sites (~1 under the null)
+- `*_dev` and `*_high`: logit deviations with overdispersion (fractions) or robust z
+  (shift) within the reference stratum, flags at `dev >= 3` with BH-adjusted p < 0.05
+
+Caveats: 3' 10x libraries cover few junctions per cell, so most cells may fall
+below 200 junction UMIs; aggregate by cluster for such data (planned). Cryptic
+detection needs the canonical acceptor to be used in the same dataset.
+
 ## Tier A: Intron Retention Index (Stage 17, requires input level L1)
 
 Per gene `g`, cell `c`, reference stratum `s = s(c)`:

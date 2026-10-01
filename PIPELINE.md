@@ -48,6 +48,14 @@ gene/cell sort as the main matrix and keeps them in memory as CSC
 and are counted in `cells_without_layers`); otherwise the layers must have the
 main matrix's dimensions and order. Gene count mismatches are hard errors.
 
+## Junction matrix (input level L2)
+
+Stage 0 records a junction source in `InputDescriptor.junctions`: `--junctions DIR`
+if given, else the STARsolo sibling `<root>/SJ/<subset>` of `<root>/Gene/<subset>`.
+Stage 1 reads `features.tsv` (STARsolo `chrom start end strand motif annotated` or
+`chrom:start-end[:strand]` lines), matches cells by barcode and keeps the counts as
+CSC (`expression::junctions::JunctionSet`); stage 19 computes the Tier B metrics.
+
 ## Cell metadata and reference strata
 
 Cells below `--min-counts` / `--min-genes` (LOW_DEPTH) or marked as doublets
@@ -86,6 +94,7 @@ Runtime order in `run_pipeline`:
 - Stage 16: Tier A unspliced fraction, stratum deviation and nuclear-fraction flag (only when spliced/unspliced layers were loaded)
 - Stage 17: Tier A intron retention index (same condition)
 - Stage 18: cell-cycle S/G2M scores, phase and `cycling` flag (always)
+- Stage 19: Tier B junction metrics (only when a junction matrix was loaded)
 - Stages 8-13: only when `--extended`
   - 8 coupling stress
   - 9 exon/intron bias
@@ -121,6 +130,7 @@ Outputs from stage 7:
   - expression signatures: `regulator_entropy_expr`, `regulator_dispersion_expr`, `missplicing_burden_expr`, `spliceosome_imbalance_expr`, `coupling_stress_expr`, `exon_definition_bias_expr`, `ea_phase_imbalance_expr`, `b_phase_imbalance_expr`, `catalytic_phase_imbalance_expr`
   - panel cores: `spliceosome_core_expr`, `splicing_rbp_expr`, `rloop_resolution_expr`, `conflict_risk_expr`, `nmd_factor_expr`
   - Tier A (empty without layers): `spliced_umis`, `unspliced_umis`, `ambiguous_umis`, `unspliced_fraction`, `unspliced_fraction_ci_low`, `unspliced_fraction_ci_high`, `unspliced_fraction_dev`, `nuclear_fraction_flag`, `intron_retention_index`, `intron_retention_index_dev`, `ir_gene_dispersion`, `ir_genes_used`, `intron_retention_high`
+  - Tier B (empty without junctions): `junction_umis`, `unannotated_junction_fraction`, `cryptic_3ss_umis`, `cryptic_3ss_fraction`, `cryptic_3ss_fraction_dev`, `cryptic_3ss_high`, `exon_skip_umis`, `exon_skip_fraction`, `exon_skip_fraction_dev`, `exon_skip_high`, `splice_site_shift`, `splice_site_shift_dev`, `splice_site_shift_high`, `site_groups_used`
   - cell cycle: `s_score_expr`, `g2m_score_expr`, `cell_cycle_phase`, `cycling`
   - experimental scores: `SOS`, `RLR`, `SII`
   - experimental flags: `splice_overload_high`, `rloop_risk_high`, `splicing_instability_high`, `genome_instability_splicing_flag`

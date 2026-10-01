@@ -12,6 +12,7 @@ use crate::model::cryptic_risk::CrypticSplicingRiskMetrics;
 use crate::model::exon_intron_bias::ExonIntronDefinitionMetrics;
 use crate::model::imbalance::SpliceosomeImbalanceMetrics;
 use crate::model::isoform_dispersion::IsoformDispersionMetrics;
+use crate::model::junctions::JunctionMetrics;
 use crate::model::missplicing::MissplicingMetrics;
 use crate::model::sis::{SpliceIntegrityClass, SpliceIntegrityMetrics};
 use crate::model::splicing_instability::{
@@ -22,7 +23,7 @@ use crate::model::splicing_noise::SplicingNoiseMetrics;
 use crate::model::timecourse::{SplicingTrajectoryClass, TimecourseSplicingMetrics};
 use crate::model::intron_retention::IntronRetentionMetrics;
 use crate::model::unspliced::UnsplicedMetrics;
-use crate::output::provenance::Provenance;
+use crate::output::provenance::{Provenance, input_levels};
 use crate::reference::{MIN_STRATUM_CELLS, Strata};
 
 /// Bumped to 2.0 in v0.3: expression-signature keys carry the `_expr`
@@ -64,6 +65,9 @@ struct JsonOutput<'a> {
     /// Tier A intron retention (input level L1); absent without layers.
     #[serde(skip_serializing_if = "Option::is_none")]
     intron_retention: Option<JsonIntronRetentionStage>,
+    /// Tier B junction metrics (input level L2); absent without a junction matrix.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    junctions: Option<JsonJunctionStage>,
     /// Reference strata used for `_dev` metrics and outlier flags.
     reference: JsonReference,
     cell_qc: JsonCellQc,
@@ -79,6 +83,52 @@ struct JsonCellQc {
     n_doublet: usize,
     low_depth: Vec<bool>,
     doublet: Vec<bool>,
+}
+
+#[derive(Serialize)]
+struct JsonCellJunctions {
+    junction_umis: u64,
+    unannotated_junction_fraction: Option<f32>,
+    cryptic_3ss_umis: u64,
+    cryptic_3ss_fraction: Option<f32>,
+    cryptic_3ss_fraction_dev: Option<f32>,
+    cryptic_3ss_high: bool,
+    exon_skip_umis: u64,
+    exon_skip_fraction: Option<f32>,
+    exon_skip_fraction_dev: Option<f32>,
+    exon_skip_high: bool,
+    splice_site_shift: Option<f32>,
+    splice_site_shift_dev: Option<f32>,
+    splice_site_shift_high: bool,
+    site_groups_used: u32,
+}
+
+#[derive(Serialize)]
+struct JsonJunctionStage {
+    source: String,
+    n_junctions: usize,
+    n_annotated: usize,
+    n_cryptic_acceptor_junctions: usize,
+    n_skip_junctions: usize,
+    n_site_groups: usize,
+    min_junction_umis: u64,
+    min_ratio_umis: u64,
+    cells_without_junctions: usize,
+    undefined_cells: usize,
+    junction_umis: Vec<u64>,
+    unannotated_junction_fraction: Vec<Option<f32>>,
+    cryptic_3ss_fraction: Vec<Option<f32>>,
+    cryptic_3ss_fraction_dev: Vec<Option<f32>>,
+    cryptic_3ss_high: Vec<bool>,
+    exon_skip_fraction: Vec<Option<f32>>,
+    exon_skip_fraction_dev: Vec<Option<f32>>,
+    exon_skip_high: Vec<bool>,
+    splice_site_shift: Vec<Option<f32>>,
+    splice_site_shift_dev: Vec<Option<f32>>,
+    splice_site_shift_high: Vec<bool>,
+    cryptic_reference: Vec<JsonStratumStat>,
+    skip_reference: Vec<JsonStratumStat>,
+    shift_reference: Vec<JsonStratumStat>,
 }
 
 #[derive(Serialize)]
@@ -191,6 +241,8 @@ struct JsonCell<'a> {
     unspliced: Option<JsonCellUnspliced>,
     #[serde(skip_serializing_if = "Option::is_none")]
     intron_retention: Option<JsonCellIntronRetention>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    junctions: Option<JsonCellJunctions>,
     cell_cycle: JsonCellCellCycle,
 }
 
@@ -503,6 +555,7 @@ pub fn write_json(
     unspliced: Option<&UnsplicedMetrics>,
     intron_retention: Option<&IntronRetentionMetrics>,
     cell_cycle: &CellCycleMetrics,
+    junctions: Option<&JunctionMetrics>,
     cell_qc: &CellQc,
     strata: &Strata,
     provenance: &Provenance,
@@ -657,6 +710,22 @@ pub fn write_json(
                 ir_gene_dispersion: opt_f32(m.ir_gene_dispersion[cell_id]),
                 ir_genes_used: m.ir_genes_used[cell_id],
                 intron_retention_high: m.intron_retention_high[cell_id],
+            }),
+            junctions: junctions.map(|m| JsonCellJunctions {
+                junction_umis: m.junction_umis[cell_id],
+                unannotated_junction_fraction: opt_f32(m.unannotated_junction_fraction[cell_id]),
+                cryptic_3ss_umis: m.cryptic_3ss_umis[cell_id],
+                cryptic_3ss_fraction: opt_f32(m.cryptic_3ss_fraction[cell_id]),
+                cryptic_3ss_fraction_dev: opt_f32(m.cryptic_3ss_fraction_dev[cell_id]),
+                cryptic_3ss_high: m.cryptic_3ss_high[cell_id],
+                exon_skip_umis: m.exon_skip_umis[cell_id],
+                exon_skip_fraction: opt_f32(m.exon_skip_fraction[cell_id]),
+                exon_skip_fraction_dev: opt_f32(m.exon_skip_fraction_dev[cell_id]),
+                exon_skip_high: m.exon_skip_high[cell_id],
+                splice_site_shift: opt_f32(m.splice_site_shift[cell_id]),
+                splice_site_shift_dev: opt_f32(m.splice_site_shift_dev[cell_id]),
+                splice_site_shift_high: m.splice_site_shift_high[cell_id],
+                site_groups_used: m.site_groups_used[cell_id],
             }),
             cell_cycle: JsonCellCellCycle {
                 s_score_expr: opt_f32(cell_cycle.s_score[cell_id]),
@@ -865,7 +934,7 @@ pub fn write_json(
         timecourse: timecourse_json,
         splicing_instability: splicing_instability_json,
         cell_cycle: cell_cycle_stage,
-        input_levels: if unspliced.is_some() { vec!["L0", "L1"] } else { vec!["L0"] },
+        input_levels: input_levels(unspliced.is_some(), junctions.is_some()),
         unspliced: unspliced.map(|u| JsonUnsplicedStage {
             source: u.source.clone(),
             min_layer_umis: u.min_layer_umis,
@@ -913,6 +982,45 @@ pub fn write_json(
                     mad: opt_f32(s.mad),
                 })
                 .collect(),
+        }),
+        junctions: junctions.map(|m| {
+            let stats = |v: &[crate::reference::StratumStat]| -> Vec<JsonStratumStat> {
+                v.iter()
+                    .map(|s| JsonStratumStat {
+                        name: s.name.clone(),
+                        n_cells: s.n_cells,
+                        n_defined: s.n_defined,
+                        median: opt_f32(s.median),
+                        mad: opt_f32(s.mad),
+                    })
+                    .collect()
+            };
+            JsonJunctionStage {
+                source: m.source.clone(),
+                n_junctions: m.n_junctions,
+                n_annotated: m.n_annotated,
+                n_cryptic_acceptor_junctions: m.n_cryptic_acceptor_junctions,
+                n_skip_junctions: m.n_skip_junctions,
+                n_site_groups: m.n_site_groups,
+                min_junction_umis: m.min_junction_umis,
+                min_ratio_umis: m.min_ratio_umis,
+                cells_without_junctions: m.cells_without_junctions,
+                undefined_cells: m.undefined_cells,
+                junction_umis: m.junction_umis.clone(),
+                unannotated_junction_fraction: opt_vec(&m.unannotated_junction_fraction),
+                cryptic_3ss_fraction: opt_vec(&m.cryptic_3ss_fraction),
+                cryptic_3ss_fraction_dev: opt_vec(&m.cryptic_3ss_fraction_dev),
+                cryptic_3ss_high: m.cryptic_3ss_high.clone(),
+                exon_skip_fraction: opt_vec(&m.exon_skip_fraction),
+                exon_skip_fraction_dev: opt_vec(&m.exon_skip_fraction_dev),
+                exon_skip_high: m.exon_skip_high.clone(),
+                splice_site_shift: opt_vec(&m.splice_site_shift),
+                splice_site_shift_dev: opt_vec(&m.splice_site_shift_dev),
+                splice_site_shift_high: m.splice_site_shift_high.clone(),
+                cryptic_reference: stats(&m.cryptic_reference),
+                skip_reference: stats(&m.skip_reference),
+                shift_reference: stats(&m.shift_reference),
+            }
         }),
         reference: JsonReference {
             mode: strata.mode.as_str(),

@@ -81,6 +81,11 @@ pub struct RunArgs {
     /// Auto-detected next to the input when omitted.
     #[arg(long)]
     pub layers: Option<PathBuf>,
+    /// Junction count matrix directory (STARsolo Solo.out/SJ/<subset>:
+    /// matrix.mtx + features.tsv + barcodes.tsv). Auto-detected as the SJ/
+    /// sibling of a STARsolo Gene/ directory.
+    #[arg(long)]
+    pub junctions: Option<PathBuf>,
     /// Cell metadata table (barcode + columns, tab-separated, header line).
     /// Auto-detected as metadata.tsv[.gz] next to a 10x directory; .h5ad
     /// inputs use obs.
@@ -165,6 +170,7 @@ fn execute_reference_build(args: ReferenceBuildArgs) -> Result<(), SpliceQcError
         out_dir: args.out.parent().map(|p| p.to_path_buf()).unwrap_or_default(),
         cache_path: None,
         layers: args.layers,
+        junctions: None,
         metadata: args.metadata,
         stratify_by: args.stratify_by,
         reference: None,
@@ -194,6 +200,7 @@ fn execute_run(args: RunArgs) -> Result<(), SpliceQcError> {
         out_dir: out,
         cache_path: args.cache,
         layers: args.layers,
+        junctions: args.junctions,
         metadata: args.metadata,
         stratify_by: args.stratify_by,
         reference: args.reference,

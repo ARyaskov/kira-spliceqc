@@ -6,9 +6,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-Phase 1 of the scientific roadmap (Tier A, direct splicing measurements).
+Phases 1 and 3 of the scientific roadmap (Tier A and Tier B, direct
+splicing measurements).
 
 ### Added
+
+- Input level L2: STARsolo `SJ/` junction count matrices (auto-detected as
+  the sibling of a `Gene/` directory or given with `--junctions`), with
+  annotation derived from the aligner's `annotated` flag.
+- Tier B stage 19: `unannotated_junction_fraction`, `cryptic_3ss_fraction`
+  (unannotated acceptors 10-50 nt upstream of an annotated acceptor of the
+  same donor, the SF3B1-mutant phenotype), `exon_skip_fraction` (junctions
+  skipping an annotated exon vs their inclusion partners) and
+  `splice_site_shift` (SpliZ-like), each with a stratum deviation and a
+  BH-controlled `_high` flag; `summary.json.junctions` and
+  `cells.json.junctions` blocks; `input_levels` reports `L2`.
 
 - Input level L1: spliced/unspliced/ambiguous count layers are auto-detected
   next to a 10x directory, in the STARsolo `Velocyto/` sibling of `Gene/`,

@@ -1,7 +1,7 @@
 pub mod config;
 pub mod run;
 
-use crate::expression::{MmapExpressionMatrix, SplicedUnspliced};
+use crate::expression::{JunctionSet, MmapExpressionMatrix, SplicedUnspliced};
 use crate::input::InputDescriptor;
 use crate::model::assembly_phase::AssemblyPhaseImbalanceMetrics;
 use crate::model::cell_cycle::CellCycleMetrics;
@@ -13,6 +13,7 @@ use crate::model::geneset_activity::GenesetActivityMatrix;
 use crate::model::imbalance::SpliceosomeImbalanceMetrics;
 use crate::model::intron_retention::IntronRetentionMetrics;
 use crate::model::isoform_dispersion::IsoformDispersionMetrics;
+use crate::model::junctions::JunctionMetrics;
 use crate::model::missplicing::MissplicingMetrics;
 use crate::model::sis::SpliceIntegrityMetrics;
 use crate::model::splicing_instability::SplicingInstabilityMetrics;
@@ -25,6 +26,8 @@ pub struct PipelineContext {
     pub stage1: MmapExpressionMatrix,
     /// Spliced/unspliced layers (input level L1), when the input carries them.
     pub stage1_layers: Option<SplicedUnspliced>,
+    /// Junction counts (input level L2), when the input carries them.
+    pub stage1_junctions: Option<JunctionSet>,
     pub stage2: GenesetActivityMatrix,
     pub stage3: IsoformDispersionMetrics,
     pub stage4: MissplicingMetrics,
@@ -44,4 +47,6 @@ pub struct PipelineContext {
     pub stage17: Option<IntronRetentionMetrics>,
     /// Cell-cycle phase scores (confounder annotation).
     pub stage18: CellCycleMetrics,
+    /// Tier B junction metrics (only with input level L2).
+    pub stage19: Option<JunctionMetrics>,
 }

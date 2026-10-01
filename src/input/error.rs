@@ -66,6 +66,8 @@ pub enum InputError {
     InvalidMetadata(String),
     #[error("invalid reference file: {0}")]
     InvalidReference(String),
+    #[error("invalid junction features: {0}")]
+    InvalidJunctionFeatures(String),
     #[error("gene index overflow")]
     GeneIndexOverflow,
     #[error("cell index overflow")]

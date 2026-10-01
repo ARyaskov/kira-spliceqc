@@ -68,6 +68,12 @@ kira-spliceqc run \
   to point at another directory or file. When the layer directory carries its own
   `barcodes.tsv`, cells are matched by barcode; otherwise the layers must have the
   main matrix's shape and order.
+- **L2 — junction counts**: a STARsolo `--soloFeatures SJ` directory
+  (`Solo.out/SJ/<subset>`: `matrix.mtx` + `features.tsv` + `barcodes.tsv`),
+  auto-detected as the `SJ/` sibling of a `Gene/` input directory, or given
+  with `--junctions DIR`. Enables Tier B: cryptic 3' splice-site usage,
+  exon skipping and a SpliZ-like splice-site shift score, all annotation-free
+  (the annotated junctions themselves define the known donors and acceptors).
 
 ## External reference
 
@@ -90,6 +96,7 @@ kira-spliceqc run --input ./sample --out ./out/sample --reference ./ref.json
 - `--run-mode standalone` (default): writes stage outputs to `--out`.
 - `--run-mode pipeline`: writes into `<OUT>/kira-spliceqc` and generates pipeline contract artifacts.
 - `--layers PATH`: explicit spliced/unspliced layer source (see "Input levels").
+- `--junctions DIR`: explicit junction count matrix (see "Input levels").
 - `--metadata PATH`: cell metadata table (`barcode` + columns); auto-detected as `metadata.tsv[.gz]` next to a 10x directory, `.h5ad` inputs use `obs`.
 - `--stratify-by COLUMN`: metadata column defining reference strata (default: `cell_type`-like, then `cluster`-like columns, else one global stratum). Strata under 50 cells fold into `global`.
 - `--reference ref.json`: external reference (see above); `summary.json.reference` records the file and the metrics that used it.
@@ -144,6 +151,17 @@ pseudo-counts), with `ir_gene_dispersion`, `ir_genes_used`,
 `intron_retention_index_dev` and an `intron_retention_high` flag. See METRICS.md
 for the reference model and interpretation caveats (protocol and cell-type
 dependence).
+
+## Tier B: junction metrics
+
+With a junction matrix (input level L2), every cell with at least 200 junction
+UMIs gets `unannotated_junction_fraction`, `cryptic_3ss_fraction` (UMIs on
+unannotated acceptors 10-50 nt upstream of an annotated acceptor of the same
+donor, divided by cryptic + canonical UMIs: the SF3B1-mutant phenotype),
+`exon_skip_fraction` (skip / (skip + inclusion) over junctions that skip an
+annotated exon) and `splice_site_shift` (SpliZ-like median standardized shift of
+splice-site usage). Each has a `_dev` deviation and a `_high` flag against the
+reference strata.
 
 ## Splicing instability proxies
 

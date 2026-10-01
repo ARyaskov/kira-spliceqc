@@ -64,6 +64,7 @@ fn config(input: &Path, out: &Path, reference: Option<&Path>) -> RunConfig {
         out_dir: out.to_path_buf(),
         cache_path: None,
         layers: None,
+        junctions: None,
         metadata: None,
         stratify_by: None,
         reference: reference.map(Path::to_path_buf),

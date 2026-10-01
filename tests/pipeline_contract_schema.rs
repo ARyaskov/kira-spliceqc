@@ -24,6 +24,7 @@ fn run_pipeline_contract(input: &Path, out: &Path) {
         out_dir: out.to_path_buf(),
         cache_path: None,
         layers: None,
+        junctions: None,
         metadata: None,
         stratify_by: None,
         reference: None,

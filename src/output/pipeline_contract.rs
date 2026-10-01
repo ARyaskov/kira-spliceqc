@@ -16,11 +16,12 @@ use crate::model::cell_cycle::{CellCycleMetrics, CellCyclePhase};
 use crate::model::cell_qc::CellQc;
 use crate::model::coupling::CouplingStressMetrics;
 use crate::model::imbalance::SpliceosomeImbalanceMetrics;
+use crate::model::junctions::JunctionMetrics;
 use crate::model::missplicing::MissplicingMetrics;
 use crate::model::sis::SpliceIntegrityMetrics;
 use crate::model::intron_retention::IntronRetentionMetrics;
 use crate::model::unspliced::UnsplicedMetrics;
-use crate::output::provenance::Provenance;
+use crate::output::provenance::{Provenance, input_levels};
 use crate::reference::{MIN_STRATUM_CELLS, Strata};
 use crate::model::splicing_instability::{
     RLOOP_RISK_HIGH_THRESHOLD, SPLICE_OVERLOAD_HIGH_THRESHOLD, SPLICING_INSTABILITY_HIGH_THRESHOLD,
@@ -80,7 +81,31 @@ struct SummaryJson<'a> {
     reference: ReferenceJson,
     /// Cell-cycle confounder summary.
     cell_cycle: CellCycleSummaryJson,
+    /// Tier B summary (input level L2); `null` without a junction matrix.
+    junctions: Option<JunctionSummaryJson>,
     provenance: &'a Provenance,
+}
+
+#[derive(Serialize)]
+struct JunctionSummaryJson {
+    source: String,
+    n_junctions: usize,
+    n_annotated: usize,
+    n_cryptic_acceptor_junctions: usize,
+    n_skip_junctions: usize,
+    n_site_groups: usize,
+    min_junction_umis: u64,
+    n_defined_cells: usize,
+    cells_without_junctions: usize,
+    unannotated_junction_fraction_median: Option<f64>,
+    cryptic_3ss_fraction_median: Option<f64>,
+    cryptic_3ss_high_fraction: f64,
+    exon_skip_fraction_median: Option<f64>,
+    exon_skip_high_fraction: f64,
+    splice_site_shift_median: Option<f64>,
+    splice_site_shift_high_fraction: f64,
+    cryptic_strata: Vec<StratumStatJson>,
+    skip_strata: Vec<StratumStatJson>,
 }
 
 #[derive(Serialize)]
@@ -344,6 +369,7 @@ pub fn write_pipeline_contract(
     unspliced: Option<&UnsplicedMetrics>,
     intron_retention: Option<&IntronRetentionMetrics>,
     cell_cycle: &CellCycleMetrics,
+    junctions: Option<&JunctionMetrics>,
     cell_qc: &CellQc,
     strata: &Strata,
     provenance: &Provenance,
@@ -364,6 +390,7 @@ pub fn write_pipeline_contract(
         unspliced,
         intron_retention,
         cell_cycle,
+        junctions,
         cell_qc,
         strata,
         provenance,
@@ -605,6 +632,7 @@ fn write_summary_json(
     unspliced: Option<&UnsplicedMetrics>,
     intron_retention: Option<&IntronRetentionMetrics>,
     cell_cycle: &CellCycleMetrics,
+    junctions: Option<&JunctionMetrics>,
     cell_qc: &CellQc,
     strata: &Strata,
     provenance: &Provenance,
@@ -656,7 +684,7 @@ fn write_summary_json(
         input: InputJson {
             n_cells: input.n_cells,
             species,
-            levels: if unspliced.is_some() { vec!["L0", "L1"] } else { vec!["L0"] },
+            levels: input_levels(unspliced.is_some(), junctions.is_some()),
         },
         distributions: DistributionsJson {
             splice_fidelity_index: DistributionJson {
@@ -781,6 +809,45 @@ fn write_summary_json(
                 },
             }
         },
+        junctions: junctions.map(|m| {
+            let med = |v: &[f32]| {
+                let mut d: Vec<f64> = v.iter().filter(|x| x.is_finite()).map(|x| *x as f64).collect();
+                let q = quantile_f64(&mut d, 0.5);
+                if q.is_finite() { Some(q) } else { None }
+            };
+            let frac = |v: &[bool]| v.iter().filter(|f| **f).count() as f64 / v.len().max(1) as f64;
+            let stats = |v: &[crate::reference::StratumStat]| -> Vec<StratumStatJson> {
+                v.iter()
+                    .map(|s| StratumStatJson {
+                        name: s.name.clone(),
+                        n_cells: s.n_cells,
+                        n_defined: s.n_defined,
+                        median: opt_f32(s.median),
+                        mad: opt_f32(s.mad),
+                    })
+                    .collect()
+            };
+            JunctionSummaryJson {
+                source: m.source.clone(),
+                n_junctions: m.n_junctions,
+                n_annotated: m.n_annotated,
+                n_cryptic_acceptor_junctions: m.n_cryptic_acceptor_junctions,
+                n_skip_junctions: m.n_skip_junctions,
+                n_site_groups: m.n_site_groups,
+                min_junction_umis: m.min_junction_umis,
+                n_defined_cells: m.junction_umis.len() - m.undefined_cells,
+                cells_without_junctions: m.cells_without_junctions,
+                unannotated_junction_fraction_median: med(&m.unannotated_junction_fraction),
+                cryptic_3ss_fraction_median: med(&m.cryptic_3ss_fraction),
+                cryptic_3ss_high_fraction: frac(&m.cryptic_3ss_high),
+                exon_skip_fraction_median: med(&m.exon_skip_fraction),
+                exon_skip_high_fraction: frac(&m.exon_skip_high),
+                splice_site_shift_median: med(&m.splice_site_shift),
+                splice_site_shift_high_fraction: frac(&m.splice_site_shift_high),
+                cryptic_strata: stats(&m.cryptic_reference),
+                skip_strata: stats(&m.skip_reference),
+            }
+        }),
         provenance,
     };
 

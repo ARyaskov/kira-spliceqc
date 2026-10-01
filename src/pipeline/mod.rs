@@ -8,6 +8,7 @@ pub mod stage15_splicing_instability;
 pub mod stage16_unspliced;
 pub mod stage17_intron_retention;
 pub mod stage18_cell_cycle;
+pub mod stage19_junctions;
 pub mod stage1_expression;
 pub mod stage2_genesets;
 pub mod stage3_isoform;

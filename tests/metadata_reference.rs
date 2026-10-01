@@ -160,6 +160,7 @@ fn run(input: &Path, out: &Path, stratify_by: Option<&str>) {
         out_dir: out.to_path_buf(),
         cache_path: None,
         layers: None,
+        junctions: None,
         metadata: None,
         stratify_by: stratify_by.map(str::to_string),
         reference: None,

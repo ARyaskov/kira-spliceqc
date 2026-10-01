@@ -10,6 +10,7 @@ use crate::model::coupling::CouplingStressMetrics;
 use crate::model::exon_intron_bias::ExonIntronDefinitionMetrics;
 use crate::model::imbalance::SpliceosomeImbalanceMetrics;
 use crate::model::isoform_dispersion::IsoformDispersionMetrics;
+use crate::model::junctions::JunctionMetrics;
 use crate::model::missplicing::MissplicingMetrics;
 use crate::model::sis::{SpliceIntegrityClass, SpliceIntegrityMetrics};
 use crate::model::splicing_instability::SplicingInstabilityMetrics;
@@ -63,6 +64,21 @@ const COLUMNS: &[(&str, bool)] = &[
     ("ir_gene_dispersion", false),
     ("ir_genes_used", false),
     ("intron_retention_high", false),
+    // Tier B (input level L2); empty without a junction matrix.
+    ("junction_umis", false),
+    ("unannotated_junction_fraction", false),
+    ("cryptic_3ss_umis", false),
+    ("cryptic_3ss_fraction", false),
+    ("cryptic_3ss_fraction_dev", false),
+    ("cryptic_3ss_high", false),
+    ("exon_skip_umis", false),
+    ("exon_skip_fraction", false),
+    ("exon_skip_fraction_dev", false),
+    ("exon_skip_high", false),
+    ("splice_site_shift", false),
+    ("splice_site_shift_dev", false),
+    ("splice_site_shift_high", false),
+    ("site_groups_used", false),
     // Cell-cycle confounder annotation (Tirosh 2016 / Seurat rule).
     ("s_score_expr", false),
     ("g2m_score_expr", false),
@@ -103,6 +119,7 @@ pub fn write_tsv(
     unspliced: Option<&UnsplicedMetrics>,
     intron_retention: Option<&IntronRetentionMetrics>,
     cell_cycle: &CellCycleMetrics,
+    junctions: Option<&JunctionMetrics>,
     cell_qc: &CellQc,
     experimental: bool,
 ) -> Result<(), InputError> {
@@ -131,6 +148,7 @@ pub fn write_tsv(
             unspliced,
             intron_retention,
             cell_cycle,
+            junctions,
             cell_qc,
         );
         debug_assert_eq!(values.len(), COLUMNS.len());
@@ -179,6 +197,7 @@ fn cell_values<'a>(
     unspliced: Option<&UnsplicedMetrics>,
     ir: Option<&IntronRetentionMetrics>,
     cc: &CellCycleMetrics,
+    jn: Option<&JunctionMetrics>,
     qc: &CellQc,
 ) {
     out.push(Value::Index(cell_id));
@@ -218,6 +237,20 @@ fn cell_values<'a>(
     out.push(Value::F32(ir.map_or(f32::NAN, |m| m.ir_gene_dispersion[cell_id])));
     out.push(Value::OptU64(ir.map(|m| m.ir_genes_used[cell_id] as u64)));
     out.push(Value::OptBool(ir.map(|m| m.intron_retention_high[cell_id])));
+    out.push(Value::OptU64(jn.map(|m| m.junction_umis[cell_id])));
+    out.push(Value::F32(jn.map_or(f32::NAN, |m| m.unannotated_junction_fraction[cell_id])));
+    out.push(Value::OptU64(jn.map(|m| m.cryptic_3ss_umis[cell_id])));
+    out.push(Value::F32(jn.map_or(f32::NAN, |m| m.cryptic_3ss_fraction[cell_id])));
+    out.push(Value::F32(jn.map_or(f32::NAN, |m| m.cryptic_3ss_fraction_dev[cell_id])));
+    out.push(Value::OptBool(jn.map(|m| m.cryptic_3ss_high[cell_id])));
+    out.push(Value::OptU64(jn.map(|m| m.exon_skip_umis[cell_id])));
+    out.push(Value::F32(jn.map_or(f32::NAN, |m| m.exon_skip_fraction[cell_id])));
+    out.push(Value::F32(jn.map_or(f32::NAN, |m| m.exon_skip_fraction_dev[cell_id])));
+    out.push(Value::OptBool(jn.map(|m| m.exon_skip_high[cell_id])));
+    out.push(Value::F32(jn.map_or(f32::NAN, |m| m.splice_site_shift[cell_id])));
+    out.push(Value::F32(jn.map_or(f32::NAN, |m| m.splice_site_shift_dev[cell_id])));
+    out.push(Value::OptBool(jn.map(|m| m.splice_site_shift_high[cell_id])));
+    out.push(Value::OptU64(jn.map(|m| m.site_groups_used[cell_id] as u64)));
     out.push(Value::F32(cc.s_score[cell_id]));
     out.push(Value::F32(cc.g2m_score[cell_id]));
     out.push(Value::Str(cc.phase[cell_id].as_str()));

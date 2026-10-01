@@ -9,6 +9,7 @@ pub mod geneset_activity;
 pub mod imbalance;
 pub mod intron_retention;
 pub mod isoform_dispersion;
+pub mod junctions;
 pub mod missplicing;
 pub mod sis;
 pub mod splicing_instability;

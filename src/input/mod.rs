@@ -16,6 +16,8 @@ pub struct InputDescriptor {
     pub has_metadata: bool,
     /// Spliced/unspliced layer source (input level L1), when detected.
     pub layers: Option<crate::io::layers::LayerLocation>,
+    /// Junction count matrix (input level L2), when detected.
+    pub junctions: Option<crate::io::junctions::JunctionLocation>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

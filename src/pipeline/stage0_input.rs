@@ -8,6 +8,7 @@ use crate::input::error::InputError;
 use crate::input::shared_cache::validate_dimensions;
 use crate::input::{InputDescriptor, InputKind, OrganelleCacheInput};
 use crate::input::{h5ad, tenx};
+use crate::io::junctions::{JunctionLocation, detect_junctions};
 use crate::io::layers::{LayerLocation, detect_mtx_layers, h5ad_has_layers};
 
 pub fn run_stage0(
@@ -27,11 +28,37 @@ pub fn run_stage0_with_layers(
     cache_override: Option<&Path>,
     layers_override: Option<&Path>,
 ) -> Result<InputDescriptor, InputError> {
+    run_stage0_full(path, run_mode, cache_override, layers_override, None)
+}
+
+/// Stage 0 with explicit layer (`--layers`) and junction (`--junctions`)
+/// sources; both are auto-detected when absent.
+pub fn run_stage0_full(
+    path: &Path,
+    run_mode: RunMode,
+    cache_override: Option<&Path>,
+    layers_override: Option<&Path>,
+    junctions_override: Option<&Path>,
+) -> Result<InputDescriptor, InputError> {
     let mut descriptor = run_stage0_inner(path, run_mode, cache_override)?;
     descriptor.layers = detect_layers(&descriptor, layers_override)?;
     match &descriptor.layers {
         Some(location) => info!(layers = %location.describe(), "spliced/unspliced layers detected (input level L1)"),
         None => info!("no spliced/unspliced layers found (input level L0 only)"),
+    }
+    if let Some(p) = junctions_override
+        && !p.is_dir()
+    {
+        return Err(InputError::MissingFile(p.display().to_string()));
+    }
+    descriptor.junctions = match &descriptor.kind {
+        InputKind::TenX(tenx) => detect_junctions(&tenx.root, junctions_override),
+        InputKind::OrganelleCache(cache) => detect_junctions(&cache.root, junctions_override),
+        InputKind::H5AD(_) => junctions_override.map(|p| JunctionLocation::MtxDir(p.to_path_buf())),
+    };
+    match &descriptor.junctions {
+        Some(location) => info!(junctions = %location.describe(), "junction matrix detected (input level L2)"),
+        None => info!("no junction matrix found (Tier B unavailable)"),
     }
     Ok(descriptor)
 }
@@ -87,6 +114,7 @@ fn run_stage0_inner(
                 has_multiple_samples: validation.has_multiple_samples,
                 has_metadata: validation.has_metadata,
                 layers: None,
+                junctions: None,
             })
         }
         DetectedInput::H5AD(path) => {
@@ -104,6 +132,7 @@ fn run_stage0_inner(
                 has_multiple_samples: validation.has_multiple_samples,
                 has_metadata: validation.has_metadata,
                 layers: None,
+                junctions: None,
             })
         }
     };
@@ -156,5 +185,6 @@ fn descriptor_from_cache(
         has_multiple_samples: false,
         has_metadata: root.join("metadata.tsv").exists() || root.join("metadata.tsv.gz").exists(),
         layers: None,
+        junctions: None,
     })
 }

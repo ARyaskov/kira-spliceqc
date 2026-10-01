@@ -11,7 +11,9 @@ use crate::input::shared_cache::crc64_ecma;
 use crate::metrics::intron_retention::{
     MIN_CELLS_PER_GENE, MIN_GENE_UMIS, MIN_GENES as IRI_MIN_GENES, PRIOR_STRENGTH, WEIGHT_CAP_UMIS,
 };
+use crate::metrics::junctions::{CRYPTIC_MAX, CRYPTIC_MIN, MIN_JUNCTION_UMIS, MIN_RATIO_UMIS};
 use crate::metrics::unspliced::MIN_LAYER_UMIS;
+use crate::model::junctions::JunctionMetrics;
 use crate::model::cell_cycle::CellCycleMetrics;
 use crate::model::cell_qc::CellQc;
 use crate::model::intron_retention::IntronRetentionMetrics;
@@ -76,6 +78,9 @@ pub struct ReferenceInfo {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Parameters {
+    pub min_junction_umis: u64,
+    pub min_ratio_umis: u64,
+    pub cryptic_window_nt: [u64; 2],
     pub min_counts: u64,
     pub min_genes: u64,
     pub controls_per_gene: usize,
@@ -97,7 +102,20 @@ pub struct UndefinedCells {
     pub sos: usize,
     pub unspliced_fraction: Option<usize>,
     pub intron_retention_index: Option<usize>,
+    pub junction_metrics: Option<usize>,
     pub cell_cycle_phase: usize,
+}
+
+/// `["L0"]`, `["L0", "L1"]`, `["L0", "L2"]` or `["L0", "L1", "L2"]`.
+pub fn input_levels(has_layers: bool, has_junctions: bool) -> Vec<&'static str> {
+    let mut v = vec!["L0"];
+    if has_layers {
+        v.push("L1");
+    }
+    if has_junctions {
+        v.push("L2");
+    }
+    v
 }
 
 impl FileInfo {
@@ -122,6 +140,7 @@ pub fn build(
     geneset_catalog: FileInfo,
     reference_file: Option<FileInfo>,
     has_layers: bool,
+    junctions: Option<&JunctionMetrics>,
     strata: &Strata,
     cell_qc: &CellQc,
     sis: &SpliceIntegrityMetrics,
@@ -155,7 +174,7 @@ pub fn build(
         geneset_catalog,
         instability_panel_version: instability.panel_version,
         reference_file,
-        input_levels: if has_layers { vec!["L0", "L1"] } else { vec!["L0"] },
+        input_levels: input_levels(has_layers, junctions.is_some()),
         reference: ReferenceInfo {
             mode: strata.mode.as_str(),
             column: strata.column.clone(),
@@ -165,6 +184,9 @@ pub fn build(
             doublet_column: cell_qc.doublet_column.clone(),
         },
         parameters: Parameters {
+            min_junction_umis: MIN_JUNCTION_UMIS,
+            min_ratio_umis: MIN_RATIO_UMIS,
+            cryptic_window_nt: [CRYPTIC_MIN, CRYPTIC_MAX],
             min_counts: cell_qc.min_counts,
             min_genes: cell_qc.min_genes,
             controls_per_gene: CONTROLS_PER_GENE,
@@ -184,6 +206,7 @@ pub fn build(
             sos: count_nan(&instability.sos),
             unspliced_fraction: unspliced.map(|u| u.undefined_cells),
             intron_retention_index: intron_retention.map(|m| m.undefined_cells),
+            junction_metrics: junctions.map(|m| m.undefined_cells),
             cell_cycle_phase: cell_cycle
                 .phase
                 .iter()

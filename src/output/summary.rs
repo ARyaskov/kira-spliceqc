@@ -1,6 +1,7 @@
 use crate::model::cell_cycle::{CellCycleMetrics, CellCyclePhase};
 use crate::model::cell_qc::CellQc;
 use crate::model::collapse::{SpliceosomeCollapseMetrics, SpliceosomeCollapseStatus};
+use crate::model::junctions::JunctionMetrics;
 use crate::model::cryptic_risk::CrypticSplicingRiskMetrics;
 use crate::model::sis::{SpliceIntegrityClass, SpliceIntegrityMetrics};
 use crate::model::intron_retention::IntronRetentionMetrics;
@@ -17,6 +18,7 @@ pub fn format_summary(
     cell_qc: &CellQc,
     unspliced: Option<&UnsplicedMetrics>,
     intron_retention: Option<&IntronRetentionMetrics>,
+    junctions: Option<&JunctionMetrics>,
     strata: &Strata,
     experimental: bool,
 ) -> String {
@@ -51,6 +53,20 @@ pub fn format_summary(
         ),
         None => format!("{qc_line}Reference: {} (no stratification column)\n", strata.mode.as_str()),
     };
+    let tier_b = match junctions {
+        Some(j) => format!(
+            "Junctions (L2): {} junctions, {} annotated, {} cryptic-3'SS, {} skip; undefined in {} cells; cryptic-high {}, skip-high {}, shift-high {}\n",
+            j.n_junctions,
+            j.n_annotated,
+            j.n_cryptic_acceptor_junctions,
+            j.n_skip_junctions,
+            j.undefined_cells,
+            j.cryptic_3ss_high.iter().filter(|f| **f).count(),
+            j.exon_skip_high.iter().filter(|f| **f).count(),
+            j.splice_site_shift_high.iter().filter(|f| **f).count()
+        ),
+        None => String::new(),
+    };
     let tier_a = match unspliced {
         Some(u) => {
             let med = median(&u.unspliced_fraction);
@@ -65,13 +81,13 @@ pub fn format_summary(
                 None => String::new(),
             };
             format!(
-                "Input levels: L0, L1 ({})\n{}Unspliced fraction: median {:.3}, undefined in {} cells, nuclear-fraction flags: {}\n{}",
-                u.source, reference, med, u.undefined_cells, flagged, iri
+                "Input levels: L0, L1 ({})\n{}Unspliced fraction: median {:.3}, undefined in {} cells, nuclear-fraction flags: {}\n{}{}",
+                u.source, reference, med, u.undefined_cells, flagged, iri, tier_b
             )
         }
         None => format!(
-            "Input levels: L0 (no spliced/unspliced layers; Tier A metrics unavailable)\n{}",
-            reference
+            "Input levels: L0 (no spliced/unspliced layers; Tier A metrics unavailable)\n{}{}",
+            reference, tier_b
         ),
     };
     if !experimental {

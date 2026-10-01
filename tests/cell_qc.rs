@@ -59,6 +59,7 @@ fn low_depth_and_doublet_cells_are_flagged_and_excluded() {
         out_dir: out.path().to_path_buf(),
         cache_path: None,
         layers: None,
+        junctions: None,
         metadata: None,
         stratify_by: None,
         reference: None,

@@ -14,7 +14,7 @@ use crate::input::error::InputError;
 use crate::genesets::loader::EMBEDDED_SPLICE_GENESETS;
 use crate::output::provenance::{self, FileInfo};
 use crate::output::pipeline_contract;
-use crate::pipeline::stage0_input::run_stage0_with_layers;
+use crate::pipeline::stage0_input::{run_stage0_full, run_stage0_with_layers};
 use crate::pipeline::stage1_expression::{Stage1Output, run_stage1_full};
 use crate::pipeline::stage2_genesets::{aggregate_with_controls as run_stage2, standardize_activity};
 use crate::pipeline::stage3_isoform::compute as run_stage3;
@@ -32,6 +32,7 @@ use crate::pipeline::stage15_splicing_instability::compute as compute_splicing_i
 use crate::pipeline::stage16_unspliced::run_stage16;
 use crate::pipeline::stage17_intron_retention::run_stage17;
 use crate::pipeline::stage18_cell_cycle::run_stage18;
+use crate::pipeline::stage19_junctions::run_stage19;
 use crate::metrics::cell_cycle::cell_cycle_gene_ids;
 use crate::input::metadata::{CellMetadata, DOUBLET_ALIASES, is_doublet_value};
 use crate::model::cell_qc::CellQc;
@@ -90,11 +91,12 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
     std::fs::create_dir_all(&effective_out_dir)?;
 
     let stage0 = run_logged(0, || {
-        run_stage0_with_layers(
+        run_stage0_full(
             &config.input,
             config.run_mode,
             config.cache_path.as_deref(),
             config.layers.as_deref(),
+            config.junctions.as_deref(),
         )
     })?;
     // Stage 1 materialises an internal expression cache (expr.bin). It is an
@@ -104,8 +106,17 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
     let Stage1Output {
         matrix: stage1,
         layers: stage1_layers,
+        junctions: stage1_junctions,
         metadata: stage1_metadata,
     } = run_logged(1, || run_stage1_full(&stage0, &cache_dir, config.metadata.as_deref()))?;
+    if let Some(j) = &stage1_junctions {
+        info!(
+            target: "kira_spliceqc::cli::run",
+            source = j.source.as_str(),
+            junctions = j.n_junctions(),
+            "input level L2 available: junction matrix loaded"
+        );
+    }
     let external = match &config.reference {
         Some(path) => Some(ReferenceFile::read(path)?),
         None => None,
@@ -180,6 +191,13 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
         Ok(compute_splicing_instability(&stage1, Some(&controls), &strata))
     })?;
     let stage18 = run_logged(18, || Ok(run_stage18(&stage1, Some(&controls))))?;
+    let stage19 = match &stage1_junctions {
+        Some(junctions) => Some(run_logged(19, || Ok(run_stage19(junctions, &strata)))?),
+        None => {
+            info!(target: "kira_spliceqc::cli::run", "skipping Stage 19 (no junction matrix)");
+            None
+        }
+    };
     let (stage16, stage17) = match &stage1_layers {
         Some(layers) => (
             Some(run_logged(16, || Ok(run_stage16(layers, &strata, external.as_ref())))?),
@@ -219,6 +237,7 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
         stage0,
         stage1,
         stage1_layers,
+        stage1_junctions,
         stage2,
         stage3,
         stage4,
@@ -235,6 +254,7 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
         stage16,
         stage17,
         stage18,
+        stage19,
     };
 
     if config.extended && context.stage14.is_none() {
@@ -246,6 +266,7 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
         catalog_info,
         config.reference.as_deref().and_then(FileInfo::of_path),
         context.stage1_layers.is_some(),
+        context.stage19.as_ref(),
         &strata,
         &cell_qc,
         &context.stage6,
@@ -274,6 +295,7 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
             context.stage16.as_ref(),
             context.stage17.as_ref(),
             &context.stage18,
+            context.stage19.as_ref(),
             &cell_qc,
             &strata,
             &provenance,
@@ -302,6 +324,7 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
             context.stage16.as_ref(),
             context.stage17.as_ref(),
             &context.stage18,
+            context.stage19.as_ref(),
             &cell_qc,
             &strata,
             &provenance,
@@ -351,6 +374,7 @@ pub fn build_reference_file(config: RunConfig, out: &Path) -> Result<(), SpliceQ
     let Stage1Output {
         matrix,
         layers,
+        junctions: _,
         metadata,
     } = run_logged(1, || run_stage1_full(&stage0, &scratch, config.metadata.as_deref()))?;
     let layers = layers.expect("layers detected in stage 0");

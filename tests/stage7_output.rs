@@ -28,6 +28,7 @@ fn make_provenance(strata: &Strata, sis: &SpliceIntegrityMetrics, si: &SplicingI
         out_dir: PathBuf::from("out"),
         cache_path: None,
         layers: None,
+        junctions: None,
         metadata: None,
         stratify_by: None,
         reference: None,
@@ -41,7 +42,7 @@ fn make_provenance(strata: &Strata, sis: &SpliceIntegrityMetrics, si: &SplicingI
         threads: None,
         experimental_signatures: true,
     };
-    provenance::build(&config, FileInfo::of_bytes("test", b"catalog"), None, false, strata, &CellQc::none(strata.n_cells()), sis, si, None, None, cc)
+    provenance::build(&config, FileInfo::of_bytes("test", b"catalog"), None, false, None, strata, &CellQc::none(strata.n_cells()), sis, si, None, None, cc)
 }
 
 fn make_cell_cycle(n: usize) -> CellCycleMetrics {
@@ -231,6 +232,7 @@ fn json_schema_sanity() {
         None,
         None,
         &make_cell_cycle(2),
+        None,
         &CellQc::none(2),
         &Strata::global(2),
         &make_provenance(&Strata::global(2), &sis, &splicing_instability, &make_cell_cycle(2)),
@@ -289,6 +291,7 @@ fn tsv_header_order() {
         None,
         None,
         &make_cell_cycle(1),
+        None,
         &CellQc::none(1),
         true,
     )
@@ -311,7 +314,7 @@ fn tsv_header_order() {
 fn summary_formatting_snapshot() {
     let (_cells, _isoform, _missplicing, _imbalance, sis, _coupling, _exon_intron, _assembly, _) =
         make_metrics(3);
-    let text = summary::format_summary(&sis, None, None, &make_cell_cycle(3), &CellQc::none(3), None, None, &Strata::global(3), true);
+    let text = summary::format_summary(&sis, None, None, &make_cell_cycle(3), &CellQc::none(3), None, None, None, &Strata::global(3), true);
     let expected = "kira-spliceqc summary\n---------------------\nCells analyzed: 3\nInput levels: L0 (no spliced/unspliced layers; Tier A metrics unavailable)\nCell QC: 0 low-depth (< 0 UMIs or < 0 genes), 0 doublets; excluded from reference norms\nReference: global (no stratification column)\nCycling (S/G2M, Tirosh 2016): N/A (cell-cycle genes not mapped)\n\nIntegrity classes:\n  Intact:       0 (0.0%)\n  Stressed:     3 (100.0%)\n  Impaired:     0 (0.0%)\n  Broken:       0 (0.0%)\n\nMedian SIS: 0.75\nFailure fraction (Impaired+Broken): 0.0%\n\nCryptic splicing risk > 0.7: N/A\nSpliceosome collapse: N/A\n";
     assert_eq!(text, expected);
 }
@@ -351,6 +354,7 @@ fn json_deterministic_bytes() {
         None,
         None,
         &make_cell_cycle(2),
+        None,
         &CellQc::none(2),
         &Strata::global(2),
         &make_provenance(&Strata::global(2), &sis, &splicing_instability, &make_cell_cycle(2)),
@@ -375,6 +379,7 @@ fn json_deterministic_bytes() {
         None,
         None,
         &make_cell_cycle(2),
+        None,
         &CellQc::none(2),
         &Strata::global(2),
         &make_provenance(&Strata::global(2), &sis, &splicing_instability, &make_cell_cycle(2)),
@@ -419,6 +424,7 @@ fn run_stage7_outputs() {
         None,
         None,
         &make_cell_cycle(1),
+        None,
         &CellQc::none(1),
         &Strata::global(1),
         &make_provenance(&Strata::global(1), &sis, &splicing_instability, &make_cell_cycle(1)),
