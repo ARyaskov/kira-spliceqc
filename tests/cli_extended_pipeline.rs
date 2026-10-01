@@ -5,6 +5,12 @@ use std::sync::{Arc, Mutex};
 
 use kira_spliceqc::cli::config::{AnalysisMode, RunConfig, RunMode};
 use kira_spliceqc::cli::run::run_pipeline;
+
+/// Both tests run the pipeline, but only one captures its logs through a
+/// thread-local dispatcher: run concurrently, the other test's uncaptured
+/// `info!` calls can cache the callsite interest as "never" before the
+/// capturing dispatcher sees them, and stage lines go missing. Serialize.
+static PIPELINE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 use sha2::{Digest, Sha256};
 use tempfile::tempdir;
 
@@ -70,6 +76,7 @@ fn write_tenx_extended(dir: &Path) {
 
 #[test]
 fn extended_pipeline_logs_and_json() {
+    let _guard = PIPELINE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let input_dir = tempdir().unwrap();
     write_tenx_extended(input_dir.path());
 
@@ -107,6 +114,7 @@ fn extended_pipeline_logs_and_json() {
     let dispatch = tracing::Dispatch::new(subscriber);
 
     tracing::dispatcher::with_default(&dispatch, || {
+        tracing::callsite::rebuild_interest_cache();
         run_pipeline(config).unwrap();
     });
 
@@ -131,6 +139,7 @@ fn extended_pipeline_logs_and_json() {
 
 #[test]
 fn extended_pipeline_deterministic_hash() {
+    let _guard = PIPELINE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let input_dir = tempdir().unwrap();
     write_tenx_extended(input_dir.path());
 
