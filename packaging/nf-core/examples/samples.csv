@@ -1,0 +1,3 @@
+id,solo_out,metadata
+pbmc_a,/data/pbmc_a/Solo.out,/data/pbmc_a/metadata.tsv
+pbmc_b,/data/pbmc_b/Solo.out,

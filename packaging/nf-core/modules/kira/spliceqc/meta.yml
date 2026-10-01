@@ -1,0 +1,90 @@
+name: kira_spliceqc
+description: Per-cell splicing quality control from gene counts, spliced/unspliced layers and junction matrices
+keywords:
+  - single-cell
+  - splicing
+  - quality control
+  - intron retention
+  - cryptic splicing
+tools:
+  - kira-spliceqc:
+      description: Deterministic, explainable splicing QC for single-cell RNA-seq
+      homepage: https://github.com/ARyaskov/kira-spliceqc
+      documentation: https://aryaskov.github.io/kira-spliceqc/
+      tool_dev_url: https://github.com/ARyaskov/kira-spliceqc
+      licence: ["MIT"]
+      identifier: ""
+input:
+  - - meta:
+        type: map
+        description: Groovy map with sample information, e.g. [ id:'sample1' ]
+    - input:
+        type: directory
+        description: STARsolo Solo.out directory (Gene plus optional Velocyto and SJ subdirectories), a 10x MatrixMarket directory, or an .h5ad file
+        pattern: "*"
+    - metadata:
+        type: file
+        description: Optional cell metadata table (barcode plus columns such as cell_type or predicted_doublet)
+        pattern: "*.{tsv,csv}{,.gz}"
+    - reference:
+        type: file
+        description: Optional external reference built with `kira-spliceqc reference build`
+        pattern: "*.json"
+output:
+  - cells:
+      - meta:
+          type: map
+          description: Groovy map with sample information
+      - "${prefix}/kira-spliceqc/cells.tsv":
+          type: file
+          description: Per-cell metrics, deviations and flags
+          pattern: "cells.tsv"
+  - cells_json:
+      - meta:
+          type: map
+          description: Groovy map with sample information
+      - "${prefix}/kira-spliceqc/cells.json":
+          type: file
+          description: Per-cell metrics as JSON (when enabled)
+          pattern: "cells.json"
+  - summary:
+      - meta:
+          type: map
+          description: Groovy map with sample information
+      - "${prefix}/kira-spliceqc/summary.json":
+          type: file
+          description: Sample-level summary, reference strata and provenance
+          pattern: "summary.json"
+  - contract:
+      - meta:
+          type: map
+          description: Groovy map with sample information
+      - "${prefix}/kira-spliceqc/spliceqc.tsv":
+          type: file
+          description: Pipeline-contract table (regimes, confidence, flags)
+          pattern: "spliceqc.tsv"
+  - multiqc:
+      - meta:
+          type: map
+          description: Groovy map with sample information
+      - "${prefix}/kira-spliceqc/*_mqc.json":
+          type: file
+          description: MultiQC custom-content table
+          pattern: "*_mqc.json"
+  - step:
+      - meta:
+          type: map
+          description: Groovy map with sample information
+      - "${prefix}/kira-spliceqc/pipeline_step.json":
+          type: file
+          description: Pipeline ingestion manifest
+          pattern: "pipeline_step.json"
+  - versions:
+      - versions.yml:
+          type: file
+          description: File containing software versions
+          pattern: "versions.yml"
+authors:
+  - "@ARyaskov"
+maintainers:
+  - "@ARyaskov"

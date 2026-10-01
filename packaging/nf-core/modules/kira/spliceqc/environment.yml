@@ -1,0 +1,6 @@
+name: kira_spliceqc
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - bioconda::kira-spliceqc=0.3.0
