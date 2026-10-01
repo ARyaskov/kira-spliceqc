@@ -143,7 +143,7 @@ fn make_metrics(
         cat_imbalance: vec![0.03; n],
     };
     let splicing_instability = SplicingInstabilityMetrics {
-        panel_version: "SPLICEQC_INSTABILITY_PANEL_V1",
+        panel_version: "SPLICEQC_INSTABILITY_PANEL_V2",
         min_genes: 3,
         conflict_panel_enabled: true,
         nmd_panel_enabled: true,
@@ -286,7 +286,7 @@ fn json_schema_sanity() {
     assert!(v["cells"][0]["splicing_instability"]["sos"].is_number());
     assert_eq!(
         v["splicing_instability"]["panel_version"],
-        "SPLICEQC_INSTABILITY_PANEL_V1"
+        "SPLICEQC_INSTABILITY_PANEL_V2"
     );
 }
 

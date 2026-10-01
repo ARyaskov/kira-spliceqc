@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kira-spliceqc"
-version = "0.3.0"
+version = "0.5.0"
 description = "Python wrapper for the kira-spliceqc binary: run splicing QC and get an AnnData back"
 readme = "README.md"
 license = "MIT"

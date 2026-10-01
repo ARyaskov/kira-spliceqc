@@ -15,9 +15,32 @@ inputs, flags and version.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-01
+
 Phases 1-4 of the scientific roadmap: Tier A and Tier B direct splicing
 measurements, the validation package, and release / community
-integration.
+integration. Tier 1 (simulation) validation passes with AUROC 1.0 and
+flag FPR below 0.5 % for every spiked effect; tiers 2-3 on public data are
+specified in `benchmarks/` and not yet executed.
+
+### Changed (breaking)
+
+- Expression signatures (`*_expr`) are control-gene depth-corrected and
+  standardized within reference stratum and library-size bin; every value
+  differs from 0.3.0 (same names, same ranges). A zero MAD in a bin gives
+  an undefined z-score instead of a silent zero.
+- Experimental composite flags (`splice_overload_high`, `rloop_risk_high`,
+  `splicing_instability_high`) follow the shared outlier rule (stratum
+  deviation >= 3, BH-adjusted p < 0.05) instead of fixed cut-offs;
+  `summary.json.splicing_instability.thresholds` describes the rule.
+- Stage-15 panel version `SPLICEQC_INSTABILITY_PANEL_V2`: `TOP2A` (a G2/M
+  marker) left the conflict-risk panel; cell-cycle genes are excluded from
+  every control pool.
+- Pipeline contract version `0.5`: the `flags` vocabulary gains
+  `LOW_DEPTH`, `DOUBLET` and `CYCLING`; `species` is inferred instead of
+  always `unknown`. Column names and order of `spliceqc.tsv` are unchanged.
+- Expression cache `expr.bin` format version 2 (gene ids); caches written
+  by 0.3.0 are rebuilt automatically.
 
 ### Added (release and integration)
 

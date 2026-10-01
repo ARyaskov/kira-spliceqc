@@ -305,7 +305,7 @@ Class:
 ## Splicing Instability Proxies (Stage 15, expression-only)
 
 Panel version:
-- `SPLICEQC_INSTABILITY_PANEL_V1`
+- `SPLICEQC_INSTABILITY_PANEL_V2`
 
 Panels (human symbols, stable order):
 - Core spliceosome / snRNP load proxy:
@@ -315,7 +315,7 @@ Panels (human symbols, stable order):
 - R-loop resolution (protective axis):
   - `SETX,DDX5,DDX21,DHX9,RNASEH1,RNASEH2A,RNASEH2B,RNASEH2C,BRCA1,BRCA2`
 - Transcription-replication conflict risk (optional):
-  - `TOP1,TOP2B,POLR2A,SUPT5H,SUPT6H` (`TOP2A` removed in v0.4: G2/M marker)
+  - `TOP1,TOP2B,POLR2A,SUPT5H,SUPT6H` (`TOP2A` removed in v0.5, panel V2: G2/M marker)
 - NMD surveillance (optional):
   - `UPF1,UPF2,UPF3B,SMG1,SMG5,SMG6,SMG7`
 
@@ -347,7 +347,7 @@ Splicing Instability Index (SII):
 - with NMD panel disabled:
   - `SII(c) = relu(SOS(c))`
 
-Flags (recalibrated in v0.4; the fixed cut-offs SOS >= 2.0 / RLR >= 1.5 /
+Flags (recalibrated in v0.5; the fixed cut-offs SOS >= 2.0 / RLR >= 1.5 /
 SII >= 2.0 fired on 4 % of null cells):
 - signed composites `SOS`, `RLR_signed = 0.7 * (-Z(rloop)) + 0.3 * Z(conflict)` (or
   `-Z(rloop)`), `SII_signed = 0.6 * SOS + 0.4 * (-Z(nmd))` (or `SOS`) are standardized

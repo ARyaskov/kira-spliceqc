@@ -84,7 +84,7 @@ fn summary_json_schema() {
     assert!(v["qc"]["high_splice_noise_fraction"].is_number());
     assert_eq!(
         v["splicing_instability"]["panel_version"],
-        "SPLICEQC_INSTABILITY_PANEL_V1"
+        "SPLICEQC_INSTABILITY_PANEL_V2"
     );
     assert!(v["splicing_instability"]["thresholds"]["flag_rule"].is_string());
     assert_eq!(

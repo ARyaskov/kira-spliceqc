@@ -12,7 +12,7 @@ use crate::model::splicing_instability::{
 use self::aggregate::aggregate_cluster_stats;
 use self::panels::{
     CONFLICT_RISK_PANEL, MIN_GENES_PER_PANEL_CELL, NMD_PANEL, RLOOP_RESOLUTION_PANEL,
-    SPLICEOSOME_PANEL, SPLICEQC_INSTABILITY_PANEL_V1, SPLICING_RBP_PANEL,
+    SPLICEOSOME_PANEL, SPLICEQC_INSTABILITY_PANEL_V2, SPLICING_RBP_PANEL,
 };
 use self::scores::{panel_trimmed_mean, percentile};
 use crate::reference::external::ReferenceFile;
@@ -397,7 +397,7 @@ pub fn compute_with(
     );
 
     SplicingInstabilityMetrics {
-        panel_version: SPLICEQC_INSTABILITY_PANEL_V1,
+        panel_version: SPLICEQC_INSTABILITY_PANEL_V2,
         min_genes: MIN_GENES_PER_PANEL_CELL,
         conflict_panel_enabled,
         nmd_panel_enabled,

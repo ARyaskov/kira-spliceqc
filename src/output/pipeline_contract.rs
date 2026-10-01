@@ -30,7 +30,7 @@ use crate::stats::robust::quantile_f64;
 const PIPELINE_DIR: &str = "kira-spliceqc";
 
 /// Version of the spliceqc.tsv / summary.json contract consumed by kira-organelle.
-pub const PIPELINE_CONTRACT_VERSION: &str = "0.3";
+pub const PIPELINE_CONTRACT_VERSION: &str = "0.5";
 
 const SPLICEQC_HEADER: &str = "barcode\tsample\tcondition\tspecies\tlibsize\tnnz\texpressed_genes\tsplice_fidelity_index\tintron_retention_rate\texon_skipping_rate\talt_splice_burden\tsplice_junction_noise\tstress_splicing_index\tregime\tflags\tconfidence";
 

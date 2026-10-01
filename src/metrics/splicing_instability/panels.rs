@@ -1,4 +1,4 @@
-pub const SPLICEQC_INSTABILITY_PANEL_V1: &str = "SPLICEQC_INSTABILITY_PANEL_V1";
+pub const SPLICEQC_INSTABILITY_PANEL_V2: &str = "SPLICEQC_INSTABILITY_PANEL_V2";
 
 pub const SPLICEOSOME_PANEL: &[&str] = &[
     "SNRPB", "SNRPD1", "SNRPD2", "SNRPD3", "SNRPE", "SNRPF", "SNRPG", "SF3A1", "SF3A2", "SF3A3",
@@ -26,7 +26,7 @@ pub const RLOOP_RESOLUTION_PANEL: &[&str] = &[
     "BRCA2",
 ];
 
-/// TOP2A was removed in v0.4: it is a G2/M marker (Tirosh et al. 2016) and
+/// TOP2A was removed in v0.5 (panel V2): it is a G2/M marker (Tirosh et al. 2016) and
 /// made the conflict-risk core a proliferation readout.
 pub const CONFLICT_RISK_PANEL: &[&str] = &["TOP1", "TOP2B", "POLR2A", "SUPT5H", "SUPT6H"];
 

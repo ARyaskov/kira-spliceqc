@@ -2,7 +2,7 @@
 # bioconda-recipes/recipes/kira-spliceqc, set `version` and `sha256` to the
 # tagged crates.io tarball, and open a pull request.
 {% set name = "kira-spliceqc" %}
-{% set version = "0.3.0" %}
+{% set version = "0.5.0" %}
 
 package:
   name: {{ name }}

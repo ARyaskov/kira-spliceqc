@@ -9,8 +9,8 @@ process KIRA_SPLICEQC {
 
     conda "${moduleDir}/environment.yml"
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
-        'https://depot.galaxyproject.org/singularity/kira-spliceqc:0.3.0--h9ee0642_0' :
-        'biocontainers/kira-spliceqc:0.3.0--h9ee0642_0' }"
+        'https://depot.galaxyproject.org/singularity/kira-spliceqc:0.5.0--h9ee0642_0' :
+        'biocontainers/kira-spliceqc:0.5.0--h9ee0642_0' }"
 
     input:
     tuple val(meta), path(input), path(metadata), path(reference)

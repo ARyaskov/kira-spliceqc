@@ -17,7 +17,7 @@ from typing import Iterable
 import pandas as pd
 
 __all__ = ["run", "simulate", "validate", "reference_build", "binary", "read_results", "__version__"]
-__version__ = "0.3.0"
+__version__ = "0.5.0"
 
 PathLike = str | os.PathLike[str]
 

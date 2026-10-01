@@ -3,4 +3,4 @@ channels:
   - conda-forge
   - bioconda
 dependencies:
-  - bioconda::kira-spliceqc=0.3.0
+  - bioconda::kira-spliceqc=0.5.0
