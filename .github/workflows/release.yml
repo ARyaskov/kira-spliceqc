@@ -1,0 +1,143 @@
+name: Release
+
+# Static binaries for every tag `v*`: HDF5 is linked statically (hdf5-sys
+# `static` feature), so the artifacts depend only on the platform's libc.
+# The crate's `.cargo/config.toml` targets the build host's CPU; RUSTFLAGS
+# below overrides it with a portable baseline so the binaries run anywhere.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.optional }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            rustflags: "-C target-cpu=x86-64-v2"
+            optional: false
+          - os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+            rustflags: ""
+            optional: false
+          - os: macos-14
+            target: aarch64-apple-darwin
+            rustflags: ""
+            optional: false
+          - os: macos-13
+            target: x86_64-apple-darwin
+            rustflags: "-C target-cpu=x86-64-v2"
+            optional: false
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+            rustflags: "-C target-cpu=x86-64-v2"
+            optional: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.target }}
+      - name: Build
+        shell: bash
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags }}
+        run: cargo build --release --locked --target ${{ matrix.target }}
+      - name: Smoke test (simulate -> run -> validate)
+        shell: bash
+        run: |
+          BIN=target/${{ matrix.target }}/release/kira-spliceqc
+          [ -f "$BIN.exe" ] && BIN="$BIN.exe"
+          "$BIN" --version
+          "$BIN" simulate --out smoke/sim --n-cells 600 --seed 7
+          "$BIN" run --input smoke/sim --junctions smoke/sim/sj --out smoke/run --run-mode pipeline
+          "$BIN" validate --run smoke/run --truth smoke/sim/truth.tsv --out smoke/validation.json
+          test -s smoke/run/kira-spliceqc/kira_spliceqc_mqc.json
+      - name: Package
+        id: package
+        shell: bash
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          NAME=kira-spliceqc-${VERSION}-${{ matrix.target }}
+          mkdir -p dist/$NAME
+          cp README.md METRICS.md PIPELINE.md CHANGELOG.md LICENSE dist/$NAME/
+          cp -r resources dist/$NAME/
+          if [ -f target/${{ matrix.target }}/release/kira-spliceqc.exe ]; then
+            cp target/${{ matrix.target }}/release/kira-spliceqc.exe dist/$NAME/
+            (cd dist && 7z a -tzip $NAME.zip $NAME >/dev/null)
+            ARCHIVE=dist/$NAME.zip
+          else
+            cp target/${{ matrix.target }}/release/kira-spliceqc dist/$NAME/
+            strip dist/$NAME/kira-spliceqc || true
+            tar -C dist -czf dist/$NAME.tar.gz $NAME
+            ARCHIVE=dist/$NAME.tar.gz
+          fi
+          (cd dist && shasum -a 256 $(basename $ARCHIVE) > $(basename $ARCHIVE).sha256)
+          echo "archive=$ARCHIVE" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: |
+            ${{ steps.package.outputs.archive }}
+            ${{ steps.package.outputs.archive }}.sha256
+          if-no-files-found: error
+
+  release:
+    name: GitHub release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Release notes from CHANGELOG
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          awk -v v="$VERSION" '
+            $0 ~ "^## \\[" v "\\]" { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "See CHANGELOG.md." > notes.md
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: notes.md
+          files: dist/*
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+
+  crates-io:
+    name: cargo publish
+    needs: release
+    if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          if [ -z "$CARGO_REGISTRY_TOKEN" ]; then
+            echo "CARGO_REGISTRY_TOKEN not set; skipping cargo publish" >&2
+            exit 0
+          fi
+          cargo publish --locked
