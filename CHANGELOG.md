@@ -29,6 +29,11 @@ splicing measurements).
   skipped one by a single junction, so the previous `skip / (skip +
   inclusion)` understated skipping by up to a factor of two relative to the
   rMATS junction-count PSI complement it cites.
+- `LOW_DEPTH` and `DOUBLET` cells get undefined Tier A and Tier B
+  deviations (`unspliced_fraction_dev`, `intron_retention_index_dev`,
+  `cryptic_3ss_fraction_dev`, `exon_skip_fraction_dev`,
+  `splice_site_shift_dev`) as documented; they were excluded from the
+  norms but still received a deviation.
 - `splice_site_shift_dev` is standardized within stratum and
   junction-depth bin (the raw score rises with junction depth); false
   `splice_site_shift_high` calls on the simulation drop from 7 % to 1 %.

@@ -155,7 +155,7 @@ pub fn compute(
         .collect();
     let (_, reference) = robust_z_by_stratum(&index, strata);
     let norms = continuous_norms(&index, &se, strata);
-    let (dev, norm_source) = match external {
+    let (mut dev, norm_source) = match external {
         Some(ext) => (
             apply_continuous_norms(&index, &se, &strata.labels, &ext.norms),
             "external",
@@ -165,6 +165,7 @@ pub fn compute(
             "internal",
         ),
     };
+    strata.blank_excluded(&mut dev);
     let high = flag_outliers(&dev, strata, 1.0);
 
     IntronRetentionMetrics {

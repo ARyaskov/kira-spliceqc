@@ -84,6 +84,17 @@ impl Strata {
         self.excluded.iter().filter(|e| **e).count()
     }
 
+    /// Sets the value of every excluded cell (`LOW_DEPTH`, `DOUBLET`) to
+    /// NaN: such cells keep their raw metrics but get no deviation, since
+    /// their depth or composition is not what the norms describe.
+    pub fn blank_excluded(&self, values: &mut [f32]) {
+        for (v, &excluded) in values.iter_mut().zip(&self.excluded) {
+            if excluded {
+                *v = f32::NAN;
+            }
+        }
+    }
+
     pub fn n_strata(&self) -> usize {
         self.names.len()
     }

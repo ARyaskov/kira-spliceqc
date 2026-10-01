@@ -76,7 +76,7 @@ pub fn compute(
         .collect();
     let (_, reference) = logit_deviation_by_stratum(&unspliced_fraction, &trials, strata);
     let norms = proportion_norms(&unspliced_fraction, &trials, strata);
-    let (unspliced_fraction_dev, norm_source) = match external {
+    let (mut unspliced_fraction_dev, norm_source) = match external {
         Some(file) => (
             apply_proportion_norms(
                 &unspliced_fraction,
@@ -94,6 +94,7 @@ pub fn compute(
             )
         }
     };
+    strata.blank_excluded(&mut unspliced_fraction_dev);
     let nuclear_fraction_flag = flag_outliers(&unspliced_fraction_dev, strata, -1.0);
 
     UnsplicedMetrics {

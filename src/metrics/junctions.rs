@@ -455,12 +455,13 @@ pub fn compute(set: &JunctionSet, strata: &Strata) -> JunctionMetrics {
         .into_iter()
         .map(Some)
         .collect();
-    let cryptic_dev = apply_proportion_norms(
+    let mut cryptic_dev = apply_proportion_norms(
         &cryptic_fraction,
         &cryptic_trials,
         &strata.labels,
         &cryptic_norms,
     );
+    strata.blank_excluded(&mut cryptic_dev);
     let cryptic_high = flag_outliers(&cryptic_dev, strata, 1.0);
 
     let (_, skip_reference) = logit_deviation_by_stratum(&skip_fraction, &skip_trials, strata);
@@ -468,15 +469,18 @@ pub fn compute(set: &JunctionSet, strata: &Strata) -> JunctionMetrics {
         .into_iter()
         .map(Some)
         .collect();
-    let skip_dev =
+    let mut skip_dev =
         apply_proportion_norms(&skip_fraction, &skip_trials, &strata.labels, &skip_norms);
+    strata.blank_excluded(&mut skip_dev);
     let skip_high = flag_outliers(&skip_dev, strata, 1.0);
 
     // The shift score rises with junction depth (more sites, more UMIs per
     // site), so its deviation is standardized within stratum and
     // junction-depth bin like every depth-sensitive metric.
     let (_, shift_reference) = robust_z_by_stratum(&splice_site_shift, strata);
-    let (shift_dev, _) = robust_z_by_stratum_and_depth(&splice_site_shift, strata, &junction_umis);
+    let (mut shift_dev, _) =
+        robust_z_by_stratum_and_depth(&splice_site_shift, strata, &junction_umis);
+    strata.blank_excluded(&mut shift_dev);
     let shift_high = flag_outliers(&shift_dev, strata, 1.0);
 
     JunctionMetrics {
