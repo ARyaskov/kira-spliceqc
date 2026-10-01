@@ -126,6 +126,52 @@ fn panel_symbols() -> Vec<String> {
 }
 
 /// Writes a null 10x dataset; returns per-cell true library sizes by barcode.
+/// Junction matrix with no structure: `N_JUNCTION_GENES` three-exon genes,
+/// every cell draws ~`JUNCTION_UMIS_PER_CELL` junction UMIs with the same
+/// per-junction probabilities (canonical 0.44 each, skip 0.06, cryptic 0.06),
+/// written in the STARsolo SJ layout next to the main matrix.
+fn write_null_junctions(dir: &Path, rng: &mut Rng) {
+    const N_JUNCTION_GENES: usize = 80;
+    const JUNCTION_UMIS_PER_CELL: f64 = 600.0;
+    let mut features = String::new();
+    for g in 0..N_JUNCTION_GENES {
+        let o = (g * 10_000) as u64;
+        features.push_str(&format!("chr1\t{}\t{}\t1\t1\t1\n", o + 101, o + 200));
+        features.push_str(&format!("chr1\t{}\t{}\t1\t1\t1\n", o + 301, o + 400));
+        features.push_str(&format!("chr1\t{}\t{}\t1\t1\t0\n", o + 101, o + 400));
+        features.push_str(&format!("chr1\t{}\t{}\t1\t1\t0\n", o + 101, o + 180));
+    }
+    let probs = [0.44, 0.44, 0.06, 0.06];
+    let per_gene = JUNCTION_UMIS_PER_CELL / N_JUNCTION_GENES as f64;
+    let mut entries: Vec<(usize, usize, u32)> = Vec::new();
+    for cell in 0..N_CELLS {
+        // junction depth scales with the cell's library size proxy
+        let scale = (0.5 + rng.uniform()).max(0.3);
+        for g in 0..N_JUNCTION_GENES {
+            for (k, p) in probs.iter().enumerate() {
+                let n = rng.poisson(per_gene * p * scale);
+                if n > 0 {
+                    entries.push((g * 4 + k + 1, cell + 1, n));
+                }
+            }
+        }
+    }
+    let sj = dir.join("sj");
+    fs::create_dir_all(&sj).unwrap();
+    fs::write(sj.join("features.tsv"), features).unwrap();
+    fs::write(
+        sj.join("barcodes.tsv"),
+        (0..N_CELLS).map(|c| format!("CELL{c:05}\n")).collect::<String>(),
+    )
+    .unwrap();
+    let mut mtx = String::from("%%MatrixMarket matrix coordinate integer general\n");
+    mtx.push_str(&format!("{} {} {}\n", N_JUNCTION_GENES * 4, N_CELLS, entries.len()));
+    for (j, c, k) in &entries {
+        mtx.push_str(&format!("{j} {c} {k}\n"));
+    }
+    fs::write(sj.join("matrix.mtx"), mtx).unwrap();
+}
+
 fn write_null_tenx(dir: &Path, seed: u64) -> HashMap<String, f64> {
     let mut rng = Rng(seed | 1);
     let mut genes = panel_symbols();
@@ -179,6 +225,7 @@ fn write_null_tenx(dir: &Path, seed: u64) -> HashMap<String, f64> {
     write_mtx("matrix.mtx", &triplets);
     write_mtx("spliced.mtx", &spliced);
     write_mtx("unspliced.mtx", &unspliced);
+    write_null_junctions(dir, &mut rng);
 
     let features = genes
         .iter()
@@ -285,7 +332,7 @@ fn null_model_baseline() {
         out_dir: out.path().to_path_buf(),
         cache_path: None,
         layers: None,
-        junctions: None,
+        junctions: Some(input.path().join("sj")),
         metadata: None,
         stratify_by: None,
         reference: None,
@@ -303,6 +350,14 @@ fn null_model_baseline() {
 
     let cells = Table::read(&out.path().join("cells.tsv"));
     assert_eq!(cells.rows.len(), N_CELLS);
+
+    // 0. Tier B is present and mostly defined on this null (junction depth ~600).
+    let junction_undefined = cells
+        .f64_col("cryptic_3ss_fraction")
+        .iter()
+        .filter(|v| v.is_none())
+        .count();
+    assert!(junction_undefined * 20 <= N_CELLS, "{junction_undefined} cells without Tier B");
 
     // 1. No missing-value flood: the null data resolves every panel and layer.
     for metric in [
@@ -326,7 +381,13 @@ fn null_model_baseline() {
 
     // 2a. Production flags on pure noise: at most 1 %.
     let mut report = String::new();
-    for flag in ["nuclear_fraction_flag", "intron_retention_high"] {
+    for flag in [
+        "nuclear_fraction_flag",
+        "intron_retention_high",
+        "cryptic_3ss_high",
+        "exon_skip_high",
+        "splice_site_shift_high",
+    ] {
         let f = fraction(&cells.str_col(flag), "true");
         report.push_str(&format!("{flag}: {:.3}\n", f));
         assert!(f <= MAX_FLAG_FRACTION, "{flag} fraction {f:.3} on null data");

@@ -20,7 +20,9 @@ splicing measurements).
   skipping an annotated exon vs their inclusion partners) and
   `splice_site_shift` (SpliZ-like), each with a stratum deviation and a
   BH-controlled `_high` flag; `summary.json.junctions` and
-  `cells.json.junctions` blocks; `input_levels` reports `L2`.
+  `cells.json.junctions` blocks; `input_levels` reports `L2`. The
+  null-model test carries a structure-free junction matrix: all three
+  Tier B flags fire on <= 0.4 % of null cells.
 
 - Input level L1: spliced/unspliced/ambiguous count layers are auto-detected
   next to a 10x directory, in the STARsolo `Velocyto/` sibling of `Gene/`,
