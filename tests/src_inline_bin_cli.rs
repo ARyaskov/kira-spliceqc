@@ -9,6 +9,7 @@ fn run_mode_defaults_to_standalone() {
         bin_main::Cli::try_parse_from(["kira-spliceqc", "--input", "in", "--out", "out"]).unwrap();
     let run = match cli.command {
         Some(bin_main::Commands::Run(args)) => args,
+        Some(_) => panic!("not a run command"),
         None => cli.run,
     };
     assert!(matches!(run.run_mode, bin_main::RunModeArg::Standalone));
@@ -28,6 +29,7 @@ fn run_mode_accepts_pipeline() {
     .unwrap();
     let run = match cli.command {
         Some(bin_main::Commands::Run(args)) => args,
+        Some(_) => panic!("not a run command"),
         None => cli.run,
     };
     assert!(matches!(run.run_mode, bin_main::RunModeArg::Pipeline));
