@@ -134,6 +134,7 @@ Pipeline mode (`--run-mode pipeline`), output directory: `<OUT>/kira-spliceqc`:
 - `summary.json` (aggregate distributions/regimes/QC fractions)
 - `panels_report.tsv` (panel coverage/sum quantiles)
 - `pipeline_step.json` (pipeline ingestion manifest)
+- `kira_spliceqc_mqc.json` (MultiQC custom-content table; `multiqc <OUT>` shows one row per sample)
 - `cells.json` / `cells.tsv` (per-cell stage-7 outputs, depending on `--json`/`--tsv` flags)
 
 Before v0.3 the per-cell stage-7 table was also named `spliceqc.tsv` and was

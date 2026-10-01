@@ -114,6 +114,31 @@ fn summary_json_schema() {
 }
 
 #[test]
+fn multiqc_custom_content() {
+    let input = tempdir().unwrap();
+    write_tenx(input.path());
+    let out = tempdir().unwrap();
+    run_pipeline_contract(input.path(), out.path());
+
+    let path = out
+        .path()
+        .join("kira-spliceqc")
+        .join("kira_spliceqc_mqc.json");
+    let v: serde_json::Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+    assert_eq!(v["id"], "kira_spliceqc");
+    assert_eq!(v["plot_type"], "table");
+    let sample = input.path().file_name().unwrap().to_str().unwrap();
+    let row = &v["data"][sample];
+    assert_eq!(row["n_cells"], 2);
+    assert!(row["low_depth_fraction"].is_number());
+    assert_eq!(row["reference_mode"], "global");
+    // No layers, no junctions: no Tier A / Tier B columns.
+    assert!(row.get("unspliced_fraction_median").is_none());
+    assert!(row.get("cryptic_3ss_high_fraction").is_none());
+    assert!(v["headers"]["n_cells"]["title"].is_string());
+}
+
+#[test]
 fn pipeline_step_json_schema() {
     let input = tempdir().unwrap();
     write_tenx(input.path());
@@ -129,6 +154,7 @@ fn pipeline_step_json_schema() {
     assert_eq!(v["artifacts"]["summary"], "summary.json");
     assert_eq!(v["artifacts"]["primary_metrics"], "spliceqc.tsv");
     assert_eq!(v["artifacts"]["panels"], "panels_report.tsv");
+    assert_eq!(v["artifacts"]["multiqc"], "kira_spliceqc_mqc.json");
     assert_eq!(
         v["cell_metrics"],
         serde_json::json!({
@@ -168,6 +194,7 @@ fn pipeline_contract_outputs_are_deterministic() {
         "summary.json",
         "panels_report.tsv",
         "pipeline_step.json",
+        "kira_spliceqc_mqc.json",
     ] {
         let bytes1 = fs::read(base1.join(file)).unwrap();
         let bytes2 = fs::read(base2.join(file)).unwrap();

@@ -148,6 +148,9 @@ Outputs:
 - `summary.json`
   - includes additive `splicing_instability` block: `panel_version`, `thresholds`, `global_stats`, `cluster_stats`, `missingness`
 - `pipeline_step.json`
+- `kira_spliceqc_mqc.json`: MultiQC custom-content table (one row per sample:
+  cell counts, QC fractions, Tier A / Tier B medians and flag fractions);
+  `multiqc <OUT>` picks it up without a dedicated module.
 
 Note: the contract table `spliceqc.tsv` and the per-cell table `cells.tsv` have distinct names, so neither overwrites the other.
 

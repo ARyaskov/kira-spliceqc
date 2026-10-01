@@ -22,6 +22,7 @@ use crate::model::missplicing::MissplicingMetrics;
 use crate::model::sis::SpliceIntegrityMetrics;
 use crate::model::splicing_instability::{COMPOSITE_FLAG_RULE, SplicingInstabilityMetrics};
 use crate::model::unspliced::UnsplicedMetrics;
+use crate::output::multiqc;
 use crate::output::provenance::{Provenance, input_levels};
 use crate::reference::{DEVIATION_THRESHOLD, FLAG_FDR, MIN_STRATUM_CELLS, Strata};
 use crate::stats::robust::quantile_f64;
@@ -338,6 +339,7 @@ struct PipelineArtifactsJson {
     summary: &'static str,
     primary_metrics: &'static str,
     panels: &'static str,
+    multiqc: &'static str,
 }
 
 #[derive(Serialize)]
@@ -403,6 +405,17 @@ pub fn write_pipeline_contract(
     )?;
     info!("pipeline contract: writing pipeline_step.json");
     write_pipeline_step_json(&out_dir.join("pipeline_step.json"))?;
+    info!("pipeline contract: writing {}", multiqc::MULTIQC_FILE);
+    let summary_path = out_dir.join("summary.json");
+    let summary: serde_json::Value = serde_json::from_reader(
+        File::open(&summary_path).map_err(|e| InputError::io(&summary_path, e))?,
+    )
+    .map_err(|e| InputError::OutputSerialization(e.to_string()))?;
+    multiqc::write_multiqc(
+        out_dir,
+        &multiqc::sample_name(&provenance.command.input),
+        &summary,
+    )?;
     Ok(())
 }
 
@@ -1015,6 +1028,7 @@ fn write_pipeline_step_json(path: &Path) -> Result<(), InputError> {
             summary: "summary.json",
             primary_metrics: "spliceqc.tsv",
             panels: "panels_report.tsv",
+            multiqc: multiqc::MULTIQC_FILE,
         },
         cell_metrics: PipelineCellMetricsJson {
             file: "spliceqc.tsv",

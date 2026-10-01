@@ -9,6 +9,13 @@ All notable changes to this project are documented here. The format follows
 Phases 1 and 3 of the scientific roadmap (Tier A and Tier B, direct
 splicing measurements).
 
+### Added (release and integration)
+
+- `kira_spliceqc_mqc.json` in pipeline mode: a MultiQC custom-content table
+  (cells, LOW_DEPTH / DOUBLET / cycling fractions, Tier A and Tier B medians
+  and flag fractions, reference mode) that `multiqc` renders without a
+  dedicated module; listed in `pipeline_step.json.artifacts.multiqc`.
+
 ### Added (validation)
 
 - `kira-spliceqc simulate`: Poisson dataset with two cell types, layers,
