@@ -32,6 +32,7 @@ fn make_provenance(strata: &Strata, sis: &SpliceIntegrityMetrics, si: &SplicingI
         metadata: None,
         stratify_by: None,
         reference: None,
+        catalog: None,
         min_counts: 0,
         min_genes: 0,
         mode: AnalysisMode::Cell,

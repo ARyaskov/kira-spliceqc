@@ -5,13 +5,17 @@ use std::path::Path;
 use crate::input::error::InputError;
 
 const MAGIC: &[u8; 8] = b"KIRAEXP1";
-const VERSION: u32 = 1;
-const HEADER_SIZE: u64 = 52;
+/// Version 2 appends a gene-id string section after the cell names and an
+/// 8-byte `gene_id_offset` to the header.
+const VERSION: u32 = 2;
+const HEADER_SIZE: u64 = 60;
 
 pub struct CacheData {
     pub n_genes: usize,
     pub n_cells: usize,
     pub gene_symbols: Vec<String>,
+    /// Same order as `gene_symbols`; empty strings when unknown.
+    pub gene_ids: Vec<String>,
     pub cell_names: Vec<String>,
     pub triplets: Vec<(u32, u32, u32)>,
     pub libsizes: Vec<u64>,
@@ -71,6 +75,15 @@ pub fn write_expr_bin(path: &Path, data: CacheData) -> Result<(), InputError> {
         file.write_all(&[0]).map_err(|e| InputError::io(path, e))?;
     }
 
+    let gene_id_offset = file
+        .stream_position()
+        .map_err(|e| InputError::io(path, e))?;
+    for id in &data.gene_ids {
+        file.write_all(id.as_bytes())
+            .map_err(|e| InputError::io(path, e))?;
+        file.write_all(&[0]).map_err(|e| InputError::io(path, e))?;
+    }
+
     file.seek(SeekFrom::Start(0))
         .map_err(|e| InputError::io(path, e))?;
 
@@ -82,6 +95,7 @@ pub fn write_expr_bin(path: &Path, data: CacheData) -> Result<(), InputError> {
     write_u64(&mut file, libsize_offset, path)?;
     write_u64(&mut file, gene_index_offset, path)?;
     write_u64(&mut file, cell_index_offset, path)?;
+    write_u64(&mut file, gene_id_offset, path)?;
 
     Ok(())
 }

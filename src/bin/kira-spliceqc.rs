@@ -157,6 +157,10 @@ pub struct RunArgs {
     /// deviations and flags are then relative to the reference strata.
     #[arg(long)]
     pub reference: Option<PathBuf>,
+    /// Geneset catalog TSV (geneset_id, axis, gene_symbol[, ensembl_id]).
+    /// Default: resources/genesets/splicing_genesets.tsv or the embedded copy.
+    #[arg(long)]
+    pub catalog: Option<PathBuf>,
     /// Cells with fewer UMIs are flagged LOW_DEPTH and excluded from
     /// reference norms (0 disables).
     #[arg(long, default_value_t = 500)]
@@ -289,6 +293,7 @@ fn execute_reference_build(args: ReferenceBuildArgs) -> Result<(), SpliceQcError
         metadata: args.metadata,
         stratify_by: args.stratify_by,
         reference: None,
+        catalog: None,
         min_counts: args.min_counts,
         min_genes: args.min_genes,
         mode: AnalysisMode::Cell,
@@ -319,6 +324,7 @@ fn execute_run(args: RunArgs) -> Result<(), SpliceQcError> {
         metadata: args.metadata,
         stratify_by: args.stratify_by,
         reference: args.reference,
+        catalog: args.catalog,
         min_counts: args.min_counts,
         min_genes: args.min_genes,
         mode: match args.mode {

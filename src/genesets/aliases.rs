@@ -93,15 +93,47 @@ pub const LEGACY_ALIASES: &[(&str, &str)] = &[
     ("HN1", "JPT1"),
 ];
 
-/// Case-insensitive symbol index of a matrix (first occurrence wins).
+/// Case-insensitive index of a matrix's gene symbols *and* gene ids (first
+/// occurrence wins). Ids are also indexed without a version suffix, so a
+/// catalog token `ENSG00000115524` matches `ENSG00000115524.17`.
 pub fn symbol_index(matrix: &dyn ExpressionMatrix) -> AHashMap<String, u32> {
-    let mut index: AHashMap<String, u32> = AHashMap::with_capacity(matrix.n_genes());
+    let mut index: AHashMap<String, u32> = AHashMap::with_capacity(matrix.n_genes() * 2);
     for gene_idx in 0..matrix.n_genes() {
         index
             .entry(matrix.gene_symbol(gene_idx).to_ascii_uppercase())
             .or_insert(gene_idx as u32);
     }
+    for gene_idx in 0..matrix.n_genes() {
+        let id = matrix.gene_id(gene_idx);
+        if id.is_empty() {
+            continue;
+        }
+        let upper = id.to_ascii_uppercase();
+        index.entry(upper.clone()).or_insert(gene_idx as u32);
+        if let Some((stem, _)) = upper.split_once('.')
+            && stem.starts_with("ENS")
+        {
+            index.entry(stem.to_string()).or_insert(gene_idx as u32);
+        }
+    }
     index
+}
+
+/// Resolves a catalog entry given its symbol and an optional id: the id
+/// first (exact or version-stripped), then the symbol with aliases.
+pub fn resolve_entry(index: &AHashMap<String, u32>, symbol: &str, id: Option<&str>) -> Option<(u32, bool)> {
+    if let Some(id) = id.filter(|s| !s.is_empty()) {
+        let upper = id.to_ascii_uppercase();
+        if let Some(&g) = index.get(&upper) {
+            return Some((g, false));
+        }
+        if let Some((stem, _)) = upper.split_once('.')
+            && let Some(&g) = index.get(stem)
+        {
+            return Some((g, false));
+        }
+    }
+    resolve_symbol(index, symbol)
 }
 
 /// Gene id for `symbol`: the current symbol first, then any legacy alias of
@@ -121,6 +153,32 @@ pub fn resolve_symbol(index: &AHashMap<String, u32>, symbol: &str) -> Option<(u3
 /// (`Snrpb`), human symbols upper-case (`SNRPB`). Returns `"human"`,
 /// `"mouse"` or `"unknown"` (no symbols, or mixed casing).
 pub fn detect_species(matrix: &dyn ExpressionMatrix) -> &'static str {
+    // Ensembl id prefixes are unambiguous when present.
+    let (mut human_ids, mut mouse_ids, mut rat_ids, mut ids) = (0usize, 0usize, 0usize, 0usize);
+    for g in 0..matrix.n_genes() {
+        let id = matrix.gene_id(g).to_ascii_uppercase();
+        if id.starts_with("ENS") {
+            ids += 1;
+            if id.starts_with("ENSG") {
+                human_ids += 1;
+            } else if id.starts_with("ENSMUSG") {
+                mouse_ids += 1;
+            } else if id.starts_with("ENSRNOG") {
+                rat_ids += 1;
+            }
+        }
+    }
+    if ids * 2 >= matrix.n_genes().max(1) {
+        if human_ids * 10 >= ids * 9 {
+            return "human";
+        }
+        if mouse_ids * 10 >= ids * 9 {
+            return "mouse";
+        }
+        if rat_ids * 10 >= ids * 9 {
+            return "rat";
+        }
+    }
     let mut upper = 0usize;
     let mut title = 0usize;
     for g in 0..matrix.n_genes() {
@@ -165,6 +223,18 @@ mod tests {
         assert_eq!(resolve_symbol(&index, "srsf1"), Some((3, true)));
         assert_eq!(resolve_symbol(&index, "HNRNPC"), Some((5, false)));
         assert_eq!(resolve_symbol(&index, "SNRNP200"), None);
+    }
+
+    #[test]
+    fn ids_resolve_exactly_and_without_version() {
+        let mut index = AHashMap::new();
+        index.insert("SRSF1".to_string(), 1u32);
+        index.insert("ENSG00000136450.14".to_string(), 1u32);
+        index.insert("ENSG00000136450".to_string(), 1u32);
+        assert_eq!(resolve_entry(&index, "missing", Some("ENSG00000136450")), Some((1, false)));
+        assert_eq!(resolve_entry(&index, "missing", Some("ensg00000136450.3")), Some((1, false)));
+        assert_eq!(resolve_entry(&index, "SRSF1", Some("ENSG99999999999")), Some((1, false)));
+        assert_eq!(resolve_entry(&index, "nope", None), None);
     }
 
     #[test]

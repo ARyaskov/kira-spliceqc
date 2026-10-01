@@ -100,6 +100,7 @@ kira-spliceqc run --input ./sample --out ./out/sample --reference ./ref.json
 - `--metadata PATH`: cell metadata table (`barcode` + columns); auto-detected as `metadata.tsv[.gz]` next to a 10x directory, `.h5ad` inputs use `obs`.
 - `--stratify-by COLUMN`: metadata column defining reference strata (default: `cell_type`-like, then `cluster`-like columns, else one global stratum). Strata under 50 cells fold into `global`.
 - `--reference ref.json`: external reference (see above); `summary.json.reference` records the file and the metrics that used it.
+- `--catalog PATH`: geneset catalog to use instead of the embedded one (hash recorded in provenance).
 - `--min-counts N` (default 500) and `--min-genes N` (default 200): cells below either are flagged `LOW_DEPTH`, keep their raw metrics but get no deviations and are excluded from reference norms. A boolean-like metadata column (`predicted_doublet`, `doublet`, `is_doublet`, `scDblFinder.class`, ...) flags `DOUBLET` the same way.
 - `--extended`: enables stages 8-13 (`coupling`, `exon/intron`, `assembly`, `noise`, `cryptic risk`, `collapse`).
 - `--experimental-signatures`: writes the experimental composite signatures (`sis`/`class`, `SOS`/`RLR`/`SII` and their flags, cryptic risk, collapse) to the per-cell outputs. Off by default; implied by `--run-mode pipeline` because the pipeline contract is built on them.
@@ -178,9 +179,13 @@ These are deterministic expression-only metrics (no timepoints, no ML). Per-cell
 Panels are written with current HGNC symbols. Matching is case-insensitive
 (mouse `Srsf1` resolves) and falls back to a table of legacy aliases
 (`SFRS1` -> `SRSF1`, `ASCC3L1` -> `SNRNP200`, `U2AF65` -> `U2AF2`, ...), so
-datasets on older annotations do not silently lose panels. The species in
-`summary.json` is inferred from symbol casing (`human` / `mouse` / `unknown`).
-Ensembl-ID matching is not yet available.
+datasets on older annotations do not silently lose panels. Gene ids from
+`features.tsv` / `var` are indexed too (version suffixes ignored), so a catalog
+with an `ensembl_id` column (`--catalog my_catalog.tsv`, four tab-separated
+columns `geneset_id axis gene_symbol ensembl_id`) resolves genes by id even when
+the symbols are missing or opaque. The species in `summary.json` comes from the
+Ensembl id prefix (`ENSG` / `ENSMUSG` / `ENSRNOG`) or, without ids, from symbol
+casing. The embedded catalog carries symbols only.
 
 ## Depth correction and reference strata
 

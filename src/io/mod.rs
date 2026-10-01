@@ -8,6 +8,8 @@ use crate::input::error::InputError;
 #[derive(Debug, Clone)]
 pub struct RawMatrix {
     pub genes: Vec<String>,
+    /// Gene identifiers (Ensembl ids when the input has them; may equal the symbols).
+    pub gene_ids: Vec<String>,
     pub cells: Vec<String>,
     pub triplets: Vec<(u32, u32, u32)>,
 }
@@ -59,6 +61,7 @@ pub(crate) fn read_via_scio(path: &Path, format: DetectedFormat) -> Result<RawMa
 
     Ok(RawMatrix {
         genes: canonical.metadata.gene_symbols,
+        gene_ids: canonical.metadata.gene_ids,
         cells: canonical.metadata.barcodes,
         triplets,
     })

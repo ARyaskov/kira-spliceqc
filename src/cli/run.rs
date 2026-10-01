@@ -152,7 +152,13 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
 
     // Load catalog ONCE and pass &GenesetCatalog to all downstream consumers
     // (previously stages 2, 3 and pipeline contract each reloaded it).
-    let catalog_path = default_catalog_path();
+    let catalog_path = config.catalog.clone().unwrap_or_else(default_catalog_path);
+    if config.catalog.is_some() && !catalog_path.is_file() {
+        return Err(SpliceQcError::InvalidInput(format!(
+            "catalog not found: {}",
+            catalog_path.display()
+        )));
+    }
     let catalog = load_catalog(&catalog_path, &stage1)?;
     let catalog_info = FileInfo::of_path(&catalog_path).unwrap_or_else(|| {
         FileInfo::of_bytes("embedded://splicing_genesets.tsv", EMBEDDED_SPLICE_GENESETS.as_bytes())

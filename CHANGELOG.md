@@ -90,6 +90,10 @@ splicing measurements).
   `run --reference ref.json` assigns cells to the reference strata and
   computes Tier A deviations and flags against them, so a whole stratum
   shifted relative to the control is detected.
+- Gene ids (Ensembl) are carried through the expression cache (format
+  version 2) and indexed next to the symbols; catalogs may carry a fourth
+  `ensembl_id` column and are selected with `--catalog`; the species is
+  inferred from `ENSG` / `ENSMUSG` / `ENSRNOG` prefixes when ids exist.
 - Legacy HGNC alias table for panel symbol resolution (SR proteins,
   hnRNPs, snRNP/SF3 subunits, U2AF, NMD factors, cell-cycle genes) shared
   by the geneset loader, the stage-15 panels and the cell-cycle scores;

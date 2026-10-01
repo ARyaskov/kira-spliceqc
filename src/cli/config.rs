@@ -21,6 +21,10 @@ pub struct RunConfig {
     /// External reference file (`ref.json` from `reference build`). Tier A
     /// deviations and flags are then relative to the reference's strata.
     pub reference: Option<PathBuf>,
+    /// Explicit geneset catalog TSV (`geneset_id axis gene_symbol [ensembl_id]`);
+    /// default: `resources/genesets/splicing_genesets.tsv` next to the binary
+    /// or the embedded copy.
+    pub catalog: Option<PathBuf>,
     /// Cells below either threshold get `LOW_DEPTH` and are left out of
     /// reference norms (0 disables).
     pub min_counts: u64,

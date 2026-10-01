@@ -5,7 +5,7 @@ use std::path::Path;
 
 use tracing::{debug, info, warn};
 
-use crate::genesets::aliases::{resolve_symbol, symbol_index};
+use crate::genesets::aliases::{resolve_entry, symbol_index};
 
 use crate::expression::ExpressionMatrix;
 use crate::genesets::{Geneset, GenesetCatalog};
@@ -22,7 +22,8 @@ pub fn load_catalog(
     path: &Path,
     matrix: &dyn ExpressionMatrix,
 ) -> Result<GenesetCatalog, InputError> {
-    let mut entries: BTreeMap<String, (String, Vec<String>)> = BTreeMap::new();
+    // geneset id -> (axis, [(symbol, optional ensembl id)])
+    let mut entries: CatalogEntries = BTreeMap::new();
     match File::open(path) {
         Ok(file) => {
             let reader = BufReader::new(file);
@@ -46,8 +47,8 @@ pub fn load_catalog(
         symbols.dedup();
         let mut gene_ids = Vec::with_capacity(symbols.len());
         let mut missing = Vec::new();
-        for symbol in symbols {
-            match resolve_symbol(&symbol_to_id, &symbol) {
+        for (symbol, ensembl) in symbols {
+            match resolve_entry(&symbol_to_id, &symbol, ensembl.as_deref()) {
                 Some((gid, via_alias)) => {
                     if via_alias {
                         aliased_total += 1;
@@ -86,22 +87,16 @@ pub fn load_catalog(
     Ok(GenesetCatalog { genesets })
 }
 
-fn parse_catalog_str(
-    content: &str,
-    source: &str,
-    entries: &mut BTreeMap<String, (String, Vec<String>)>,
-) -> Result<(), InputError> {
+type CatalogEntries = BTreeMap<String, (String, Vec<(String, Option<String>)>)>;
+
+fn parse_catalog_str(content: &str, source: &str, entries: &mut CatalogEntries) -> Result<(), InputError> {
     for (i, line) in content.lines().enumerate() {
         parse_catalog_line(i + 1, line, source, entries)?;
     }
     Ok(())
 }
 
-fn parse_catalog_lines<I>(
-    lines: I,
-    source: String,
-    entries: &mut BTreeMap<String, (String, Vec<String>)>,
-) -> Result<(), InputError>
+fn parse_catalog_lines<I>(lines: I, source: String, entries: &mut CatalogEntries) -> Result<(), InputError>
 where
     I: Iterator<Item = Result<String, std::io::Error>>,
 {
@@ -112,12 +107,8 @@ where
     Ok(())
 }
 
-fn parse_catalog_line(
-    line_no: usize,
-    line: &str,
-    source: &str,
-    entries: &mut BTreeMap<String, (String, Vec<String>)>,
-) -> Result<(), InputError> {
+/// Catalog line: `geneset_id<TAB>axis<TAB>gene_symbol[<TAB>ensembl_id]`.
+fn parse_catalog_line(line_no: usize, line: &str, source: &str, entries: &mut CatalogEntries) -> Result<(), InputError> {
     let mut trimmed = line.trim();
     if line_no == 1 {
         trimmed = trimmed.trim_start_matches('\u{feff}');
@@ -126,13 +117,13 @@ fn parse_catalog_line(
         return Ok(());
     }
     let cols: Vec<_> = trimmed.split('\t').collect();
-    if cols.len() != 3 {
+    if cols.len() != 3 && cols.len() != 4 {
         return Err(InputError::InvalidGenesetCatalog(format!(
             "{source}:{line_no}"
         )));
     }
     if cols[0] == "geneset_id" && cols[1] == "axis" && cols[2] == "gene_symbol" {
-        return Ok(());
+        return Ok(()); // header (3 or 4 columns)
     }
     let id = cols[0].trim();
     let axis = cols[1].trim();
@@ -150,6 +141,7 @@ fn parse_catalog_line(
             "{source}:{line_no}"
         )));
     }
-    entry.1.push(symbol.to_string());
+    let ensembl = cols.get(3).map(|c| c.trim()).filter(|c| !c.is_empty()).map(str::to_string);
+    entry.1.push((symbol.to_string(), ensembl));
     Ok(())
 }

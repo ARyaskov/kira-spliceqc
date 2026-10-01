@@ -68,6 +68,7 @@ fn config(input: &Path, out: &Path, reference: Option<&Path>) -> RunConfig {
         metadata: None,
         stratify_by: None,
         reference: reference.map(Path::to_path_buf),
+        catalog: None,
         min_counts: 0,
         min_genes: 0,
         mode: AnalysisMode::Cell,

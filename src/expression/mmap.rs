@@ -8,8 +8,8 @@ use crate::expression::ExpressionMatrix;
 use crate::input::error::InputError;
 
 const EXPR_MAGIC: &[u8; 8] = b"KIRAEXP1";
-const EXPR_VERSION: u32 = 1;
-const EXPR_HEADER_SIZE: usize = 52;
+const EXPR_VERSION: u32 = 2;
+const EXPR_HEADER_SIZE: usize = 60;
 
 /// CSR layout — one row per gene, `(cell, count)` pairs sorted by cell.
 struct ExprBinBackend {
@@ -33,6 +33,8 @@ pub struct MmapExpressionMatrix {
     n_genes: usize,
     n_cells: usize,
     gene_symbols: Vec<String>,
+    /// Gene identifiers (empty strings when the source had none).
+    gene_ids: Vec<String>,
     cell_names: Vec<String>,
     libsizes: Vec<u64>,
     /// Pre-computed for ExprBin; for SharedCache we derive O(1) from col_ptr.
@@ -78,12 +80,14 @@ impl MmapExpressionMatrix {
         let libsize_offset = read_u64(&mmap, 28)?;
         let gene_index_offset = read_u64(&mmap, 36)?;
         let cell_index_offset = read_u64(&mmap, 44)?;
+        let gene_id_offset = read_u64(&mmap, 52)?;
 
         let file_len = mmap.len() as u64;
         if !(counts_offset < libsize_offset
             && libsize_offset < gene_index_offset
             && gene_index_offset < cell_index_offset
-            && cell_index_offset <= file_len)
+            && cell_index_offset <= gene_id_offset
+            && gene_id_offset <= file_len)
         {
             return Err(InputError::InvalidSparseMatrix);
         }
@@ -93,13 +97,15 @@ impl MmapExpressionMatrix {
         let libsizes = parse_libsizes(&mmap, n_cells, libsize_offset, gene_index_offset)?;
         let gene_symbols =
             parse_expr_strings(&mmap, gene_index_offset, cell_index_offset, n_genes)?;
-        let cell_names = parse_expr_strings(&mmap, cell_index_offset, file_len, n_cells)?;
+        let cell_names = parse_expr_strings(&mmap, cell_index_offset, gene_id_offset, n_cells)?;
+        let gene_ids = parse_expr_strings(&mmap, gene_id_offset, file_len, n_genes)?;
         let cell_nnz = compute_cell_nnz_expr(&mmap, n_cells, &row_offsets, &row_nnz)?;
 
         Ok(Self {
             n_genes,
             n_cells,
             gene_symbols,
+            gene_ids,
             cell_names,
             libsizes,
             cell_nnz: Some(cell_nnz),
@@ -118,6 +124,8 @@ impl MmapExpressionMatrix {
         let n_genes = cache.n_genes;
         let n_cells = cache.n_cells;
         let gene_symbols = cache.genes.clone();
+        // The shared cache carries symbols only.
+        let gene_ids = vec![String::new(); n_genes];
         let cell_names = cache.barcodes.clone();
 
         // Compute libsizes once from zero-copy values slice.
@@ -138,6 +146,7 @@ impl MmapExpressionMatrix {
             n_genes,
             n_cells,
             gene_symbols,
+            gene_ids,
             cell_names,
             libsizes,
             cell_nnz: None, // computed O(1) via col_ptr deltas.
@@ -155,6 +164,9 @@ impl ExpressionMatrix for MmapExpressionMatrix {
     }
     fn gene_symbol(&self, gene_id: usize) -> &str {
         &self.gene_symbols[gene_id]
+    }
+    fn gene_id(&self, gene_id: usize) -> &str {
+        &self.gene_ids[gene_id]
     }
     fn cell_name(&self, cell_id: usize) -> &str {
         &self.cell_names[cell_id]

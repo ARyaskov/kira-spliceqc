@@ -95,8 +95,16 @@ pub fn run_stage1_full(
     };
 
     let raw_cell_order = raw.cells.clone();
+    let raw_gene_ids = raw.gene_ids;
     let gene_index = build_index(raw.genes, true)?;
     let cell_index = build_index(raw.cells, false)?;
+    // Gene ids follow the gene sort.
+    let mut sorted_gene_ids = vec![String::new(); input.n_genes];
+    if raw_gene_ids.len() == input.n_genes {
+        for (old, id) in raw_gene_ids.into_iter().enumerate() {
+            sorted_gene_ids[gene_index.old_to_new[old] as usize] = id;
+        }
+    }
 
     let metadata = match &input.kind {
         InputKind::TenX(tenx) => {
@@ -146,6 +154,7 @@ pub fn run_stage1_full(
         n_genes: input.n_genes,
         n_cells: input.n_cells,
         gene_symbols: gene_index.sorted_names,
+        gene_ids: sorted_gene_ids,
         cell_names: cell_index.sorted_names,
         triplets,
         libsizes,

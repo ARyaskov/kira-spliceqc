@@ -3,6 +3,10 @@ pub trait ExpressionMatrix: Sync {
     fn n_cells(&self) -> usize;
 
     fn gene_symbol(&self, gene_id: usize) -> &str;
+    /// Gene identifier (e.g. Ensembl id) when the input carries one; empty otherwise.
+    fn gene_id(&self, _gene_id: usize) -> &str {
+        ""
+    }
     fn cell_name(&self, cell_id: usize) -> &str;
 
     fn libsize(&self, cell_id: usize) -> u64;

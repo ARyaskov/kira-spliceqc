@@ -60,6 +60,7 @@ fn config(input: &Path, out: &Path, run_mode: RunMode) -> RunConfig {
         metadata: None,
         stratify_by: None,
         reference: None,
+        catalog: None,
         min_counts: 0,
         min_genes: 0,
         mode: AnalysisMode::Cell,

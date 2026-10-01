@@ -28,6 +28,7 @@ fn run_pipeline_contract(input: &Path, out: &Path) {
         metadata: None,
         stratify_by: None,
         reference: None,
+        catalog: None,
         min_counts: 0,
         min_genes: 0,
         mode: AnalysisMode::Cell,

@@ -160,15 +160,16 @@ When stage-0 selected shared-cache input (`kira-organelle.bin`), stage-1 opens t
 
 Format (little-endian, mmap-friendly):
 
-Header (52 bytes):
+Header (60 bytes):
 - `magic`: `[u8; 8] = b"KIRAEXP1"`
-- `version`: `u32 = 1`
+- `version`: `u32 = 2`
 - `n_genes`: `u32`
 - `n_cells`: `u32`
 - `counts_offset`: `u64`
 - `libsize_offset`: `u64`
 - `gene_index_offset`: `u64`
 - `cell_index_offset`: `u64`
+- `gene_id_offset`: `u64` (version 2: gene identifiers, e.g. Ensembl ids, after the cell names)
 
 Counts section (gene-major sparse rows):
 - per gene: `row_offset: u64`, `nnz: u32`, then `nnz` pairs `(cell_id: u32, count: u32)`

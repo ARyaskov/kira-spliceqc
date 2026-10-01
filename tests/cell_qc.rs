@@ -63,6 +63,7 @@ fn low_depth_and_doublet_cells_are_flagged_and_excluded() {
         metadata: None,
         stratify_by: None,
         reference: None,
+        catalog: None,
         min_counts: 500,
         min_genes: 20,
         mode: AnalysisMode::Cell,
