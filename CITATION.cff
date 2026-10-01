@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: If you use kira-spliceqc, please cite it as below.
+type: software
+title: "kira-spliceqc: deterministic, explainable splicing QC for single-cell RNA-seq"
+authors:
+  - family-names: Riaskov
+    given-names: Andrei
+version: 0.3.0
+date-released: "2026-10-01"
+license: MIT
+repository-code: https://github.com/ARyaskov/kira-spliceqc
+url: https://aryaskov.github.io/kira-spliceqc/
+keywords:
+  - single-cell
+  - splicing
+  - quality control
+  - intron retention
+  - cryptic splice sites

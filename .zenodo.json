@@ -1,0 +1,12 @@
+{
+  "title": "kira-spliceqc: deterministic, explainable splicing QC for single-cell RNA-seq",
+  "description": "Per-cell splicing quality control from gene counts (expression signatures), spliced/unspliced layers (unspliced fraction with Wilson intervals, intron retention index) and STARsolo junction matrices (cryptic 3' splice-site usage, exon skipping, splice-site shift), with stratified depth-corrected references, FDR-calibrated flags, a simulation-based validation suite and a public benchmark package.",
+  "creators": [{"name": "Riaskov, Andrei"}],
+  "license": "MIT",
+  "upload_type": "software",
+  "access_right": "open",
+  "keywords": ["single-cell RNA-seq", "splicing", "quality control", "intron retention", "SF3B1", "Rust"],
+  "related_identifiers": [
+    {"identifier": "https://github.com/ARyaskov/kira-spliceqc", "relation": "isSupplementTo", "scheme": "url"}
+  ]
+}
