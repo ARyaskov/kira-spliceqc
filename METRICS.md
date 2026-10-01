@@ -161,7 +161,8 @@ Per cell `c` (undefined when `junction_umis < MIN_JUNCTION_UMIS = 200`):
   of the reference stratum, `z = (r_c - r_s) / sqrt(v_s / n_c)`; the score is
   `median_sites |z| / 0.6745` over >= `MIN_SITE_GROUPS = 5` sites (~1 under the null)
 - `*_dev` and `*_high`: logit deviations with overdispersion (fractions) or robust z
-  (shift) within the reference stratum, flags at `dev >= 3` with BH-adjusted p < 0.05
+  within stratum and junction-depth bin (shift, whose raw score rises with junction
+  depth), flags at `dev >= 3` with BH-adjusted p < 0.05
 
 Caveats: 3' 10x libraries cover few junctions per cell, so most cells may fall
 below 200 junction UMIs; aggregate by cluster for such data (planned). Cryptic

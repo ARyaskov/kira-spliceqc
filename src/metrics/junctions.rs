@@ -39,7 +39,7 @@ use crate::io::junctions::Strand;
 use crate::model::junctions::JunctionMetrics;
 use crate::reference::{
     Strata, StratumStat, apply_proportion_norms, flag_outliers, logit_deviation_by_stratum,
-    proportion_norms, robust_z_by_stratum,
+    proportion_norms, robust_z_by_stratum, robust_z_by_stratum_and_depth,
 };
 use crate::stats::robust::median;
 
@@ -417,7 +417,11 @@ pub fn compute(set: &JunctionSet, strata: &Strata) -> JunctionMetrics {
     let skip_dev = apply_proportion_norms(&skip_fraction, &skip_trials, &strata.labels, &skip_norms);
     let skip_high = flag_outliers(&skip_dev, strata, 1.0);
 
-    let (shift_dev, shift_reference) = robust_z_by_stratum(&splice_site_shift, strata);
+    // The shift score rises with junction depth (more sites, more UMIs per
+    // site), so its deviation is standardized within stratum and
+    // junction-depth bin like every depth-sensitive metric.
+    let (_, shift_reference) = robust_z_by_stratum(&splice_site_shift, strata);
+    let (shift_dev, _) = robust_z_by_stratum_and_depth(&splice_site_shift, strata, &junction_umis);
     let shift_high = flag_outliers(&shift_dev, strata, 1.0);
 
     JunctionMetrics {
