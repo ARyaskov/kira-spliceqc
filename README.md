@@ -2,6 +2,11 @@
 
 Deterministic splicing quality control for single-cell RNA-seq.
 
+Documentation: <https://aryaskov.github.io/kira-spliceqc/> (metric cards,
+tutorials, interpretation rules; source in `docs/`). Integration:
+MultiQC custom content, an nf-core-style Nextflow module and a Python
+wrapper returning `AnnData` (`packaging/`, `python/`).
+
 ## Build requirements
 
 - Rust >= 1.95

@@ -4,13 +4,42 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/).
 
+Compatibility policy (full table in `docs/src/compatibility.md`): output
+column names and meanings, flag semantics, the pipeline contract, the
+geneset catalog and the stage-15 panels change only in a major release;
+minor releases may append columns, keys, genesets and flags; patch
+releases change none of them. Before 1.0 a minor release may still break
+compatibility, and every such change is listed under "Changed (breaking)"
+with the old and the new name. Outputs are byte-identical for the same
+inputs, flags and version.
+
 ## [Unreleased]
 
-Phases 1 and 3 of the scientific roadmap (Tier A and Tier B, direct
-splicing measurements).
+Phases 1-4 of the scientific roadmap: Tier A and Tier B direct splicing
+measurements, the validation package, and release / community
+integration.
 
 ### Added (release and integration)
 
+- Release workflow: static binaries for Linux (x86_64, aarch64), macOS
+  (arm64, x86_64) and Windows on `v*` tags, with a simulate -> run ->
+  validate smoke test, SHA-256 sums, release notes from this changelog and
+  `cargo publish`.
+- `packaging/`: Dockerfile (BioContainers-style), bioconda recipe,
+  nf-core-style Nextflow module with an example workflow, and a channel
+  overview.
+- `python/`: pip-installable wrapper that runs the binary and returns an
+  `AnnData` (`cells.tsv` in `obs`, `summary.json` in `uns`).
+- `docs/`: mdBook site (installation, inputs, reference model, outputs,
+  metric cards with formulas / ranges / confounders / literature, the full
+  specification, interpretation rules, "what the tool does not do", three
+  tutorials, validation, compatibility policy, release checklist) built to
+  GitHub Pages by the docs workflow.
+- `resources/genesets/README.md`: catalog version, format and the source
+  literature of every geneset; GitHub issue templates for bug reports, new
+  panels and new validation datasets.
+- `CITATION.cff`, `.zenodo.json` and a JOSS application-note draft
+  (`paper/`).
 - `kira_spliceqc_mqc.json` in pipeline mode: a MultiQC custom-content table
   (cells, LOW_DEPTH / DOUBLET / cycling fractions, Tier A and Tier B medians
   and flag fractions, reference mode) that `multiqc` renders without a
