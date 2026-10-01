@@ -125,7 +125,10 @@ impl Effect {
 
 /// Splicing-panel genes that must exist for the expression stages to run.
 pub fn panel_symbols() -> Vec<String> {
-    const CATALOG: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/resources/genesets/splicing_genesets.tsv"));
+    const CATALOG: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/resources/genesets/splicing_genesets.tsv"
+    ));
     let mut symbols: Vec<String> = Vec::new();
     for line in CATALOG.lines() {
         let line = line.trim_start_matches('\u{feff}').trim();
@@ -136,7 +139,15 @@ pub fn panel_symbols() -> Vec<String> {
             symbols.push(sym.to_string());
         }
     }
-    for panel in [SPLICEOSOME_PANEL, SPLICING_RBP_PANEL, RLOOP_RESOLUTION_PANEL, CONFLICT_RISK_PANEL, NMD_PANEL, S_GENES, G2M_GENES] {
+    for panel in [
+        SPLICEOSOME_PANEL,
+        SPLICING_RBP_PANEL,
+        RLOOP_RESOLUTION_PANEL,
+        CONFLICT_RISK_PANEL,
+        NMD_PANEL,
+        S_GENES,
+        G2M_GENES,
+    ] {
         symbols.extend(panel.iter().map(|s| s.to_string()));
     }
     symbols.sort();
@@ -156,7 +167,13 @@ pub fn simulate(config: &SimulationConfig, out: &Path) -> Result<Vec<Effect>, In
     let n_panel = genes.len();
     genes.extend((0..config.n_filler_genes).map(|i| format!("FILLER{i:04}")));
     let weights: Vec<f64> = (0..genes.len())
-        .map(|g| if g < n_panel { (0.5 + 0.8 * rng.gauss()).exp() } else { (1.5 * rng.gauss()).exp() })
+        .map(|g| {
+            if g < n_panel {
+                (0.5 + 0.8 * rng.gauss()).exp()
+            } else {
+                (1.5 * rng.gauss()).exp()
+            }
+        })
         .collect();
     let total: f64 = weights.iter().sum();
 
@@ -175,13 +192,25 @@ pub fn simulate(config: &SimulationConfig, out: &Path) -> Result<Vec<Effect>, In
             guard += 1;
         }
     };
-    assign(Effect::Cryptic, config.cryptic_fraction, &mut effects, &mut rng);
+    assign(
+        Effect::Cryptic,
+        config.cryptic_fraction,
+        &mut effects,
+        &mut rng,
+    );
     assign(Effect::Ir, config.ir_fraction, &mut effects, &mut rng);
-    assign(Effect::Damaged, config.damaged_fraction, &mut effects, &mut rng);
+    assign(
+        Effect::Damaged,
+        config.damaged_fraction,
+        &mut effects,
+        &mut rng,
+    );
     assign(Effect::Skip, config.skip_fraction, &mut effects, &mut rng);
 
     // Two cell types with different baseline unspliced fractions.
-    let cell_type: Vec<&str> = (0..n_cells).map(|c| if c % 2 == 0 { "TypeA" } else { "TypeB" }).collect();
+    let cell_type: Vec<&str> = (0..n_cells)
+        .map(|c| if c % 2 == 0 { "TypeA" } else { "TypeB" })
+        .collect();
     let base_uf = |c: usize| if c.is_multiple_of(2) { 0.25 } else { 0.45 };
 
     let mut matrix = Vec::new();
@@ -210,18 +239,23 @@ pub fn simulate(config: &SimulationConfig, out: &Path) -> Result<Vec<Effect>, In
             }
         }
     }
-    let write_mtx = |path: &Path, n_rows: usize, entries: &[(usize, usize, u32)]| -> Result<(), InputError> {
-        let mut s = String::from("%%MatrixMarket matrix coordinate integer general\n");
-        s.push_str(&format!("{n_rows} {n_cells} {}\n", entries.len()));
-        for (r, c, k) in entries {
-            s.push_str(&format!("{r} {c} {k}\n"));
-        }
-        fs::write(path, s).map_err(|e| InputError::io(path, e))
-    };
+    let write_mtx =
+        |path: &Path, n_rows: usize, entries: &[(usize, usize, u32)]| -> Result<(), InputError> {
+            let mut s = String::from("%%MatrixMarket matrix coordinate integer general\n");
+            s.push_str(&format!("{n_rows} {n_cells} {}\n", entries.len()));
+            for (r, c, k) in entries {
+                s.push_str(&format!("{r} {c} {k}\n"));
+            }
+            fs::write(path, s).map_err(|e| InputError::io(path, e))
+        };
     write_mtx(&out.join("matrix.mtx"), genes.len(), &matrix)?;
     write_mtx(&out.join("spliced.mtx"), genes.len(), &spliced)?;
     write_mtx(&out.join("unspliced.mtx"), genes.len(), &unspliced)?;
-    let features: String = genes.iter().enumerate().map(|(i, g)| format!("ENSG{i:08}\t{g}\tGene Expression\n")).collect();
+    let features: String = genes
+        .iter()
+        .enumerate()
+        .map(|(i, g)| format!("ENSG{i:08}\t{g}\tGene Expression\n"))
+        .collect();
     fs::write(out.join("features.tsv"), features).map_err(|e| InputError::io(out, e))?;
     let barcodes: String = (0..n_cells).map(|c| format!("CELL{c:05}\n")).collect();
     fs::write(out.join("barcodes.tsv"), &barcodes).map_err(|e| InputError::io(out, e))?;
@@ -261,11 +295,17 @@ pub fn simulate(config: &SimulationConfig, out: &Path) -> Result<Vec<Effect>, In
             }
         }
     }
-    write_mtx(&sj.join("matrix.mtx"), config.n_junction_genes * 4, &entries)?;
+    write_mtx(
+        &sj.join("matrix.mtx"),
+        config.n_junction_genes * 4,
+        &entries,
+    )?;
 
     // Metadata (strata) and truth.
     let mut metadata = String::from("barcode\tcell_type\n");
-    let mut truth = String::from("barcode\tcell_type\tlibsize_true\teffect\ttruth_cryptic\ttruth_ir\ttruth_damaged\ttruth_skip\n");
+    let mut truth = String::from(
+        "barcode\tcell_type\tlibsize_true\teffect\ttruth_cryptic\ttruth_ir\ttruth_damaged\ttruth_skip\n",
+    );
     for c in 0..n_cells {
         metadata.push_str(&format!("CELL{c:05}\t{}\n", cell_type[c]));
         let col = effects[c].column();
@@ -274,7 +314,8 @@ pub fn simulate(config: &SimulationConfig, out: &Path) -> Result<Vec<Effect>, In
             "CELL{c:05}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
             cell_type[c],
             libsizes[c],
-            col.map(|s| s.trim_start_matches("truth_")).unwrap_or("none"),
+            col.map(|s| s.trim_start_matches("truth_"))
+                .unwrap_or("none"),
             flag("truth_cryptic"),
             flag("truth_ir"),
             flag("truth_damaged"),

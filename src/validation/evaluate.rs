@@ -31,16 +31,23 @@ impl Pair {
     pub fn parse(spec: &str) -> Result<Self, InputError> {
         let parts: Vec<&str> = spec.split(':').collect();
         if parts.len() < 2 || parts.len() > 4 {
-            return Err(InputError::UnsupportedInput(format!("pair spec {spec:?}: expected truth:metric[:flag[:sign]]")));
+            return Err(InputError::UnsupportedInput(format!(
+                "pair spec {spec:?}: expected truth:metric[:flag[:sign]]"
+            )));
         }
         let sign = match parts.get(3) {
-            Some(s) => s.parse::<f64>().map_err(|_| InputError::UnsupportedInput(format!("pair spec {spec:?}: bad sign")))?,
+            Some(s) => s.parse::<f64>().map_err(|_| {
+                InputError::UnsupportedInput(format!("pair spec {spec:?}: bad sign"))
+            })?,
             None => 1.0,
         };
         Ok(Self {
             truth: parts[0].to_string(),
             metric: parts[1].to_string(),
-            flag: parts.get(2).filter(|f| !f.is_empty()).map(|f| f.to_string()),
+            flag: parts
+                .get(2)
+                .filter(|f| !f.is_empty())
+                .map(|f| f.to_string()),
             sign,
         })
     }
@@ -49,10 +56,30 @@ impl Pair {
 /// Default pairs for the `simulate` truth columns.
 pub fn default_pairs() -> Vec<Pair> {
     [
-        ("truth_cryptic", "cryptic_3ss_fraction_dev", "cryptic_3ss_high", 1.0),
-        ("truth_ir", "intron_retention_index_dev", "intron_retention_high", 1.0),
-        ("truth_damaged", "unspliced_fraction_dev", "nuclear_fraction_flag", -1.0),
-        ("truth_skip", "exon_skip_fraction_dev", "exon_skip_high", 1.0),
+        (
+            "truth_cryptic",
+            "cryptic_3ss_fraction_dev",
+            "cryptic_3ss_high",
+            1.0,
+        ),
+        (
+            "truth_ir",
+            "intron_retention_index_dev",
+            "intron_retention_high",
+            1.0,
+        ),
+        (
+            "truth_damaged",
+            "unspliced_fraction_dev",
+            "nuclear_fraction_flag",
+            -1.0,
+        ),
+        (
+            "truth_skip",
+            "exon_skip_fraction_dev",
+            "exon_skip_high",
+            1.0,
+        ),
     ]
     .iter()
     .map(|(t, m, f, s)| Pair {
@@ -159,7 +186,12 @@ fn auprc(scores: &[f64], labels: &[bool]) -> Option<f64> {
     Some(sum_precision / n_pos as f64)
 }
 
-fn score_pair(pair: &Pair, stratum: &str, rows: &[(f64, bool, Option<bool>)], n_undefined: usize) -> PairResult {
+fn score_pair(
+    pair: &Pair,
+    stratum: &str,
+    rows: &[(f64, bool, Option<bool>)],
+    n_undefined: usize,
+) -> PairResult {
     let scores: Vec<f64> = rows.iter().map(|r| r.0 * pair.sign).collect();
     let labels: Vec<bool> = rows.iter().map(|r| r.1).collect();
     let n_positive = labels.iter().filter(|l| **l).count();
@@ -177,7 +209,13 @@ fn score_pair(pair: &Pair, stratum: &str, rows: &[(f64, bool, Option<bool>)], n_
             }
         }
     }
-    let ratio = |a: usize, b: usize| if b > 0 { Some(a as f64 / b as f64) } else { None };
+    let ratio = |a: usize, b: usize| {
+        if b > 0 {
+            Some(a as f64 / b as f64)
+        } else {
+            None
+        }
+    };
     let precision = if has_flag { ratio(tp, tp + fp) } else { None };
     let recall = if has_flag { ratio(tp, tp + fnn) } else { None };
     let f1 = match (precision, recall) {
@@ -201,22 +239,36 @@ fn score_pair(pair: &Pair, stratum: &str, rows: &[(f64, bool, Option<bool>)], n_
     }
 }
 
-pub fn evaluate(cells_tsv: &Path, truth_tsv: &Path, pairs: &[Pair]) -> Result<ValidationReport, InputError> {
+pub fn evaluate(
+    cells_tsv: &Path,
+    truth_tsv: &Path,
+    pairs: &[Pair],
+) -> Result<ValidationReport, InputError> {
     let cells = read_table(cells_tsv)?;
     let truth = read_table(truth_tsv)?;
     let col = |t: &Table, name: &str| t.header.iter().position(|h| h == name);
-    let cell_name = col(&cells, "cell_name")
-        .ok_or_else(|| InputError::UnsupportedInput("cells.tsv has no cell_name column".to_string()))?;
-    let truth_barcode = col(&truth, "barcode")
-        .ok_or_else(|| InputError::UnsupportedInput("truth table has no barcode column".to_string()))?;
+    let cell_name = col(&cells, "cell_name").ok_or_else(|| {
+        InputError::UnsupportedInput("cells.tsv has no cell_name column".to_string())
+    })?;
+    let truth_barcode = col(&truth, "barcode").ok_or_else(|| {
+        InputError::UnsupportedInput("truth table has no barcode column".to_string())
+    })?;
     let truth_stratum = col(&truth, "cell_type");
-    let truth_index: HashMap<&str, &Vec<String>> = truth.rows.iter().map(|r| (r[truth_barcode].as_str(), r)).collect();
+    let truth_index: HashMap<&str, &Vec<String>> = truth
+        .rows
+        .iter()
+        .map(|r| (r[truth_barcode].as_str(), r))
+        .collect();
 
     let mut results = Vec::new();
     let mut n_scored = 0usize;
     for pair in pairs {
         let (Some(ti), Some(mi)) = (col(&truth, &pair.truth), col(&cells, &pair.metric)) else {
-            tracing::warn!(truth = pair.truth.as_str(), metric = pair.metric.as_str(), "pair skipped: column missing");
+            tracing::warn!(
+                truth = pair.truth.as_str(),
+                metric = pair.metric.as_str(),
+                "pair skipped: column missing"
+            );
             continue;
         };
         let fi = pair.flag.as_deref().and_then(|f| col(&cells, f));
@@ -224,12 +276,18 @@ pub fn evaluate(cells_tsv: &Path, truth_tsv: &Path, pairs: &[Pair]) -> Result<Va
         let mut by_stratum: BTreeMap<String, Vec<(f64, bool, Option<bool>)>> = BTreeMap::new();
         let mut undefined: BTreeMap<String, usize> = BTreeMap::new();
         for row in &cells.rows {
-            let Some(t) = truth_index.get(row[cell_name].as_str()) else { continue };
+            let Some(t) = truth_index.get(row[cell_name].as_str()) else {
+                continue;
+            };
             n_scored += 1;
             let label = truthy(&t[ti]);
             let flag = fi.map(|i| truthy(&row[i]));
             let stratum = truth_stratum.map(|i| t[i].clone()).unwrap_or_default();
-            let keys: Vec<String> = if stratum.is_empty() { vec!["all".to_string()] } else { vec!["all".to_string(), stratum] };
+            let keys: Vec<String> = if stratum.is_empty() {
+                vec!["all".to_string()]
+            } else {
+                vec!["all".to_string(), stratum]
+            };
             match row[mi].parse::<f64>() {
                 Ok(v) if v.is_finite() => {
                     for k in keys {
@@ -244,7 +302,12 @@ pub fn evaluate(cells_tsv: &Path, truth_tsv: &Path, pairs: &[Pair]) -> Result<Va
             }
         }
         for (stratum, rows) in &by_stratum {
-            results.push(score_pair(pair, stratum, rows, *undefined.get(stratum).unwrap_or(&0)));
+            results.push(score_pair(
+                pair,
+                stratum,
+                rows,
+                *undefined.get(stratum).unwrap_or(&0),
+            ));
         }
     }
     Ok(ValidationReport {
@@ -258,7 +321,10 @@ pub fn evaluate(cells_tsv: &Path, truth_tsv: &Path, pairs: &[Pair]) -> Result<Va
 
 impl ValidationReport {
     pub fn to_markdown(&self) -> String {
-        let fmt = |v: Option<f64>| v.map(|x| format!("{x:.3}")).unwrap_or_else(|| "-".to_string());
+        let fmt = |v: Option<f64>| {
+            v.map(|x| format!("{x:.3}"))
+                .unwrap_or_else(|| "-".to_string())
+        };
         let mut s = String::new();
         s.push_str(&format!(
             "# kira-spliceqc validation report\n\nTool {} · cells `{}` · truth `{}` · {} cells scored\n\n",

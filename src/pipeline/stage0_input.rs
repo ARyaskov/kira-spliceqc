@@ -43,7 +43,9 @@ pub fn run_stage0_full(
     let mut descriptor = run_stage0_inner(path, run_mode, cache_override)?;
     descriptor.layers = detect_layers(&descriptor, layers_override)?;
     match &descriptor.layers {
-        Some(location) => info!(layers = %location.describe(), "spliced/unspliced layers detected (input level L1)"),
+        Some(location) => {
+            info!(layers = %location.describe(), "spliced/unspliced layers detected (input level L1)")
+        }
         None => info!("no spliced/unspliced layers found (input level L0 only)"),
     }
     if let Some(p) = junctions_override
@@ -57,7 +59,9 @@ pub fn run_stage0_full(
         InputKind::H5AD(_) => junctions_override.map(|p| JunctionLocation::MtxDir(p.to_path_buf())),
     };
     match &descriptor.junctions {
-        Some(location) => info!(junctions = %location.describe(), "junction matrix detected (input level L2)"),
+        Some(location) => {
+            info!(junctions = %location.describe(), "junction matrix detected (input level L2)")
+        }
         None => info!("no junction matrix found (Tier B unavailable)"),
     }
     Ok(descriptor)
@@ -79,7 +83,9 @@ fn detect_layers(
     }
     Ok(match &descriptor.kind {
         InputKind::TenX(tenx) => detect_mtx_layers(&tenx.root, None),
-        InputKind::H5AD(h5) => h5ad_has_layers(&h5.path).then(|| LayerLocation::H5ad(h5.path.clone())),
+        InputKind::H5AD(h5) => {
+            h5ad_has_layers(&h5.path).then(|| LayerLocation::H5ad(h5.path.clone()))
+        }
         InputKind::OrganelleCache(cache) => detect_mtx_layers(&cache.root, None),
     })
 }

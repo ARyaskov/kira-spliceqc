@@ -52,11 +52,7 @@ fn write_h5ad_csr(path: &Path) {
         .write(&[0_i64, 1, 2])
         .unwrap();
     // kira-scio expects /X to carry the `shape` HDF5 *attribute* (not a sub-dataset).
-    let shape_attr = x_group
-        .new_attr::<u64>()
-        .shape(2)
-        .create("shape")
-        .unwrap();
+    let shape_attr = x_group.new_attr::<u64>().shape(2).create("shape").unwrap();
     shape_attr.write(&[2_u64, 2]).unwrap();
 
     let var_group = file.create_group("var").unwrap();

@@ -33,7 +33,8 @@ pub fn compute(activity: &GenesetActivityMatrix) -> Result<MissplicingMetrics, I
     let n_cells = activity.n_cells;
     let id_to_idx = build_id_index(activity);
 
-    let mut z_scores: AHashMap<&'static str, Vec<f32>> = AHashMap::with_capacity(REQUIRED_GENESETS.len());
+    let mut z_scores: AHashMap<&'static str, Vec<f32>> =
+        AHashMap::with_capacity(REQUIRED_GENESETS.len());
     let mut present_core = 0usize;
 
     for &id in REQUIRED_GENESETS {
@@ -178,7 +179,11 @@ fn mean_available(series: &[Option<&Vec<f32>>], cell: usize, min_finite: usize) 
             n += 1;
         }
     }
-    if n >= min_finite { sum / n as f32 } else { f32::NAN }
+    if n >= min_finite {
+        sum / n as f32
+    } else {
+        f32::NAN
+    }
 }
 
 #[inline]

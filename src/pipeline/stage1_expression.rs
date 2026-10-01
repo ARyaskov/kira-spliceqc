@@ -2,17 +2,17 @@ use std::path::Path;
 
 use tracing::info;
 
+use crate::expression::ExpressionMatrix;
 use crate::expression::cache_writer::{CacheData, write_expr_bin};
 use crate::expression::index::build_index;
-use crate::expression::ExpressionMatrix;
+use crate::expression::junctions::JunctionSet;
 use crate::expression::layers::{LayerMatrix, SplicedUnspliced};
 use crate::expression::mmap::MmapExpressionMatrix;
-use crate::expression::junctions::JunctionSet;
-use crate::io::junctions::{RawJunctions, read_junctions};
-use crate::io::layers::{RawLayer, RawLayers, read_layers};
 use crate::input::error::InputError;
 use crate::input::metadata::{CellMetadata, read_metadata_h5ad, read_metadata_tsv};
 use crate::input::{InputDescriptor, InputKind};
+use crate::io::junctions::{RawJunctions, read_junctions};
+use crate::io::layers::{RawLayer, RawLayers, read_layers};
 use crate::io::{h5ad, mtx};
 
 /// Stage 1 result: the mmap'd main matrix plus, when the input carries them,
@@ -54,19 +54,31 @@ pub fn run_stage1_full(
             let matrix = MmapExpressionMatrix::open_shared_cache(&shared.cache_path)?;
             // The shared cache is already in canonical order, so layers found
             // next to it are matched by barcode against that order.
-            let genes: Vec<String> =
-                (0..matrix.n_genes()).map(|g| matrix.gene_symbol(g).to_string()).collect();
-            let cells: Vec<String> =
-                (0..matrix.n_cells()).map(|c| matrix.cell_name(c).to_string()).collect();
+            let genes: Vec<String> = (0..matrix.n_genes())
+                .map(|g| matrix.gene_symbol(g).to_string())
+                .collect();
+            let cells: Vec<String> = (0..matrix.n_cells())
+                .map(|c| matrix.cell_name(c).to_string())
+                .collect();
             let layers = match &input.layers {
                 Some(location) => {
                     let raw_layers = read_layers(location, &genes, &cells)?;
-                    Some(build_layers(raw_layers, genes.len(), cells.len(), None, None))
+                    Some(build_layers(
+                        raw_layers,
+                        genes.len(),
+                        cells.len(),
+                        None,
+                        None,
+                    ))
                 }
                 None => None,
             };
             let junctions = match &input.junctions {
-                Some(location) => Some(build_junctions(read_junctions(location, &cells)?, cells.len(), None)),
+                Some(location) => Some(build_junctions(
+                    read_junctions(location, &cells)?,
+                    cells.len(),
+                    None,
+                )),
                 None => None,
             };
             let metadata = load_tsv_metadata(&shared.root, metadata_override, &cells)?;
@@ -126,7 +138,8 @@ pub fn run_stage1_full(
             Some(&cell_index.old_to_new),
         )
     });
-    let junctions = raw_junctions.map(|rj| build_junctions(rj, input.n_cells, Some(&cell_index.old_to_new)));
+    let junctions =
+        raw_junctions.map(|rj| build_junctions(rj, input.n_cells, Some(&cell_index.old_to_new)));
 
     let mut triplets: Vec<(u32, u32, u32)> = raw
         .triplets

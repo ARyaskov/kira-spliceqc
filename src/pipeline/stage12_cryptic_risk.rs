@@ -124,5 +124,9 @@ fn finite_min_max(values: &[f32]) -> (f32, f32) {
             }
         }
     }
-    if found { (min, max) } else { (f32::NAN, f32::NAN) }
+    if found {
+        (min, max)
+    } else {
+        (f32::NAN, f32::NAN)
+    }
 }

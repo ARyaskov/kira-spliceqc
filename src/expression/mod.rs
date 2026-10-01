@@ -37,12 +37,7 @@ pub trait ExpressionMatrix: Sync {
     /// one-pass merge against the cell's column.
     ///
     /// Default impl performs one `log_cp10k` call per panel gene.
-    fn gather_panel_log_cp10k(
-        &self,
-        panel_sorted: &[u32],
-        cell: usize,
-        out: &mut Vec<f32>,
-    ) {
+    fn gather_panel_log_cp10k(&self, panel_sorted: &[u32], cell: usize, out: &mut Vec<f32>) {
         out.reserve(panel_sorted.len());
         for &g in panel_sorted {
             out.push(self.log_cp10k(g as usize, cell));
@@ -78,11 +73,7 @@ pub trait ExpressionMatrix: Sync {
     }
 
     /// `(sum, detected)` over `panel_sorted` — used by pipeline_contract panels report.
-    fn panel_count_sum_and_detected(
-        &self,
-        panel_sorted: &[u32],
-        cell: usize,
-    ) -> (u64, usize) {
+    fn panel_count_sum_and_detected(&self, panel_sorted: &[u32], cell: usize) -> (u64, usize) {
         let mut sum = 0u64;
         let mut detected = 0usize;
         for &g in panel_sorted {

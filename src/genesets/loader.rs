@@ -52,7 +52,11 @@ pub fn load_catalog(
                 Some((gid, via_alias)) => {
                     if via_alias {
                         aliased_total += 1;
-                        debug!(geneset_id = id.as_str(), symbol = symbol.as_str(), "resolved through a legacy alias");
+                        debug!(
+                            geneset_id = id.as_str(),
+                            symbol = symbol.as_str(),
+                            "resolved through a legacy alias"
+                        );
                     }
                     gene_ids.push(gid);
                 }
@@ -80,7 +84,10 @@ pub fn load_catalog(
     }
 
     if aliased_total > 0 {
-        info!(aliased = aliased_total, "panel genes resolved through legacy symbol aliases");
+        info!(
+            aliased = aliased_total,
+            "panel genes resolved through legacy symbol aliases"
+        );
     }
     info!(genesets = genesets.len(), "geneset catalog loaded");
 
@@ -89,14 +96,22 @@ pub fn load_catalog(
 
 type CatalogEntries = BTreeMap<String, (String, Vec<(String, Option<String>)>)>;
 
-fn parse_catalog_str(content: &str, source: &str, entries: &mut CatalogEntries) -> Result<(), InputError> {
+fn parse_catalog_str(
+    content: &str,
+    source: &str,
+    entries: &mut CatalogEntries,
+) -> Result<(), InputError> {
     for (i, line) in content.lines().enumerate() {
         parse_catalog_line(i + 1, line, source, entries)?;
     }
     Ok(())
 }
 
-fn parse_catalog_lines<I>(lines: I, source: String, entries: &mut CatalogEntries) -> Result<(), InputError>
+fn parse_catalog_lines<I>(
+    lines: I,
+    source: String,
+    entries: &mut CatalogEntries,
+) -> Result<(), InputError>
 where
     I: Iterator<Item = Result<String, std::io::Error>>,
 {
@@ -108,7 +123,12 @@ where
 }
 
 /// Catalog line: `geneset_id<TAB>axis<TAB>gene_symbol[<TAB>ensembl_id]`.
-fn parse_catalog_line(line_no: usize, line: &str, source: &str, entries: &mut CatalogEntries) -> Result<(), InputError> {
+fn parse_catalog_line(
+    line_no: usize,
+    line: &str,
+    source: &str,
+    entries: &mut CatalogEntries,
+) -> Result<(), InputError> {
     let mut trimmed = line.trim();
     if line_no == 1 {
         trimmed = trimmed.trim_start_matches('\u{feff}');
@@ -141,7 +161,11 @@ fn parse_catalog_line(line_no: usize, line: &str, source: &str, entries: &mut Ca
             "{source}:{line_no}"
         )));
     }
-    let ensembl = cols.get(3).map(|c| c.trim()).filter(|c| !c.is_empty()).map(str::to_string);
+    let ensembl = cols
+        .get(3)
+        .map(|c| c.trim())
+        .filter(|c| !c.is_empty())
+        .map(str::to_string);
     entry.1.push((symbol.to_string(), ensembl));
     Ok(())
 }

@@ -59,7 +59,13 @@ pub fn robust_z(values: &[f32]) -> (Vec<f32>, RobustRef) {
             .iter()
             .map(|v| if v.is_finite() { 0.0 } else { f32::NAN })
             .collect();
-        return (z, RobustRef { median: med, mad: m });
+        return (
+            z,
+            RobustRef {
+                median: med,
+                mad: m,
+            },
+        );
     }
 
     let denom = MAD_TO_SIGMA * m + ROBUST_EPS;
@@ -73,7 +79,13 @@ pub fn robust_z(values: &[f32]) -> (Vec<f32>, RobustRef) {
             }
         })
         .collect();
-    (z, RobustRef { median: med, mad: m })
+    (
+        z,
+        RobustRef {
+            median: med,
+            mad: m,
+        },
+    )
 }
 
 /// `robust_z` with diagnostics: logs a warning when the MAD collapses to
@@ -116,7 +128,9 @@ pub fn quantile_f64(values: &mut [f64], q: f64) -> f64 {
     let pos = ((max_idx as f64) * q).round() as usize;
     let k = pos.min(max_idx);
     *values
-        .select_nth_unstable_by(k, |a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+        .select_nth_unstable_by(k, |a, b| {
+            a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
+        })
         .1
 }
 
@@ -132,9 +146,7 @@ fn median_in_place(buf: &mut [f32]) -> f32 {
         upper
     } else {
         // Lower-half max via second selection (mid-1) constrained to [0, mid).
-        let lower = *buf[..mid]
-            .select_nth_unstable_by(mid - 1, f32_total_cmp)
-            .1;
+        let lower = *buf[..mid].select_nth_unstable_by(mid - 1, f32_total_cmp).1;
         (lower + upper) * 0.5
     }
 }

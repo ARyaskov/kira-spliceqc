@@ -72,7 +72,11 @@ pub fn compute(
     debug_assert_eq!(strata.n_cells(), n_cells);
 
     let references: Vec<GeneReference> = match external {
-        Some(ext) => ext.gene_ratios.iter().map(|p| GeneReference { p: p.clone() }).collect(),
+        Some(ext) => ext
+            .gene_ratios
+            .iter()
+            .map(|p| GeneReference { p: p.clone() })
+            .collect(),
         None => strata
             .members()
             .par_iter()
@@ -152,8 +156,14 @@ pub fn compute(
     let (_, reference) = robust_z_by_stratum(&index, strata);
     let norms = continuous_norms(&index, &se, strata);
     let (dev, norm_source) = match external {
-        Some(ext) => (apply_continuous_norms(&index, &se, &strata.labels, &ext.norms), "external"),
-        None => (scaled_deviation_by_stratum_and_depth(&index, &se, strata, &depth), "internal"),
+        Some(ext) => (
+            apply_continuous_norms(&index, &se, &strata.labels, &ext.norms),
+            "external",
+        ),
+        None => (
+            scaled_deviation_by_stratum_and_depth(&index, &se, strata, &depth),
+            "internal",
+        ),
     };
     let high = flag_outliers(&dev, strata, 1.0);
 
@@ -242,12 +252,24 @@ mod tests {
         assert_eq!(m.undefined_cells, 0);
         assert_eq!(m.genes_with_reference, 30);
         // Typical cell: ratio at the reference -> index ~ 0.
-        assert!(m.intron_retention_index[0].abs() < 0.15, "{}", m.intron_retention_index[0]);
+        assert!(
+            m.intron_retention_index[0].abs() < 0.15,
+            "{}",
+            m.intron_retention_index[0]
+        );
         // Boosted cells: unspliced doubled -> index clearly positive (shrinkage
         // pulls it below the naive log2(2) but keeps the sign and order).
         for &c in &boosted {
-            assert!(m.intron_retention_index[c] > 0.4, "{}", m.intron_retention_index[c]);
-            assert!(m.intron_retention_index_dev[c] > 3.0, "{}", m.intron_retention_index_dev[c]);
+            assert!(
+                m.intron_retention_index[c] > 0.4,
+                "{}",
+                m.intron_retention_index[c]
+            );
+            assert!(
+                m.intron_retention_index_dev[c] > 3.0,
+                "{}",
+                m.intron_retention_index_dev[c]
+            );
             assert!(m.intron_retention_high[c]);
         }
         assert_eq!(m.intron_retention_high.iter().filter(|f| **f).count(), 2);

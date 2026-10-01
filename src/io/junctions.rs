@@ -91,12 +91,17 @@ pub struct RawJunctions {
 /// Finds a junction matrix for a 10x-style input directory: an explicit
 /// override, then the STARsolo sibling `<root>/SJ/<subset>` of
 /// `<root>/Gene/<subset>`.
-pub fn detect_junctions(input_dir: &Path, override_path: Option<&Path>) -> Option<JunctionLocation> {
+pub fn detect_junctions(
+    input_dir: &Path,
+    override_path: Option<&Path>,
+) -> Option<JunctionLocation> {
     if let Some(p) = override_path {
         return Some(JunctionLocation::MtxDir(p.to_path_buf()));
     }
     if let (Some(subset), Some(gene_dir)) = (input_dir.file_name(), input_dir.parent())
-        && gene_dir.file_name().is_some_and(|n| n == "Gene" || n == "GeneFull")
+        && gene_dir
+            .file_name()
+            .is_some_and(|n| n == "Gene" || n == "GeneFull")
         && let Some(root) = gene_dir.parent()
     {
         let candidate = root.join("SJ").join(subset);
@@ -122,7 +127,10 @@ fn resolve(dir: &Path, base: &str) -> Option<PathBuf> {
     if gz.is_file() { Some(gz) } else { None }
 }
 
-pub fn read_junctions(location: &JunctionLocation, barcodes: &[String]) -> Result<RawJunctions, InputError> {
+pub fn read_junctions(
+    location: &JunctionLocation,
+    barcodes: &[String],
+) -> Result<RawJunctions, InputError> {
     let JunctionLocation::MtxDir(dir) = location;
     let matrix_path = resolve(dir, "matrix.mtx")
         .ok_or_else(|| InputError::MissingFile(dir.join("matrix.mtx").display().to_string()))?;
@@ -228,12 +236,19 @@ fn parse_features(path: &Path) -> Result<Vec<Junction>, InputError> {
         }
         let cols: Vec<&str> = t.split('\t').collect();
         let junction = parse_feature_line(&cols).ok_or_else(|| {
-            InputError::InvalidJunctionFeatures(format!("{}:{}: {t:?}", path.display(), line_no + 1))
+            InputError::InvalidJunctionFeatures(format!(
+                "{}:{}: {t:?}",
+                path.display(),
+                line_no + 1
+            ))
         })?;
         out.push(junction);
     }
     if out.is_empty() {
-        return Err(InputError::InvalidJunctionFeatures(format!("{}: no junctions", path.display())));
+        return Err(InputError::InvalidJunctionFeatures(format!(
+            "{}: no junctions",
+            path.display()
+        )));
     }
     Ok(out)
 }
@@ -262,8 +277,14 @@ fn parse_feature_line(cols: &[&str]) -> Option<Junction> {
         let chrom = parts.next()?.to_string();
         let range = parts.next()?;
         let (s, e) = range.split_once('-')?;
-        let strand = parts.next().map(parse_strand).unwrap_or(Some(Strand::Unknown))?;
-        let annotated = cols.get(1).map(|a| parse_annotated(a)).unwrap_or(Some(false))?;
+        let strand = parts
+            .next()
+            .map(parse_strand)
+            .unwrap_or(Some(Strand::Unknown))?;
+        let annotated = cols
+            .get(1)
+            .map(|a| parse_annotated(a))
+            .unwrap_or(Some(false))?;
         return Some(Junction {
             chrom,
             start: s.parse().ok()?,

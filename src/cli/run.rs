@@ -9,14 +9,19 @@ use crate::expression::ExpressionMatrix;
 use crate::genesets::catalog::default_catalog_path;
 use crate::genesets::controls::ControlPool;
 use crate::genesets::load_catalog;
-use crate::metrics::splicing_instability::panel_gene_ids as instability_panel_gene_ids;
-use crate::input::error::InputError;
 use crate::genesets::loader::EMBEDDED_SPLICE_GENESETS;
-use crate::output::provenance::{self, FileInfo};
+use crate::input::error::InputError;
+use crate::input::metadata::{CellMetadata, DOUBLET_ALIASES, is_doublet_value};
+use crate::metrics::cell_cycle::cell_cycle_gene_ids;
+use crate::metrics::splicing_instability::panel_gene_ids as instability_panel_gene_ids;
+use crate::model::cell_qc::CellQc;
 use crate::output::pipeline_contract;
+use crate::output::provenance::{self, FileInfo};
 use crate::pipeline::stage0_input::{run_stage0_full, run_stage0_with_layers};
 use crate::pipeline::stage1_expression::{Stage1Output, run_stage1_full};
-use crate::pipeline::stage2_genesets::{aggregate_with_controls as run_stage2, standardize_activity};
+use crate::pipeline::stage2_genesets::{
+    aggregate_with_controls as run_stage2, standardize_activity,
+};
 use crate::pipeline::stage3_isoform::compute as run_stage3;
 use crate::pipeline::stage4_missplicing::compute as compute_missplicing;
 use crate::pipeline::stage5_imbalance::compute as compute_imbalance;
@@ -33,9 +38,6 @@ use crate::pipeline::stage16_unspliced::run_stage16;
 use crate::pipeline::stage17_intron_retention::run_stage17;
 use crate::pipeline::stage18_cell_cycle::run_stage18;
 use crate::pipeline::stage19_junctions::run_stage19;
-use crate::metrics::cell_cycle::cell_cycle_gene_ids;
-use crate::input::metadata::{CellMetadata, DOUBLET_ALIASES, is_doublet_value};
-use crate::model::cell_qc::CellQc;
 use crate::reference::Strata;
 use crate::reference::external::{ReferenceFile, build_reference};
 
@@ -108,7 +110,9 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
         layers: stage1_layers,
         junctions: stage1_junctions,
         metadata: stage1_metadata,
-    } = run_logged(1, || run_stage1_full(&stage0, &cache_dir, config.metadata.as_deref()))?;
+    } = run_logged(1, || {
+        run_stage1_full(&stage0, &cache_dir, config.metadata.as_deref())
+    })?;
     if let Some(j) = &stage1_junctions {
         info!(
             target: "kira_spliceqc::cli::run",
@@ -121,10 +125,19 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
         Some(path) => Some(ReferenceFile::read(path)?),
         None => None,
     };
-    let cell_qc = cell_qc(&stage1, &stage1_metadata, config.min_counts, config.min_genes);
+    let cell_qc = cell_qc(
+        &stage1,
+        &stage1_metadata,
+        config.min_counts,
+        config.min_genes,
+    );
     let mut strata = match &external {
         Some(file) => file.assign(&stage1_metadata, stage1.n_cells()),
-        None => Strata::from_metadata(&stage1_metadata, stage1.n_cells(), config.stratify_by.as_deref()),
+        None => Strata::from_metadata(
+            &stage1_metadata,
+            stage1.n_cells(),
+            config.stratify_by.as_deref(),
+        ),
     };
     strata.exclude(cell_qc.excluded());
     info!(
@@ -161,7 +174,10 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
     }
     let catalog = load_catalog(&catalog_path, &stage1)?;
     let catalog_info = FileInfo::of_path(&catalog_path).unwrap_or_else(|| {
-        FileInfo::of_bytes("embedded://splicing_genesets.tsv", EMBEDDED_SPLICE_GENESETS.as_bytes())
+        FileInfo::of_bytes(
+            "embedded://splicing_genesets.tsv",
+            EMBEDDED_SPLICE_GENESETS.as_bytes(),
+        )
     });
     info!(
         target: "kira_spliceqc::cli::run",
@@ -173,7 +189,11 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
     // Control-gene pool for depth correction: every gene of any splicing panel
     // is excluded from the pool (see genesets::controls).
     let controls = {
-        let mut exclude: Vec<u32> = catalog.genesets.iter().flat_map(|g| g.gene_ids.iter().copied()).collect();
+        let mut exclude: Vec<u32> = catalog
+            .genesets
+            .iter()
+            .flat_map(|g| g.gene_ids.iter().copied())
+            .collect();
         exclude.extend(instability_panel_gene_ids(&stage1));
         exclude.extend(cell_cycle_gene_ids(&stage1));
         let pool = ControlPool::new(stage1.gene_mean_log_cp10k(), &exclude);
@@ -194,7 +214,11 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
     let stage5 = run_logged(5, || compute_imbalance(&stage2))?;
     let stage6 = run_logged(6, || run_stage6(&stage3, &stage4, &stage5))?;
     let stage15 = run_logged(15, || {
-        Ok(compute_splicing_instability(&stage1, Some(&controls), &strata))
+        Ok(compute_splicing_instability(
+            &stage1,
+            Some(&controls),
+            &strata,
+        ))
     })?;
     let stage18 = run_logged(18, || Ok(run_stage18(&stage1, Some(&controls))))?;
     let stage19 = match &stage1_junctions {
@@ -206,8 +230,12 @@ pub fn run_pipeline(config: RunConfig) -> Result<(), SpliceQcError> {
     };
     let (stage16, stage17) = match &stage1_layers {
         Some(layers) => (
-            Some(run_logged(16, || Ok(run_stage16(layers, &strata, external.as_ref())))?),
-            Some(run_logged(17, || Ok(run_stage17(&stage1, layers, &strata, external.as_ref())))?),
+            Some(run_logged(16, || {
+                Ok(run_stage16(layers, &strata, external.as_ref()))
+            })?),
+            Some(run_logged(17, || {
+                Ok(run_stage17(&stage1, layers, &strata, external.as_ref()))
+            })?),
         ),
         None => {
             info!(target: "kira_spliceqc::cli::run", "skipping Stages 16-17 (no spliced/unspliced layers)");
@@ -370,7 +398,12 @@ pub fn build_reference_file(config: RunConfig, out: &Path) -> Result<(), SpliceQ
     }
     let scratch = std::env::temp_dir().join(format!("kira-spliceqc-ref-{}", std::process::id()));
     let stage0 = run_logged(0, || {
-        run_stage0_with_layers(&config.input, RunMode::Standalone, None, config.layers.as_deref())
+        run_stage0_with_layers(
+            &config.input,
+            RunMode::Standalone,
+            None,
+            config.layers.as_deref(),
+        )
     })?;
     if stage0.layers.is_none() {
         return Err(SpliceQcError::InvalidInput(
@@ -382,14 +415,25 @@ pub fn build_reference_file(config: RunConfig, out: &Path) -> Result<(), SpliceQ
         layers,
         junctions: _,
         metadata,
-    } = run_logged(1, || run_stage1_full(&stage0, &scratch, config.metadata.as_deref()))?;
+    } = run_logged(1, || {
+        run_stage1_full(&stage0, &scratch, config.metadata.as_deref())
+    })?;
     let layers = layers.expect("layers detected in stage 0");
-    let mut strata = Strata::from_metadata(&metadata, matrix.n_cells(), config.stratify_by.as_deref());
+    let mut strata =
+        Strata::from_metadata(&metadata, matrix.n_cells(), config.stratify_by.as_deref());
     strata.exclude(cell_qc(&matrix, &metadata, config.min_counts, config.min_genes).excluded());
     let stage16 = run_logged(16, || Ok(run_stage16(&layers, &strata, None)))?;
     let stage17 = run_logged(17, || Ok(run_stage17(&matrix, &layers, &strata, None)))?;
-    let symbols: Vec<String> = (0..matrix.n_genes()).map(|g| matrix.gene_symbol(g).to_string()).collect();
-    let file = build_reference(&strata, matrix.n_cells(), Some(&stage16), Some(&stage17), &symbols);
+    let symbols: Vec<String> = (0..matrix.n_genes())
+        .map(|g| matrix.gene_symbol(g).to_string())
+        .collect();
+    let file = build_reference(
+        &strata,
+        matrix.n_cells(),
+        Some(&stage16),
+        Some(&stage17),
+        &symbols,
+    );
     drop(matrix);
     let _ = std::fs::remove_dir_all(&scratch);
     file.write(out)?;
@@ -399,12 +443,21 @@ pub fn build_reference_file(config: RunConfig, out: &Path) -> Result<(), SpliceQ
         strata = file.strata.len(),
         "reference written"
     );
-    println!("reference written: {} ({} strata)", out.display(), file.strata.len());
+    println!(
+        "reference written: {} ({} strata)",
+        out.display(),
+        file.strata.len()
+    );
     Ok(())
 }
 
 /// Low-depth and doublet flags from the matrix and metadata.
-fn cell_qc(matrix: &dyn ExpressionMatrix, metadata: &CellMetadata, min_counts: u64, min_genes: u64) -> CellQc {
+fn cell_qc(
+    matrix: &dyn ExpressionMatrix,
+    metadata: &CellMetadata,
+    min_counts: u64,
+    min_genes: u64,
+) -> CellQc {
     let n = matrix.n_cells();
     let low_depth: Vec<bool> = (0..n)
         .map(|c| matrix.libsize(c) < min_counts || matrix.nnz_cell(c) < min_genes)

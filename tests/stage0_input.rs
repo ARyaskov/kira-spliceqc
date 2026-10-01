@@ -62,11 +62,7 @@ fn write_h5ad_csr(path: &Path, n_cells: i64, n_genes: i64) {
         .write(&indptr)
         .unwrap();
     // kira-scio reads /X.shape as an HDF5 attribute, not a sub-dataset.
-    let shape_attr = x_group
-        .new_attr::<u64>()
-        .shape(2)
-        .create("shape")
-        .unwrap();
+    let shape_attr = x_group.new_attr::<u64>().shape(2).create("shape").unwrap();
     shape_attr.write(&[n_cells as u64, n_genes as u64]).unwrap();
 
     let var_group = file.create_group("var").unwrap();

@@ -32,7 +32,9 @@ impl ControlPool {
     pub fn new(means: Vec<f32>, exclude: &[u32]) -> Self {
         let excluded: BTreeSet<u32> = exclude.iter().copied().collect();
         let mut ranked: Vec<u32> = (0..means.len() as u32)
-            .filter(|g| !excluded.contains(g) && means[*g as usize] > 0.0 && means[*g as usize].is_finite())
+            .filter(|g| {
+                !excluded.contains(g) && means[*g as usize] > 0.0 && means[*g as usize].is_finite()
+            })
             .collect();
         ranked.sort_by(|a, b| {
             means[*a as usize]

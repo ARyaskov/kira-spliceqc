@@ -8,7 +8,10 @@ use crate::expression::ExpressionMatrix;
 use crate::genesets::controls::ControlPool;
 use crate::model::cell_cycle::CellCycleMetrics;
 
-pub fn run_stage18(matrix: &dyn ExpressionMatrix, controls: Option<&ControlPool>) -> CellCycleMetrics {
+pub fn run_stage18(
+    matrix: &dyn ExpressionMatrix,
+    controls: Option<&ControlPool>,
+) -> CellCycleMetrics {
     let start = Instant::now();
     let metrics = crate::metrics::cell_cycle::compute(matrix, controls);
     info!(

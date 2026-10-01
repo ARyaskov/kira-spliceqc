@@ -21,8 +21,7 @@ use kira_spliceqc::cli::config::{AnalysisMode, RunConfig, RunMode};
 use kira_spliceqc::cli::run::run_pipeline;
 use kira_spliceqc::metrics::cell_cycle::{G2M_GENES, S_GENES};
 use kira_spliceqc::metrics::splicing_instability::panels::{
-    CONFLICT_RISK_PANEL, NMD_PANEL, RLOOP_RESOLUTION_PANEL, SPLICEOSOME_PANEL,
-    SPLICING_RBP_PANEL,
+    CONFLICT_RISK_PANEL, NMD_PANEL, RLOOP_RESOLUTION_PANEL, SPLICEOSOME_PANEL, SPLICING_RBP_PANEL,
 };
 use tempfile::tempdir;
 
@@ -162,11 +161,18 @@ fn write_null_junctions(dir: &Path, rng: &mut Rng) {
     fs::write(sj.join("features.tsv"), features).unwrap();
     fs::write(
         sj.join("barcodes.tsv"),
-        (0..N_CELLS).map(|c| format!("CELL{c:05}\n")).collect::<String>(),
+        (0..N_CELLS)
+            .map(|c| format!("CELL{c:05}\n"))
+            .collect::<String>(),
     )
     .unwrap();
     let mut mtx = String::from("%%MatrixMarket matrix coordinate integer general\n");
-    mtx.push_str(&format!("{} {} {}\n", N_JUNCTION_GENES * 4, N_CELLS, entries.len()));
+    mtx.push_str(&format!(
+        "{} {} {}\n",
+        N_JUNCTION_GENES * 4,
+        N_CELLS,
+        entries.len()
+    ));
     for (j, c, k) in &entries {
         mtx.push_str(&format!("{j} {c} {k}\n"));
     }
@@ -203,7 +209,9 @@ fn write_null_tenx(dir: &Path, seed: u64) -> HashMap<String, f64> {
             if k > 0 {
                 triplets.push((g + 1, cell + 1, k));
                 // Layers: every UMI is unspliced with the same probability.
-                let u = (0..k).filter(|_| rng.uniform() < NULL_UNSPLICED_RATIO).count() as u32;
+                let u = (0..k)
+                    .filter(|_| rng.uniform() < NULL_UNSPLICED_RATIO)
+                    .count() as u32;
                 if u > 0 {
                     unspliced.push((g + 1, cell + 1, u));
                 }
@@ -359,7 +367,10 @@ fn null_model_baseline() {
         .iter()
         .filter(|v| v.is_none())
         .count();
-    assert!(junction_undefined * 20 <= N_CELLS, "{junction_undefined} cells without Tier B");
+    assert!(
+        junction_undefined * 20 <= N_CELLS,
+        "{junction_undefined} cells without Tier B"
+    );
 
     // 1. No missing-value flood: the null data resolves every panel and layer.
     for metric in [
@@ -392,7 +403,10 @@ fn null_model_baseline() {
     ] {
         let f = fraction(&cells.str_col(flag), "true");
         report.push_str(&format!("{flag}: {:.3}\n", f));
-        assert!(f <= MAX_FLAG_FRACTION, "{flag} fraction {f:.3} on null data");
+        assert!(
+            f <= MAX_FLAG_FRACTION,
+            "{flag} fraction {f:.3} on null data"
+        );
     }
     // 2b. Experimental composite flags: baseline bound until Phase 2.
     for flag in [
@@ -403,7 +417,10 @@ fn null_model_baseline() {
     ] {
         let f = fraction(&cells.str_col(flag), "true");
         report.push_str(&format!("{flag} (experimental): {:.3}\n", f));
-        assert!(f <= MAX_EXPERIMENTAL_FLAG_FRACTION, "{flag} fraction {f:.3} on null data");
+        assert!(
+            f <= MAX_EXPERIMENTAL_FLAG_FRACTION,
+            "{flag} fraction {f:.3} on null data"
+        );
     }
     let class = cells.str_col("class");
     let failure = fraction(&class, "Impaired") + fraction(&class, "Broken");
@@ -451,8 +468,14 @@ fn null_model_baseline() {
 
     // 3b. Experimental composite: baseline bound.
     let rho = rho_with_libsize("sis");
-    report.push_str(&format!("spearman(sis, libsize) (experimental): {rho:+.3}\n"));
-    assert!(rho.abs() <= MAX_EXPERIMENTAL_ABS_SPEARMAN, "sis: |spearman| = {:.3}", rho.abs());
+    report.push_str(&format!(
+        "spearman(sis, libsize) (experimental): {rho:+.3}\n"
+    ));
+    assert!(
+        rho.abs() <= MAX_EXPERIMENTAL_ABS_SPEARMAN,
+        "sis: |spearman| = {:.3}",
+        rho.abs()
+    );
 
     // 3c. Depth-binned deviations: per depth quintile, |median| small and the
     // flag rate at most MAX_FLAG_FRACTION.
@@ -470,10 +493,19 @@ fn null_model_baseline() {
             let mut v: Vec<f64> = sel.iter().filter_map(|&i| values[i]).collect();
             v.sort_by(|a, b| a.partial_cmp(b).unwrap());
             let med = v[v.len() / 2];
-            let rate = sel.iter().filter(|&&i| flags[i] == "true").count() as f64 / sel.len() as f64;
-            report.push_str(&format!("{metric} quintile {q}: median {med:+.3}, {flag} rate {rate:.3}\n"));
-            assert!(med.abs() <= MAX_ABS_QUINTILE_MEDIAN, "{metric} quintile {q}: median {med:+.3}");
-            assert!(rate <= MAX_FLAG_FRACTION, "{flag} quintile {q}: rate {rate:.3}");
+            let rate =
+                sel.iter().filter(|&&i| flags[i] == "true").count() as f64 / sel.len() as f64;
+            report.push_str(&format!(
+                "{metric} quintile {q}: median {med:+.3}, {flag} rate {rate:.3}\n"
+            ));
+            assert!(
+                med.abs() <= MAX_ABS_QUINTILE_MEDIAN,
+                "{metric} quintile {q}: median {med:+.3}"
+            );
+            assert!(
+                rate <= MAX_FLAG_FRACTION,
+                "{flag} quintile {q}: rate {rate:.3}"
+            );
         }
     }
     println!("null-model report\n{report}");
@@ -490,14 +522,14 @@ fn null_model_is_deterministic() {
             input: input.path().to_path_buf(),
             out_dir: out.path().to_path_buf(),
             cache_path: None,
-        layers: None,
-        junctions: None,
-        metadata: None,
-        stratify_by: None,
-        reference: None,
-        catalog: None,
-        min_counts: 0,
-        min_genes: 0,
+            layers: None,
+            junctions: None,
+            metadata: None,
+            stratify_by: None,
+            reference: None,
+            catalog: None,
+            min_counts: 0,
+            min_genes: 0,
             mode: AnalysisMode::Cell,
             run_mode: RunMode::Standalone,
             output_json: false,

@@ -55,9 +55,15 @@ pub fn compute(
 
     let start = Instant::now();
 
-    let z_ea = z_scores.remove("SPLICE_EA_PHASE").unwrap_or_else(|| vec![f32::NAN; n_cells]);
-    let z_b = z_scores.remove("SPLICE_B_PHASE").unwrap_or_else(|| vec![f32::NAN; n_cells]);
-    let z_cat = z_scores.remove("SPLICE_CATALYTIC_PHASE").unwrap_or_else(|| vec![f32::NAN; n_cells]);
+    let z_ea = z_scores
+        .remove("SPLICE_EA_PHASE")
+        .unwrap_or_else(|| vec![f32::NAN; n_cells]);
+    let z_b = z_scores
+        .remove("SPLICE_B_PHASE")
+        .unwrap_or_else(|| vec![f32::NAN; n_cells]);
+    let z_cat = z_scores
+        .remove("SPLICE_CATALYTIC_PHASE")
+        .unwrap_or_else(|| vec![f32::NAN; n_cells]);
 
     let derived: Vec<(f32, f32, f32)> = (0..n_cells)
         .into_par_iter()

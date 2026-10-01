@@ -26,7 +26,11 @@ const Z95: f64 = 1.959_963_984_540_054;
 /// With an external reference the deviations use the file's per-stratum
 /// norms (cells are already assigned to the reference strata); the
 /// dataset's own norms are still computed and reported.
-pub fn compute(layers: &SplicedUnspliced, strata: &Strata, external: Option<&ReferenceFile>) -> UnsplicedMetrics {
+pub fn compute(
+    layers: &SplicedUnspliced,
+    strata: &Strata,
+    external: Option<&ReferenceFile>,
+) -> UnsplicedMetrics {
     let n_cells = layers.n_cells();
     debug_assert_eq!(strata.n_cells(), n_cells);
 
@@ -35,10 +39,7 @@ pub fn compute(layers: &SplicedUnspliced, strata: &Strata, external: Option<&Ref
         .map(|cell| {
             let s = layers.spliced.cell_total(cell);
             let u = layers.unspliced.cell_total(cell);
-            let a = layers
-                .ambiguous
-                .as_ref()
-                .map_or(0, |m| m.cell_total(cell));
+            let a = layers.ambiguous.as_ref().map_or(0, |m| m.cell_total(cell));
             let n = s + u;
             if n < MIN_LAYER_UMIS {
                 (s, u, a, f32::NAN, f32::NAN, f32::NAN)
@@ -77,12 +78,20 @@ pub fn compute(layers: &SplicedUnspliced, strata: &Strata, external: Option<&Ref
     let norms = proportion_norms(&unspliced_fraction, &trials, strata);
     let (unspliced_fraction_dev, norm_source) = match external {
         Some(file) => (
-            apply_proportion_norms(&unspliced_fraction, &trials, &strata.labels, &file.unspliced_norms()),
+            apply_proportion_norms(
+                &unspliced_fraction,
+                &trials,
+                &strata.labels,
+                &file.unspliced_norms(),
+            ),
             "external",
         ),
         None => {
             let own: Vec<_> = norms.iter().map(|n| Some(*n)).collect();
-            (apply_proportion_norms(&unspliced_fraction, &trials, &strata.labels, &own), "internal")
+            (
+                apply_proportion_norms(&unspliced_fraction, &trials, &strata.labels, &own),
+                "internal",
+            )
         }
     };
     let nuclear_fraction_flag = flag_outliers(&unspliced_fraction_dev, strata, -1.0);
@@ -119,8 +128,16 @@ pub fn wilson_interval(successes: u64, trials: u64, z: f64) -> (f64, f64) {
     let center = (p + z2 / (2.0 * n)) / denom;
     let half = z * (p * (1.0 - p) / n + z2 / (4.0 * n * n)).sqrt() / denom;
     // Exact bounds at the extremes (the algebra leaves ~1e-18 residues).
-    let lo = if successes == 0 { 0.0 } else { (center - half).max(0.0) };
-    let hi = if successes == trials { 1.0 } else { (center + half).min(1.0) };
+    let lo = if successes == 0 {
+        0.0
+    } else {
+        (center - half).max(0.0)
+    };
+    let hi = if successes == trials {
+        1.0
+    } else {
+        (center + half).min(1.0)
+    };
     (lo, hi)
 }
 

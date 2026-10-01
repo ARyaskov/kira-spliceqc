@@ -19,15 +19,27 @@ fn write_dataset(dir: &Path) {
         .collect();
     genes.extend((0..20).map(|i| format!("FILLER{i:02}")));
     let n_cells = 100;
-    let (mut m, mut s, mut u, mut barcodes) = (String::new(), String::new(), String::new(), String::new());
+    let (mut m, mut s, mut u, mut barcodes) =
+        (String::new(), String::new(), String::new(), String::new());
     let mut metadata = String::from("barcode\tpredicted_doublet\n");
     let mut entries = 0;
     for c in 0..n_cells {
         let barcode = format!("CELL{c:03}");
         barcodes.push_str(&format!("{barcode}\n"));
-        metadata.push_str(&format!("{barcode}\t{}\n", if (10..15).contains(&c) { "True" } else { "False" }));
+        metadata.push_str(&format!(
+            "{barcode}\t{}\n",
+            if (10..15).contains(&c) {
+                "True"
+            } else {
+                "False"
+            }
+        ));
         for g in 1..=genes.len() {
-            let total = if c < 10 { 2 + (g % 3) as u32 } else { 200 + ((c * 11 + g * 7) % 9) as u32 };
+            let total = if c < 10 {
+                2 + (g % 3) as u32
+            } else {
+                200 + ((c * 11 + g * 7) % 9) as u32
+            };
             let un = (total as f64 * (0.25 + (c % 5) as f64 * 0.01)).round() as u32;
             m.push_str(&format!("{g} {} {total}\n", c + 1));
             s.push_str(&format!("{g} {} {}\n", c + 1, total - un));
@@ -35,13 +47,22 @@ fn write_dataset(dir: &Path) {
             entries += 1;
         }
     }
-    let header = format!("%%MatrixMarket matrix coordinate integer general\n{} {} {}\n", genes.len(), n_cells, entries);
+    let header = format!(
+        "%%MatrixMarket matrix coordinate integer general\n{} {} {}\n",
+        genes.len(),
+        n_cells,
+        entries
+    );
     fs::write(dir.join("matrix.mtx"), format!("{header}{m}")).unwrap();
     fs::write(dir.join("spliced.mtx"), format!("{header}{s}")).unwrap();
     fs::write(dir.join("unspliced.mtx"), format!("{header}{u}")).unwrap();
     fs::write(
         dir.join("features.tsv"),
-        genes.iter().enumerate().map(|(i, g)| format!("g{i}\t{g}\n")).collect::<String>(),
+        genes
+            .iter()
+            .enumerate()
+            .map(|(i, g)| format!("g{i}\t{g}\n"))
+            .collect::<String>(),
     )
     .unwrap();
     fs::write(dir.join("barcodes.tsv"), barcodes).unwrap();
@@ -105,15 +126,27 @@ fn low_depth_and_doublet_cells_are_flagged_and_excluded() {
             assert_eq!(f[uf_dev], "");
         }
         if idx >= 15 {
-            assert!(!f[uf_dev].is_empty(), "kept cell {} must have a deviation", f[name]);
+            assert!(
+                !f[uf_dev].is_empty(),
+                "kept cell {} must have a deviation",
+                f[name]
+            );
         }
     }
     assert_eq!(n_low, 10);
     assert_eq!(n_dbl, 5);
 
     let contract = fs::read_to_string(base.join("spliceqc.tsv")).unwrap();
-    assert!(contract.lines().any(|l| l.starts_with("CELL000\t") && l.contains("LOW_DEPTH")));
-    assert!(contract.lines().any(|l| l.starts_with("CELL012\t") && l.contains("DOUBLET")));
+    assert!(
+        contract
+            .lines()
+            .any(|l| l.starts_with("CELL000\t") && l.contains("LOW_DEPTH"))
+    );
+    assert!(
+        contract
+            .lines()
+            .any(|l| l.starts_with("CELL012\t") && l.contains("DOUBLET"))
+    );
 
     let summary: serde_json::Value =
         serde_json::from_slice(&fs::read(base.join("summary.json")).unwrap()).unwrap();

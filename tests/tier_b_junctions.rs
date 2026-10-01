@@ -35,12 +35,21 @@ fn write_solo(root: &Path) {
     }
     fs::write(
         gene_dir.join("matrix.mtx"),
-        format!("%%MatrixMarket matrix coordinate integer general\n{} {} {}\n{m}", genes.len(), N_CELLS, entries),
+        format!(
+            "%%MatrixMarket matrix coordinate integer general\n{} {} {}\n{m}",
+            genes.len(),
+            N_CELLS,
+            entries
+        ),
     )
     .unwrap();
     fs::write(
         gene_dir.join("features.tsv"),
-        genes.iter().enumerate().map(|(i, g)| format!("g{i}\t{g}\n")).collect::<String>(),
+        genes
+            .iter()
+            .enumerate()
+            .map(|(i, g)| format!("g{i}\t{g}\n"))
+            .collect::<String>(),
     )
     .unwrap();
     let barcodes: String = (0..N_CELLS).map(|c| format!("CELL{c:03}\n")).collect();
@@ -69,8 +78,16 @@ fn write_solo(root: &Path) {
         let skipper = (6..10).contains(&c);
         for g in 0..N_GENES {
             let base = 10 + ((c * 5 + g * 3) % 7) as u32; // reads from donor 1 of this gene
-            let cryptic = if mutant { (base as f64 * 0.15).round() as u32 } else { (g + c) as u32 % 2 };
-            let skip = if skipper { (base as f64 * 0.25).round() as u32 } else { (g * 3 + c) as u32 % 2 };
+            let cryptic = if mutant {
+                (base as f64 * 0.15).round() as u32
+            } else {
+                (g + c) as u32 % 2
+            };
+            let skip = if skipper {
+                (base as f64 * 0.25).round() as u32
+            } else {
+                (g * 3 + c) as u32 % 2
+            };
             let j0 = base - cryptic.min(base / 2);
             let j1 = base + ((c + g) % 3) as u32;
             let rows = [(0, j0), (1, j1), (2, skip), (3, cryptic)];
@@ -84,7 +101,12 @@ fn write_solo(root: &Path) {
     }
     fs::write(
         sj_dir.join("matrix.mtx"),
-        format!("%%MatrixMarket matrix coordinate integer general\n{} {} {}\n{sj}", N_GENES * 4, N_CELLS, nnz),
+        format!(
+            "%%MatrixMarket matrix coordinate integer general\n{} {} {}\n{sj}",
+            N_GENES * 4,
+            N_CELLS,
+            nnz
+        ),
     )
     .unwrap();
 }
@@ -119,12 +141,25 @@ fn starsolo_sj_sibling_is_detected() {
     write_solo(&root);
     let gene_dir = root.join("Gene").join("raw");
     let stage0 = run_stage0_full(&gene_dir, RunMode::Standalone, None, None, None).unwrap();
-    assert_eq!(stage0.junctions, Some(JunctionLocation::MtxDir(root.join("SJ").join("raw"))));
+    assert_eq!(
+        stage0.junctions,
+        Some(JunctionLocation::MtxDir(root.join("SJ").join("raw")))
+    );
     // Explicit override wins; a missing override path is an error.
     let elsewhere = root.join("SJ").join("raw");
-    let stage0 = run_stage0_full(&gene_dir, RunMode::Standalone, None, None, Some(&elsewhere)).unwrap();
+    let stage0 =
+        run_stage0_full(&gene_dir, RunMode::Standalone, None, None, Some(&elsewhere)).unwrap();
     assert_eq!(stage0.junctions, Some(JunctionLocation::MtxDir(elsewhere)));
-    assert!(run_stage0_full(&gene_dir, RunMode::Standalone, None, None, Some(&root.join("nope"))).is_err());
+    assert!(
+        run_stage0_full(
+            &gene_dir,
+            RunMode::Standalone,
+            None,
+            None,
+            Some(&root.join("nope"))
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -145,8 +180,14 @@ fn cryptic_and_skip_cells_are_flagged() {
     assert_eq!(j["n_cryptic_acceptor_junctions"], N_GENES);
     assert_eq!(j["n_skip_junctions"], N_GENES);
     assert_eq!(j["undefined_cells"], 0);
-    assert_eq!(summary["provenance"]["input_levels"], serde_json::json!(["L0", "L2"]));
-    assert_eq!(summary["provenance"]["parameters"]["cryptic_window_nt"], serde_json::json!([10, 50]));
+    assert_eq!(
+        summary["provenance"]["input_levels"],
+        serde_json::json!(["L0", "L2"])
+    );
+    assert_eq!(
+        summary["provenance"]["parameters"]["cryptic_window_nt"],
+        serde_json::json!([10, 50])
+    );
 
     let cells = fs::read_to_string(base.join("cells.tsv")).unwrap();
     let mut lines = cells.lines();
@@ -168,9 +209,15 @@ fn cryptic_and_skip_cells_are_flagged() {
         let cryptic: f64 = f[cf].parse().unwrap();
         let skip: f64 = f[sf].parse().unwrap();
         if idx < 6 {
-            assert!(cryptic > 0.10, "mutant cell {idx}: cryptic fraction {cryptic}");
+            assert!(
+                cryptic > 0.10,
+                "mutant cell {idx}: cryptic fraction {cryptic}"
+            );
         } else {
-            assert!(cryptic < 0.08, "normal cell {idx}: cryptic fraction {cryptic}");
+            assert!(
+                cryptic < 0.08,
+                "normal cell {idx}: cryptic fraction {cryptic}"
+            );
         }
         if (6..10).contains(&idx) {
             assert!(skip > 0.15, "skipper cell {idx}: skip fraction {skip}");
@@ -190,5 +237,8 @@ fn cryptic_and_skip_cells_are_flagged() {
         serde_json::from_slice(&fs::read(base.join("cells.json")).unwrap()).unwrap();
     assert_eq!(cj["input_levels"], serde_json::json!(["L0", "L2"]));
     assert!(cj["cells"][0]["junctions"]["junction_umis"].is_number());
-    assert_eq!(cj["junctions"]["n_site_groups"].as_u64().unwrap(), (N_GENES * 2) as u64);
+    assert_eq!(
+        cj["junctions"]["n_site_groups"].as_u64().unwrap(),
+        (N_GENES * 2) as u64
+    );
 }

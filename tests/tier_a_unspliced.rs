@@ -74,7 +74,10 @@ fn config(input: &Path, out: &Path, run_mode: RunMode) -> RunConfig {
 }
 
 fn column(header: &str, name: &str) -> usize {
-    header.split('\t').position(|h| h == name).unwrap_or_else(|| panic!("missing column {name}"))
+    header
+        .split('\t')
+        .position(|h| h == name)
+        .unwrap_or_else(|| panic!("missing column {name}"))
 }
 
 #[test]
@@ -128,8 +131,17 @@ fn unspliced_fraction_is_written_per_cell() {
     assert_eq!(v["intron_retention"]["genes_with_reference"], 0);
     assert_eq!(v["cells"][0]["intron_retention"]["ir_genes_used"], 0);
     let iri = column(header, "intron_retention_index");
-    assert!(tsv.lines().skip(1).all(|l| l.split('\t').nth(iri).unwrap().is_empty()));
-    assert!(v["unspliced"]["source"].as_str().unwrap().starts_with("mtx-dir:"));
+    assert!(
+        tsv.lines()
+            .skip(1)
+            .all(|l| l.split('\t').nth(iri).unwrap().is_empty())
+    );
+    assert!(
+        v["unspliced"]["source"]
+            .as_str()
+            .unwrap()
+            .starts_with("mtx-dir:")
+    );
     assert!(v["cells"][0]["unspliced"]["spliced_umis"].is_number());
 }
 
@@ -177,7 +189,10 @@ fn pipeline_summary_carries_tier_a_block() {
     // Two defined cells (0.25, 0.5); the round((n-1)q) quantile rule picks
     // one of them, so the median is one of the two values.
     let median = v["unspliced"]["median"].as_f64().unwrap();
-    assert!((median - 0.25).abs() < 1e-6 || (median - 0.5).abs() < 1e-6, "{median}");
+    assert!(
+        (median - 0.25).abs() < 1e-6 || (median - 0.5).abs() < 1e-6,
+        "{median}"
+    );
     assert!((v["unspliced"]["p10"].as_f64().unwrap() - 0.25).abs() < 1e-6);
     assert!((v["unspliced"]["p90"].as_f64().unwrap() - 0.5).abs() < 1e-6);
 }

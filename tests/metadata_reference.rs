@@ -24,7 +24,11 @@ fn metadata_tsv_is_aligned_to_cell_order() {
         "barcode\tcell_type\tsample\ncellB\tT cell\ts1\ncellA\tB cell\ts1\ncellZ\tNK\ts2\n",
     )
     .unwrap();
-    let cells = vec!["cellA".to_string(), "cellB".to_string(), "cellC".to_string()];
+    let cells = vec![
+        "cellA".to_string(),
+        "cellB".to_string(),
+        "cellC".to_string(),
+    ];
     let md = read_metadata_tsv(&path, &cells).unwrap();
     assert_eq!(md.column("cell_type").unwrap(), &["B cell", "T cell", ""]);
     assert_eq!(md.column("sample").unwrap(), &["s1", "s1", ""]);
@@ -110,12 +114,15 @@ fn write_stratified_dataset(dir: &Path) {
         let neuron = c < 60;
         let barcode = format!("CELL{c:03}");
         barcodes.push_str(&format!("{barcode}\n"));
-        metadata.push_str(&format!("{barcode}\t{}\n", if neuron { "Neuron" } else { "Glia" }));
+        metadata.push_str(&format!(
+            "{barcode}\t{}\n",
+            if neuron { "Neuron" } else { "Glia" }
+        ));
         // per-gene counts: 200 UMIs per gene with a per-cell jitter so MAD > 0
         let jitter = (c % 5) as f64 * 0.01;
         let uf = match c {
-            0 => 0.2,          // neuron with glia-like UF: outlier in its stratum
-            60 => 0.02,        // damaged glia cell
+            0 => 0.2,   // neuron with glia-like UF: outlier in its stratum
+            60 => 0.02, // damaged glia cell
             _ if neuron => 0.6 + jitter,
             _ => 0.2 + jitter,
         };
@@ -147,7 +154,11 @@ fn write_stratified_dataset(dir: &Path) {
     fs::write(dir.join("unspliced.mtx"), unspliced).unwrap();
     fs::write(
         dir.join("features.tsv"),
-        genes.iter().enumerate().map(|(i, g)| format!("g{i}\t{g}\n")).collect::<String>(),
+        genes
+            .iter()
+            .enumerate()
+            .map(|(i, g)| format!("g{i}\t{g}\n"))
+            .collect::<String>(),
     )
     .unwrap();
     fs::write(dir.join("barcodes.tsv"), barcodes).unwrap();
@@ -181,7 +192,12 @@ fn run(input: &Path, out: &Path, stratify_by: Option<&str>) {
 fn read_cells(path: &Path) -> (Vec<String>, Vec<Vec<String>>) {
     let text = fs::read_to_string(path).unwrap();
     let mut lines = text.lines();
-    let header = lines.next().unwrap().split('\t').map(str::to_string).collect();
+    let header = lines
+        .next()
+        .unwrap()
+        .split('\t')
+        .map(str::to_string)
+        .collect();
     let rows = lines
         .map(|l| l.split('\t').map(str::to_string).collect())
         .collect();
@@ -222,9 +238,21 @@ fn stratified_reference_flags_outliers_within_cell_type() {
             flagged.push(r[name].clone());
         }
         match r[name].as_str() {
-            "CELL000" => assert!(r[dev].parse::<f64>().unwrap() < -3.0, "neuron outlier {}", r[dev]),
-            "CELL060" => assert!(r[dev].parse::<f64>().unwrap() < -3.0, "damaged glia {}", r[dev]),
-            "CELL061" => assert!(r[dev].parse::<f64>().unwrap().abs() < 2.0, "typical glia {}", r[dev]),
+            "CELL000" => assert!(
+                r[dev].parse::<f64>().unwrap() < -3.0,
+                "neuron outlier {}",
+                r[dev]
+            ),
+            "CELL060" => assert!(
+                r[dev].parse::<f64>().unwrap() < -3.0,
+                "damaged glia {}",
+                r[dev]
+            ),
+            "CELL061" => assert!(
+                r[dev].parse::<f64>().unwrap().abs() < 2.0,
+                "typical glia {}",
+                r[dev]
+            ),
             _ => {}
         }
     }
@@ -264,7 +292,10 @@ fn global_reference_on_mixed_cell_types_misses_outliers() {
         .map(|r| r[col("cell_name")].as_str())
         .collect();
     assert!(flagged.is_empty(), "{flagged:?}");
-    let damaged = rows.iter().find(|r| r[col("cell_name")] == "CELL060").unwrap();
+    let damaged = rows
+        .iter()
+        .find(|r| r[col("cell_name")] == "CELL060")
+        .unwrap();
     let dev: f64 = damaged[col("unspliced_fraction_dev")].parse().unwrap();
     assert!(dev > -3.0 && dev < 0.0, "{dev}");
 }

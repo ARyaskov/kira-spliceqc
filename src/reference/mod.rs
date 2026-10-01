@@ -114,7 +114,10 @@ impl Strata {
             Some(name) => match metadata.resolve(&[name]) {
                 Some((found, values)) => Some((found.to_string(), values.to_vec())),
                 None => {
-                    warn!(column = name, "stratification column not found in metadata; using global reference");
+                    warn!(
+                        column = name,
+                        "stratification column not found in metadata; using global reference"
+                    );
                     None
                 }
             },
@@ -128,7 +131,10 @@ impl Strata {
             return Self::global(n_cells);
         };
         if values.len() != n_cells {
-            warn!(column = name.as_str(), "stratification column length mismatch; using global reference");
+            warn!(
+                column = name.as_str(),
+                "stratification column length mismatch; using global reference"
+            );
             return Self::global(n_cells);
         }
 
@@ -295,7 +301,8 @@ pub fn scaled_deviation_by_stratum_and_depth(
             let sample: Vec<f32> = defined.iter().map(|&c| values[c]).collect();
             let med = median(&sample);
             let robust_var = (1.4826 * mad(&sample, med)).powi(2) as f64;
-            let mean_se2 = defined.iter().map(|&c| (se[c] as f64).powi(2)).sum::<f64>() / defined.len() as f64;
+            let mean_se2 =
+                defined.iter().map(|&c| (se[c] as f64).powi(2)).sum::<f64>() / defined.len() as f64;
             let tau2 = (robust_var - mean_se2).max(0.0);
             for &c in &defined {
                 let denom = ((se[c] as f64).powi(2) + tau2).sqrt();
@@ -343,7 +350,11 @@ pub fn logit_deviation_by_stratum(
         let med_logit = median(&member_logits) as f64;
         let mad_logit = mad(&member_logits, med_logit as f32) as f64;
         let robust_var = (1.4826 * mad_logit).powi(2);
-        let defined: Vec<usize> = members.iter().copied().filter(|&c| logits[c].is_finite()).collect();
+        let defined: Vec<usize> = members
+            .iter()
+            .copied()
+            .filter(|&c| logits[c].is_finite())
+            .collect();
         let mean_binom = if defined.is_empty() {
             f64::NAN
         } else {
@@ -409,7 +420,11 @@ fn logit_terms(proportions: &[f32], trials: &[u64]) -> (Vec<f64>, Vec<f64>) {
 }
 
 /// Per-stratum proportion norms of this dataset (what an external reference stores).
-pub fn proportion_norms(proportions: &[f32], trials: &[u64], strata: &Strata) -> Vec<ProportionNorm> {
+pub fn proportion_norms(
+    proportions: &[f32],
+    trials: &[u64],
+    strata: &Strata,
+) -> Vec<ProportionNorm> {
     let (logits, binom_var) = logit_terms(proportions, trials);
     strata
         .members()
@@ -419,7 +434,11 @@ pub fn proportion_norms(proportions: &[f32], trials: &[u64], strata: &Strata) ->
             let member_logits: Vec<f32> = members.iter().map(|&c| logits[c] as f32).collect();
             let med_logit = median(&member_logits) as f64;
             let robust_var = (1.4826 * mad(&member_logits, med_logit as f32) as f64).powi(2);
-            let defined: Vec<usize> = members.iter().copied().filter(|&c| logits[c].is_finite()).collect();
+            let defined: Vec<usize> = members
+                .iter()
+                .copied()
+                .filter(|&c| logits[c].is_finite())
+                .collect();
             let mean_binom = if defined.is_empty() {
                 f64::NAN
             } else {
@@ -447,7 +466,11 @@ pub fn apply_proportion_norms(
         .map(|c| match norms[labels[c] as usize] {
             Some(norm) if logits[c].is_finite() && norm.median_logit.is_finite() => {
                 let denom = (binom_var[c] + norm.tau2).sqrt();
-                if denom > 0.0 { ((logits[c] - norm.median_logit) / denom) as f32 } else { f32::NAN }
+                if denom > 0.0 {
+                    ((logits[c] - norm.median_logit) / denom) as f32
+                } else {
+                    f32::NAN
+                }
             }
             _ => f32::NAN,
         })
@@ -494,7 +517,11 @@ pub fn apply_continuous_norms(
         .map(|c| match norms[labels[c] as usize] {
             Some(norm) if values[c].is_finite() && se[c].is_finite() && norm.median.is_finite() => {
                 let denom = ((se[c] as f64).powi(2) + norm.tau2).sqrt();
-                if denom > 0.0 { ((values[c] - norm.median) as f64 / denom) as f32 } else { f32::NAN }
+                if denom > 0.0 {
+                    ((values[c] - norm.median) as f64 / denom) as f32
+                } else {
+                    f32::NAN
+                }
             }
             _ => f32::NAN,
         })
@@ -532,7 +559,9 @@ pub fn benjamini_hochberg(p: &[f64]) -> Vec<f64> {
 /// Outlier flags in one direction: `sign * d >= DEVIATION_THRESHOLD` and
 /// BH-adjusted two-sided normal p < FLAG_FDR within each stratum.
 pub fn flag_outliers(deviation: &[f32], strata: &Strata, sign: f32) -> Vec<bool> {
-    flag_outliers_with(deviation, strata, sign, |c| two_sided_p(deviation[c] as f64))
+    flag_outliers_with(deviation, strata, sign, |c| {
+        two_sided_p(deviation[c] as f64)
+    })
 }
 
 /// Like `flag_outliers`, but the deviation of cell `c` rests on an estimated
@@ -663,15 +692,17 @@ fn erfc(x: f64) -> f64 {
     // Numerical Recipes erfcc: fractional error < 1.2e-7 everywhere.
     let z = x.abs();
     let t = 1.0 / (1.0 + 0.5 * z);
-    let r = t * (-z * z - 1.265_512_23
-        + t * (1.000_023_68
-            + t * (0.374_091_96
-                + t * (0.096_784_18
-                    + t * (-0.186_288_06
-                        + t * (0.278_868_07
-                            + t * (-1.135_203_98
-                                + t * (1.488_515_87 + t * (-0.822_152_23 + t * 0.170_872_77)))))))))
-        .exp();
+    let r = t
+        * (-z * z - 1.265_512_23
+            + t * (1.000_023_68
+                + t * (0.374_091_96
+                    + t * (0.096_784_18
+                        + t * (-0.186_288_06
+                            + t * (0.278_868_07
+                                + t * (-1.135_203_98
+                                    + t * (1.488_515_87
+                                        + t * (-0.822_152_23 + t * 0.170_872_77)))))))))
+            .exp();
     if x >= 0.0 { r } else { 2.0 - r }
 }
 
@@ -683,8 +714,10 @@ mod tests {
 
     fn metadata(col: &str, values: &[&str]) -> CellMetadata {
         let mut m = CellMetadata::default();
-        m.columns
-            .insert(col.to_string(), values.iter().map(|s| s.to_string()).collect());
+        m.columns.insert(
+            col.to_string(),
+            values.iter().map(|s| s.to_string()).collect(),
+        );
         m
     }
 
@@ -760,7 +793,8 @@ mod tests {
         assert!(low.abs() < 0.3, "{low}");
         assert!(high.abs() < 0.3, "{high}");
         // Small stratum -> a single bin.
-        let (_, bins) = robust_z_by_stratum_and_depth(&values[..70], &Strata::global(70), &libsize[..70]);
+        let (_, bins) =
+            robust_z_by_stratum_and_depth(&values[..70], &Strata::global(70), &libsize[..70]);
         assert_eq!(bins, vec![1]);
     }
 

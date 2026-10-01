@@ -14,7 +14,12 @@ use crate::reference::{Strata, robust_z_by_stratum_and_depth};
 const EPS: f32 = 1e-12;
 
 const REGULATOR_SET_IDS: &[&str] = &[
-    "SRSF_SR", "HNRNP", "U1_CORE", "U2_CORE", "SF3B_AXIS", "MINOR_U12",
+    "SRSF_SR",
+    "HNRNP",
+    "U1_CORE",
+    "U2_CORE",
+    "SF3B_AXIS",
+    "MINOR_U12",
 ];
 
 pub fn run_stage3(matrix: &dyn ExpressionMatrix) -> Result<IsoformDispersionMetrics, InputError> {

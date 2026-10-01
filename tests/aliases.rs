@@ -12,7 +12,9 @@ use tempfile::tempdir;
 fn write_legacy_tenx(dir: &Path) {
     fs::create_dir_all(dir).unwrap();
     // Old annotation: SFRS1/SFRS2/SFRS3 for SRSF1-3, HNRPA1 for HNRNPA1, ASCC3L1 for SNRNP200.
-    let genes = ["SNRPC", "SF3A1", "SF3B1", "SFRS1", "SFRS2", "SFRS3", "HNRPA1", "ASCC3L1"];
+    let genes = [
+        "SNRPC", "SF3A1", "SF3B1", "SFRS1", "SFRS2", "SFRS3", "HNRPA1", "ASCC3L1",
+    ];
     let mut mtx = String::from("%%MatrixMarket matrix coordinate integer general\n");
     mtx.push_str(&format!("{} 2 {}\n", genes.len(), genes.len() * 2));
     for g in 1..=genes.len() {
@@ -21,7 +23,11 @@ fn write_legacy_tenx(dir: &Path) {
     fs::write(dir.join("matrix.mtx"), mtx).unwrap();
     fs::write(
         dir.join("features.tsv"),
-        genes.iter().enumerate().map(|(i, g)| format!("g{i}\t{g}\n")).collect::<String>(),
+        genes
+            .iter()
+            .enumerate()
+            .map(|(i, g)| format!("g{i}\t{g}\n"))
+            .collect::<String>(),
     )
     .unwrap();
     fs::write(dir.join("barcodes.tsv"), "c1\nc2\n").unwrap();
@@ -37,10 +43,18 @@ fn legacy_symbols_resolve_panel_genes() {
     let matrix = run_stage1(&stage0, out.path()).unwrap();
     let catalog = load_catalog(Path::new("does-not-exist.tsv"), &matrix).unwrap();
     let get = |id: &str| catalog.genesets.iter().find(|g| g.id == id).unwrap();
-    assert_eq!(get("SRSF_SR").gene_ids.len(), 3, "SFRS1-3 must resolve SRSF1-3");
+    assert_eq!(
+        get("SRSF_SR").gene_ids.len(),
+        3,
+        "SFRS1-3 must resolve SRSF1-3"
+    );
     assert!(get("SRSF_SR").missing.is_empty());
     assert_eq!(get("HNRNP").gene_ids.len(), 1);
-    assert_eq!(get("U4_U6_CORE").gene_ids.len(), 1, "ASCC3L1 must resolve SNRNP200");
+    assert_eq!(
+        get("U4_U6_CORE").gene_ids.len(),
+        1,
+        "ASCC3L1 must resolve SNRNP200"
+    );
 }
 
 /// features.tsv with Ensembl ids and symbols the panels do not know; a user
@@ -55,7 +69,13 @@ fn ensembl_ids_resolve_through_a_catalog_with_an_id_column() {
     let input = dir.path().join("data");
     fs::create_dir_all(&input).unwrap();
     // 5 panel genes under opaque symbols, 2 cells with distinct profiles.
-    let ids = ["ENSG00000124562.9", "ENSG00000099995.1", "ENSG00000115524.17", "ENSG00000136450.14", "ENSG00000135486.3"];
+    let ids = [
+        "ENSG00000124562.9",
+        "ENSG00000099995.1",
+        "ENSG00000115524.17",
+        "ENSG00000136450.14",
+        "ENSG00000135486.3",
+    ];
     let mut mtx = String::from("%%MatrixMarket matrix coordinate integer general\n5 2 10\n");
     // Non-proportional profiles (a scaled copy would give zero-MAD panels).
     for g in 1..=5 {
@@ -64,7 +84,10 @@ fn ensembl_ids_resolve_through_a_catalog_with_an_id_column() {
     fs::write(input.join("matrix.mtx"), mtx).unwrap();
     fs::write(
         input.join("features.tsv"),
-        ids.iter().enumerate().map(|(i, id)| format!("{id}\tLOC{i}\tGene Expression\n")).collect::<String>(),
+        ids.iter()
+            .enumerate()
+            .map(|(i, id)| format!("{id}\tLOC{i}\tGene Expression\n"))
+            .collect::<String>(),
     )
     .unwrap();
     fs::write(input.join("barcodes.tsv"), "c1\nc2\n").unwrap();
@@ -88,9 +111,21 @@ fn ensembl_ids_resolve_through_a_catalog_with_an_id_column() {
     let stage0 = run_stage0(&input, RunMode::Standalone, None).unwrap();
     let out = tempdir().unwrap();
     let matrix = run_stage1(&stage0, out.path()).unwrap();
-    assert_eq!(detect_species(&matrix), "human", "species from ENSG prefixes");
+    assert_eq!(
+        detect_species(&matrix),
+        "human",
+        "species from ENSG prefixes"
+    );
     let by_symbol = load_catalog(Path::new("does-not-exist.tsv"), &matrix).unwrap();
-    assert!(by_symbol.genesets.iter().find(|g| g.id == "SRSF_SR").unwrap().gene_ids.is_empty());
+    assert!(
+        by_symbol
+            .genesets
+            .iter()
+            .find(|g| g.id == "SRSF_SR")
+            .unwrap()
+            .gene_ids
+            .is_empty()
+    );
 
     // With the id column every panel gene resolves (version suffixes ignored).
     let by_id = load_catalog(&catalog, &matrix).unwrap();
@@ -128,5 +163,10 @@ fn ensembl_ids_resolve_through_a_catalog_with_an_id_column() {
     )
     .unwrap();
     assert_eq!(summary["input"]["species"], "human");
-    assert!(summary["provenance"]["geneset_catalog"]["source"].as_str().unwrap().ends_with("catalog.tsv"));
+    assert!(
+        summary["provenance"]["geneset_catalog"]["source"]
+            .as_str()
+            .unwrap()
+            .ends_with("catalog.tsv")
+    );
 }

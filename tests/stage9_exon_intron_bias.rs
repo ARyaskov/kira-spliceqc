@@ -1,7 +1,7 @@
 use kira_spliceqc::model::geneset_activity::GenesetActivityMatrix;
 use kira_spliceqc::pipeline::stage2_genesets::standardize_activity;
-use kira_spliceqc::reference::Strata;
 use kira_spliceqc::pipeline::stage9_exon_intron_bias::compute;
+use kira_spliceqc::reference::Strata;
 
 fn make_activity(genesets: Vec<&str>, values: Vec<Vec<f32>>) -> GenesetActivityMatrix {
     let n_cells = values[0].len();
@@ -55,7 +55,12 @@ fn synthetic_bias_sign() {
     let genesets = vec!["SRSF_SR", "HNRNP", "U2AF_AXIS"];
     let values = vec![vec![2.0, 0.0], vec![0.0, 2.0], vec![2.0, 0.0]];
     let activity = make_activity(genesets, values);
-    let metrics = compute(&standardize_activity(&activity, &Strata::global(activity.n_cells), None)).unwrap();
+    let metrics = compute(&standardize_activity(
+        &activity,
+        &Strata::global(activity.n_cells),
+        None,
+    ))
+    .unwrap();
 
     let z_srsf = robust_z(&activity.values[0..2]);
     let z_hnrnp = robust_z(&activity.values[2..4]);
@@ -73,7 +78,12 @@ fn missing_geneset_nan() {
     let genesets = vec!["SRSF_SR", "HNRNP"];
     let values = vec![vec![1.0, 2.0], vec![2.0, 1.0]];
     let activity = make_activity(genesets, values);
-    let metrics = compute(&standardize_activity(&activity, &Strata::global(activity.n_cells), None)).unwrap();
+    let metrics = compute(&standardize_activity(
+        &activity,
+        &Strata::global(activity.n_cells),
+        None,
+    ))
+    .unwrap();
 
     assert!(metrics.exon_definition_bias[0].is_nan());
     assert!(metrics.exon_definition_bias[1].is_nan());
@@ -85,8 +95,18 @@ fn deterministic_outputs() {
     let values = vec![vec![1.0, 2.0], vec![2.0, 3.0], vec![3.0, 4.0]];
     let activity = make_activity(genesets, values);
 
-    let first = compute(&standardize_activity(&activity, &Strata::global(activity.n_cells), None)).unwrap();
-    let second = compute(&standardize_activity(&activity, &Strata::global(activity.n_cells), None)).unwrap();
+    let first = compute(&standardize_activity(
+        &activity,
+        &Strata::global(activity.n_cells),
+        None,
+    ))
+    .unwrap();
+    let second = compute(&standardize_activity(
+        &activity,
+        &Strata::global(activity.n_cells),
+        None,
+    ))
+    .unwrap();
 
     assert_eq!(first.exon_definition_bias, second.exon_definition_bias);
     assert_eq!(first.z_srsf, second.z_srsf);

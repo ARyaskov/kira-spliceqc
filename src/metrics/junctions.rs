@@ -81,7 +81,10 @@ pub struct JunctionAnnotation {
 
 impl JunctionAnnotation {
     pub fn n_cryptic(&self) -> usize {
-        self.class.iter().filter(|c| **c == Class::CrypticAcceptor).count()
+        self.class
+            .iter()
+            .filter(|c| **c == Class::CrypticAcceptor)
+            .count()
     }
     pub fn n_skip(&self) -> usize {
         self.skip.iter().filter(|s| **s).count()
@@ -102,8 +105,18 @@ pub fn annotate(set: &JunctionSet) -> JunctionAnnotation {
             continue;
         }
         let k = key(&j.chrom, j.strand);
-        donors.entry(k.clone()).or_default().entry(j.donor()).or_default().push(i as u32);
-        acceptors.entry(k).or_default().entry(j.acceptor()).or_default().push(i as u32);
+        donors
+            .entry(k.clone())
+            .or_default()
+            .entry(j.donor())
+            .or_default()
+            .push(i as u32);
+        acceptors
+            .entry(k)
+            .or_default()
+            .entry(j.acceptor())
+            .or_default()
+            .push(i as u32);
     }
 
     let mut class = vec![Class::Novel; n];
@@ -117,13 +130,20 @@ pub fn annotate(set: &JunctionSet) -> JunctionAnnotation {
             continue;
         }
         let k = key(&j.chrom, j.strand);
-        let Some(donor_map) = donors.get(&k) else { continue };
-        let Some(by_donor) = donor_map.get(&j.donor()) else { continue };
+        let Some(donor_map) = donors.get(&k) else {
+            continue;
+        };
+        let Some(by_donor) = donor_map.get(&j.donor()) else {
+            continue;
+        };
         // Annotated acceptor downstream of this acceptor by 10..=50 nt.
         let acc = j.acceptor();
         let (lo, hi) = match j.strand {
             Strand::Plus => (acc + CRYPTIC_MIN, acc + CRYPTIC_MAX),
-            Strand::Minus => (acc.saturating_sub(CRYPTIC_MAX), acc.saturating_sub(CRYPTIC_MIN)),
+            Strand::Minus => (
+                acc.saturating_sub(CRYPTIC_MAX),
+                acc.saturating_sub(CRYPTIC_MIN),
+            ),
             Strand::Unknown => unreachable!(),
         };
         // Canonical partner: an annotated junction from the same donor whose
@@ -150,7 +170,8 @@ pub fn annotate(set: &JunctionSet) -> JunctionAnnotation {
         let (Some(donor_map), Some(acceptor_map)) = (donors.get(&k), acceptors.get(&k)) else {
             continue;
         };
-        let (Some(from_donor), Some(to_acceptor)) = (donor_map.get(&j.donor()), acceptor_map.get(&j.acceptor()))
+        let (Some(from_donor), Some(to_acceptor)) =
+            (donor_map.get(&j.donor()), acceptor_map.get(&j.acceptor()))
         else {
             continue;
         };
@@ -223,7 +244,11 @@ pub fn annotate(set: &JunctionSet) -> JunctionAnnotation {
         let strand = junctions[members[0] as usize].strand;
         members.sort_by_key(|&m| {
             let j = &junctions[m as usize];
-            let pos = if donor_anchored { j.acceptor() } else { j.donor() };
+            let pos = if donor_anchored {
+                j.acceptor()
+            } else {
+                j.donor()
+            };
             // transcript direction: ascending on +, descending on -
             match strand {
                 Strand::Minus => u64::MAX - pos,
@@ -293,13 +318,20 @@ fn cell_sums(set: &JunctionSet, ann: &JunctionAnnotation, cell: usize) -> CellSu
             e.1 += rank as f64 * k as f64;
         }
     }
-    s.sites = site_acc.into_iter().map(|(g, (n, sr))| (g, n, sr)).collect();
+    s.sites = site_acc
+        .into_iter()
+        .map(|(g, (n, sr))| (g, n, sr))
+        .collect();
     s.sites.sort_unstable_by_key(|t| t.0);
     s
 }
 
 fn ratio(num: u64, denom: u64) -> f32 {
-    if denom >= MIN_RATIO_UMIS { num as f32 / denom as f32 } else { f32::NAN }
+    if denom >= MIN_RATIO_UMIS {
+        num as f32 / denom as f32
+    } else {
+        f32::NAN
+    }
 }
 
 pub fn compute(set: &JunctionSet, strata: &Strata) -> JunctionMetrics {
@@ -307,7 +339,10 @@ pub fn compute(set: &JunctionSet, strata: &Strata) -> JunctionMetrics {
     debug_assert_eq!(strata.n_cells(), n_cells);
     let ann = annotate(set);
 
-    let sums: Vec<CellSums> = (0..n_cells).into_par_iter().map(|c| cell_sums(set, &ann, c)).collect();
+    let sums: Vec<CellSums> = (0..n_cells)
+        .into_par_iter()
+        .map(|c| cell_sums(set, &ann, c))
+        .collect();
 
     let mut junction_umis = Vec::with_capacity(n_cells);
     let mut annotated_umis = Vec::with_capacity(n_cells);
@@ -326,10 +361,18 @@ pub fn compute(set: &JunctionSet, strata: &Strata) -> JunctionMetrics {
         }
         junction_umis.push(s.total);
         annotated_umis.push(s.annotated);
-        unannotated_fraction.push(if defined { (s.total - s.annotated) as f32 / s.total as f32 } else { f32::NAN });
+        unannotated_fraction.push(if defined {
+            (s.total - s.annotated) as f32 / s.total as f32
+        } else {
+            f32::NAN
+        });
         cryptic_umis.push(s.cryptic);
         let ct = s.cryptic + s.canonical;
-        cryptic_fraction.push(if defined { ratio(s.cryptic, ct) } else { f32::NAN });
+        cryptic_fraction.push(if defined {
+            ratio(s.cryptic, ct)
+        } else {
+            f32::NAN
+        });
         cryptic_trials.push(ct);
         skip_umis.push(s.skip);
         let st = s.skip + s.inclusion;
@@ -401,12 +444,18 @@ pub fn compute(set: &JunctionSet, strata: &Strata) -> JunctionMetrics {
     }
 
     // Deviations and flags.
-    let (_, cryptic_reference) = logit_deviation_by_stratum(&cryptic_fraction, &cryptic_trials, strata);
+    let (_, cryptic_reference) =
+        logit_deviation_by_stratum(&cryptic_fraction, &cryptic_trials, strata);
     let cryptic_norms: Vec<_> = proportion_norms(&cryptic_fraction, &cryptic_trials, strata)
         .into_iter()
         .map(Some)
         .collect();
-    let cryptic_dev = apply_proportion_norms(&cryptic_fraction, &cryptic_trials, &strata.labels, &cryptic_norms);
+    let cryptic_dev = apply_proportion_norms(
+        &cryptic_fraction,
+        &cryptic_trials,
+        &strata.labels,
+        &cryptic_norms,
+    );
     let cryptic_high = flag_outliers(&cryptic_dev, strata, 1.0);
 
     let (_, skip_reference) = logit_deviation_by_stratum(&skip_fraction, &skip_trials, strata);
@@ -414,7 +463,8 @@ pub fn compute(set: &JunctionSet, strata: &Strata) -> JunctionMetrics {
         .into_iter()
         .map(Some)
         .collect();
-    let skip_dev = apply_proportion_norms(&skip_fraction, &skip_trials, &strata.labels, &skip_norms);
+    let skip_dev =
+        apply_proportion_norms(&skip_fraction, &skip_trials, &strata.labels, &skip_norms);
     let skip_high = flag_outliers(&skip_dev, strata, 1.0);
 
     // The shift score rises with junction depth (more sites, more UMIs per
@@ -534,8 +584,18 @@ mod tests {
         for c in 0..105 {
             let jitter = (c % 4) as u32;
             let cryptic = if c < 3 { 40 } else { 2 + jitter % 2 };
-            let skip = if (3..5).contains(&c) { 60 } else { 3 + jitter % 3 };
-            cells.push(vec![(0, 150 + jitter), (1, 150 + jitter), (2, skip), (3, cryptic), (5, 10)]);
+            let skip = if (3..5).contains(&c) {
+                60
+            } else {
+                3 + jitter % 3
+            };
+            cells.push(vec![
+                (0, 150 + jitter),
+                (1, 150 + jitter),
+                (2, skip),
+                (3, cryptic),
+                (5, 10),
+            ]);
         }
         let s = set(cells);
         let m = compute(&s, &Strata::global(105));
@@ -545,11 +605,19 @@ mod tests {
         assert!((m.cryptic_3ss_fraction[0] - 40.0 / 190.0).abs() < 1e-5);
         assert!(m.cryptic_3ss_fraction[10] < 0.03);
         for c in 0..3 {
-            assert!(m.cryptic_3ss_high[c], "cell {c} dev {}", m.cryptic_3ss_fraction_dev[c]);
+            assert!(
+                m.cryptic_3ss_high[c],
+                "cell {c} dev {}",
+                m.cryptic_3ss_fraction_dev[c]
+            );
         }
         assert_eq!(m.cryptic_3ss_high.iter().filter(|f| **f).count(), 3);
         for c in 3..5 {
-            assert!(m.exon_skip_high[c], "cell {c} dev {}", m.exon_skip_fraction_dev[c]);
+            assert!(
+                m.exon_skip_high[c],
+                "cell {c} dev {}",
+                m.exon_skip_fraction_dev[c]
+            );
         }
         assert_eq!(m.exon_skip_high.iter().filter(|f| **f).count(), 2);
         assert!(m.exon_skip_fraction[3] > 0.15);

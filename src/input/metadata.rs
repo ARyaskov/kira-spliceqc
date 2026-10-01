@@ -28,8 +28,14 @@ pub const CELL_TYPE_ALIASES: &[&str] = &[
     "cell_ontology_class",
     "predicted.celltype",
 ];
-pub const CLUSTER_ALIASES: &[&str] =
-    &["cluster", "clusters", "leiden", "louvain", "seurat_clusters", "cluster_id"];
+pub const CLUSTER_ALIASES: &[&str] = &[
+    "cluster",
+    "clusters",
+    "leiden",
+    "louvain",
+    "seurat_clusters",
+    "cluster_id",
+];
 pub const SAMPLE_ALIASES: &[&str] = &["sample", "sample_id", "orig.ident", "batch", "library"];
 pub const CONDITION_ALIASES: &[&str] = &["condition", "group", "treatment", "disease"];
 /// Boolean-like doublet calls from upstream tools (Scrublet, scDblFinder,
@@ -92,7 +98,12 @@ pub fn read_metadata_tsv(path: &Path, cell_names: &[String]) -> Result<CellMetad
     let mut lines = reader.lines();
     let header = match lines.next() {
         Some(h) => h.map_err(|e| InputError::io(path, e))?,
-        None => return Err(InputError::InvalidMetadata(format!("{}: empty file", path.display()))),
+        None => {
+            return Err(InputError::InvalidMetadata(format!(
+                "{}: empty file",
+                path.display()
+            )));
+        }
     };
     let header: Vec<String> = header
         .trim_end_matches(['\r', '\n'])
@@ -203,7 +214,11 @@ pub fn read_metadata_h5ad(
     for (name, values) in raw {
         let aligned: Vec<String> = cell_names
             .iter()
-            .map(|c| position.get(c.as_str()).map_or(String::new(), |&i| values[i].clone()))
+            .map(|c| {
+                position
+                    .get(c.as_str())
+                    .map_or(String::new(), |&i| values[i].clone())
+            })
             .collect();
         columns.insert(name, aligned);
     }
@@ -256,9 +271,18 @@ fn decode(codes: &[i64], categories: &[String]) -> Vec<String> {
 
 fn read_codes(ds: &hdf5::Dataset) -> Option<Vec<i64>> {
     ds.read_raw::<i64>()
-        .or_else(|_| ds.read_raw::<i32>().map(|v| v.into_iter().map(i64::from).collect()))
-        .or_else(|_| ds.read_raw::<i16>().map(|v| v.into_iter().map(i64::from).collect()))
-        .or_else(|_| ds.read_raw::<i8>().map(|v| v.into_iter().map(i64::from).collect()))
+        .or_else(|_| {
+            ds.read_raw::<i32>()
+                .map(|v| v.into_iter().map(i64::from).collect())
+        })
+        .or_else(|_| {
+            ds.read_raw::<i16>()
+                .map(|v| v.into_iter().map(i64::from).collect())
+        })
+        .or_else(|_| {
+            ds.read_raw::<i8>()
+                .map(|v| v.into_iter().map(i64::from).collect())
+        })
         .ok()
 }
 

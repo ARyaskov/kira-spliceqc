@@ -51,9 +51,15 @@ pub fn compute(
 
     let start = Instant::now();
 
-    let z_srsf = z_scores.remove("SRSF_SR").unwrap_or_else(|| vec![f32::NAN; n_cells]);
-    let z_hnrnp = z_scores.remove("HNRNP").unwrap_or_else(|| vec![f32::NAN; n_cells]);
-    let z_u2af = z_scores.remove("U2AF_AXIS").unwrap_or_else(|| vec![f32::NAN; n_cells]);
+    let z_srsf = z_scores
+        .remove("SRSF_SR")
+        .unwrap_or_else(|| vec![f32::NAN; n_cells]);
+    let z_hnrnp = z_scores
+        .remove("HNRNP")
+        .unwrap_or_else(|| vec![f32::NAN; n_cells]);
+    let z_u2af = z_scores
+        .remove("U2AF_AXIS")
+        .unwrap_or_else(|| vec![f32::NAN; n_cells]);
 
     let exon_definition_bias: Vec<f32> = (0..n_cells)
         .into_par_iter()

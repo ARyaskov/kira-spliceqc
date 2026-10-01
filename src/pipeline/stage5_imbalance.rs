@@ -33,7 +33,8 @@ pub fn compute(
     let n_cells = activity.n_cells;
     let id_to_idx = super::stage4_missplicing::build_id_index(activity);
 
-    let mut z_scores: AHashMap<&'static str, Vec<f32>> = AHashMap::with_capacity(REQUIRED_GENESETS.len());
+    let mut z_scores: AHashMap<&'static str, Vec<f32>> =
+        AHashMap::with_capacity(REQUIRED_GENESETS.len());
     let mut present_core = 0usize;
 
     for &id in REQUIRED_GENESETS {
@@ -60,13 +61,27 @@ pub fn compute(
 
     let start = Instant::now();
 
-    let z_u1 = z_scores.remove("U1_CORE").unwrap_or_else(|| vec![f32::NAN; n_cells]);
-    let z_u2 = z_scores.remove("U2_CORE").unwrap_or_else(|| vec![f32::NAN; n_cells]);
-    let z_sf3b = z_scores.remove("SF3B_AXIS").unwrap_or_else(|| vec![f32::NAN; n_cells]);
-    let z_srsf = z_scores.remove("SRSF_SR").unwrap_or_else(|| vec![f32::NAN; n_cells]);
-    let z_hnrnp = z_scores.remove("HNRNP").unwrap_or_else(|| vec![f32::NAN; n_cells]);
-    let z_u12 = z_scores.remove("MINOR_U12").unwrap_or_else(|| vec![f32::NAN; n_cells]);
-    let z_nmd = z_scores.remove("NMD_SURVEILLANCE").unwrap_or_else(|| vec![f32::NAN; n_cells]);
+    let z_u1 = z_scores
+        .remove("U1_CORE")
+        .unwrap_or_else(|| vec![f32::NAN; n_cells]);
+    let z_u2 = z_scores
+        .remove("U2_CORE")
+        .unwrap_or_else(|| vec![f32::NAN; n_cells]);
+    let z_sf3b = z_scores
+        .remove("SF3B_AXIS")
+        .unwrap_or_else(|| vec![f32::NAN; n_cells]);
+    let z_srsf = z_scores
+        .remove("SRSF_SR")
+        .unwrap_or_else(|| vec![f32::NAN; n_cells]);
+    let z_hnrnp = z_scores
+        .remove("HNRNP")
+        .unwrap_or_else(|| vec![f32::NAN; n_cells]);
+    let z_u12 = z_scores
+        .remove("MINOR_U12")
+        .unwrap_or_else(|| vec![f32::NAN; n_cells]);
+    let z_nmd = z_scores
+        .remove("NMD_SURVEILLANCE")
+        .unwrap_or_else(|| vec![f32::NAN; n_cells]);
 
     let derived: Vec<(f32, f32, f32, f32, f32)> = (0..n_cells)
         .into_par_iter()

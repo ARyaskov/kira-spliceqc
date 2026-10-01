@@ -65,7 +65,9 @@ fn spiked_effects_are_recovered() {
     for r in report.results.iter().filter(|r| r.stratum == "all") {
         let auroc = r.auroc.unwrap_or_else(|| panic!("{}: no AUROC", r.truth));
         assert!(auroc >= 0.95, "{}: AUROC {auroc:.3}", r.truth);
-        let fpr = r.flag_fpr.unwrap_or_else(|| panic!("{}: no flag FPR", r.truth));
+        let fpr = r
+            .flag_fpr
+            .unwrap_or_else(|| panic!("{}: no flag FPR", r.truth));
         assert!(fpr <= 0.01, "{}: FPR {fpr:.3}", r.truth);
         let recall = r.flag_recall.unwrap();
         assert!(recall >= 0.9, "{}: recall {recall:.3}", r.truth);

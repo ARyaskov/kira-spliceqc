@@ -12,6 +12,7 @@ use crate::model::coupling::CouplingStressMetrics;
 use crate::model::cryptic_risk::CrypticSplicingRiskMetrics;
 use crate::model::exon_intron_bias::ExonIntronDefinitionMetrics;
 use crate::model::imbalance::SpliceosomeImbalanceMetrics;
+use crate::model::intron_retention::IntronRetentionMetrics;
 use crate::model::isoform_dispersion::IsoformDispersionMetrics;
 use crate::model::junctions::JunctionMetrics;
 use crate::model::missplicing::MissplicingMetrics;
@@ -19,11 +20,10 @@ use crate::model::sis::SpliceIntegrityMetrics;
 use crate::model::splicing_instability::SplicingInstabilityMetrics;
 use crate::model::splicing_noise::SplicingNoiseMetrics;
 use crate::model::timecourse::TimecourseSplicingMetrics;
-use crate::model::intron_retention::IntronRetentionMetrics;
 use crate::model::unspliced::UnsplicedMetrics;
-use crate::reference::Strata;
 use crate::output::provenance::Provenance;
 use crate::output::{json, summary, tsv};
+use crate::reference::Strata;
 
 pub struct OutputOptions {
     pub json: bool,
@@ -60,10 +60,14 @@ pub fn run_stage7(
     if let Some(j) = junctions
         && j.junction_umis.len() != cell_names.len()
     {
-        return Err(InputError::LengthMismatch("junction metrics length mismatch".to_string()));
+        return Err(InputError::LengthMismatch(
+            "junction metrics length mismatch".to_string(),
+        ));
     }
     if cell_qc.n_cells() != cell_names.len() {
-        return Err(InputError::LengthMismatch("cell QC length mismatch".to_string()));
+        return Err(InputError::LengthMismatch(
+            "cell QC length mismatch".to_string(),
+        ));
     }
     if cell_cycle.phase.len() != cell_names.len() {
         return Err(InputError::LengthMismatch(

@@ -75,7 +75,9 @@ pub fn detect_mtx_layers(input_dir: &Path, override_path: Option<&Path>) -> Opti
     }
     // STARsolo: Solo.out/Gene/raw <-> Solo.out/Velocyto/raw
     if let (Some(subset), Some(gene_dir)) = (input_dir.file_name(), input_dir.parent())
-        && gene_dir.file_name().is_some_and(|n| n == "Gene" || n == "GeneFull")
+        && gene_dir
+            .file_name()
+            .is_some_and(|n| n == "Gene" || n == "GeneFull")
         && let Some(root) = gene_dir.parent()
     {
         let candidate = root.join("Velocyto").join(subset);
@@ -118,9 +120,13 @@ pub fn read_layers(
 // MTX directory
 // ---------------------------------------------------------------------------
 
-fn read_mtx_dir(dir: &Path, genes: &[String], barcodes: &[String]) -> Result<RawLayers, InputError> {
-    let spliced_path =
-        resolve(dir, SPLICED).ok_or_else(|| InputError::MissingFile(dir.join(SPLICED).display().to_string()))?;
+fn read_mtx_dir(
+    dir: &Path,
+    genes: &[String],
+    barcodes: &[String],
+) -> Result<RawLayers, InputError> {
+    let spliced_path = resolve(dir, SPLICED)
+        .ok_or_else(|| InputError::MissingFile(dir.join(SPLICED).display().to_string()))?;
     let unspliced_path = resolve(dir, UNSPLICED)
         .ok_or_else(|| InputError::MissingFile(dir.join(UNSPLICED).display().to_string()))?;
     let ambiguous_path = resolve(dir, AMBIGUOUS);
@@ -291,7 +297,12 @@ fn read_h5ad_layers(path: &Path, n_genes: usize, n_cells: usize) -> Result<RawLa
     let spliced = read_h5ad_sparse_layer(&file, "layers/spliced", n_genes, n_cells)?;
     let unspliced = read_h5ad_sparse_layer(&file, "layers/unspliced", n_genes, n_cells)?;
     let ambiguous = if file.group("layers/ambiguous").is_ok() {
-        Some(read_h5ad_sparse_layer(&file, "layers/ambiguous", n_genes, n_cells)?)
+        Some(read_h5ad_sparse_layer(
+            &file,
+            "layers/ambiguous",
+            n_genes,
+            n_cells,
+        )?)
     } else {
         None
     };
@@ -321,7 +332,8 @@ fn read_h5ad_sparse_layer(
     let group = file
         .group(group_path)
         .map_err(|_| InputError::MissingDataset(group_path.to_string()))?;
-    let encoding = read_attr_string(&group, "encoding-type").unwrap_or_else(|| "csr_matrix".to_string());
+    let encoding =
+        read_attr_string(&group, "encoding-type").unwrap_or_else(|| "csr_matrix".to_string());
     let indptr = read_i64_dataset(&group, "indptr")?;
     let indices = read_i64_dataset(&group, "indices")?;
     let data: Vec<f32> = group
@@ -361,7 +373,11 @@ fn read_h5ad_sparse_layer(
             if !v.is_finite() || v < 0.0 || v.fract().abs() > FRAC_TOL {
                 return Err(InputError::InvalidSparseMatrix);
             }
-            let (gene, cell) = if major_is_cell { (minor, major) } else { (major, minor) };
+            let (gene, cell) = if major_is_cell {
+                (minor, major)
+            } else {
+                (major, minor)
+            };
             if gene >= n_genes || cell >= n_cells {
                 return Err(InputError::LayerMismatch(format!(
                     "{group_path}: index out of range for the main matrix"
@@ -381,7 +397,10 @@ fn read_i64_dataset(group: &hdf5::Group, name: &str) -> Result<Vec<i64>, InputEr
         .dataset(name)
         .map_err(|_| InputError::MissingDataset(name.to_string()))?;
     ds.read_raw::<i64>()
-        .or_else(|_| ds.read_raw::<i32>().map(|v| v.into_iter().map(i64::from).collect()))
+        .or_else(|_| {
+            ds.read_raw::<i32>()
+                .map(|v| v.into_iter().map(i64::from).collect())
+        })
         .map_err(|e| InputError::UnsupportedInput(format!("{name}: {e}")))
 }
 

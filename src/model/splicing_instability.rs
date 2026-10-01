@@ -95,4 +95,5 @@ pub struct SplicingInstabilityMissingness {
 /// `DEVIATION_THRESHOLD` with a BH-adjusted p below `FLAG_FDR`. The fixed
 /// cut-offs of v0.3 (SOS >= 2.0, RLR >= 1.5, SII >= 2.0) fired on 4 % of
 /// null cells and are gone.
-pub const COMPOSITE_FLAG_RULE: &str = "signed composite dev >= 3 and BH-adjusted p < 0.05 within stratum";
+pub const COMPOSITE_FLAG_RULE: &str =
+    "signed composite dev >= 3 and BH-adjusted p < 0.05 within stratum";

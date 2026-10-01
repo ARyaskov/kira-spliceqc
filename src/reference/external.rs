@@ -101,11 +101,11 @@ impl ReferenceFile {
             .enumerate()
             .map(|(i, n)| (n.as_str(), i as u32))
             .collect();
-        let (labels, folded, column) = match self
-            .stratify_by
-            .as_deref()
-            .and_then(|col| metadata.resolve(&[col]).map(|(found, values)| (found.to_string(), values)))
-        {
+        let (labels, folded, column) = match self.stratify_by.as_deref().and_then(|col| {
+            metadata
+                .resolve(&[col])
+                .map(|(found, values)| (found.to_string(), values))
+        }) {
             Some((found, values)) if values.len() == n_cells => {
                 let mut folded = 0usize;
                 let labels = values
@@ -127,7 +127,15 @@ impl ReferenceFile {
                         "reference stratification column not in this dataset; every cell uses the global reference stratum"
                     );
                 }
-                (vec![0u32; n_cells], if self.stratify_by.is_some() { n_cells } else { 0 }, None)
+                (
+                    vec![0u32; n_cells],
+                    if self.stratify_by.is_some() {
+                        n_cells
+                    } else {
+                        0
+                    },
+                    None,
+                )
             }
         };
         Strata {
@@ -145,7 +153,10 @@ impl ReferenceFile {
     }
 
     pub fn intron_retention_norms(&self) -> Vec<Option<ContinuousNorm>> {
-        self.strata.iter().map(|s| s.intron_retention_index).collect()
+        self.strata
+            .iter()
+            .map(|s| s.intron_retention_index)
+            .collect()
     }
 
     /// Per-stratum pooled unspliced ratio per gene id of `matrix` (NaN where

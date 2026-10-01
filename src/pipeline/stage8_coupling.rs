@@ -41,9 +41,15 @@ pub fn compute(activity: &GenesetActivityMatrix) -> Result<CouplingStressMetrics
         _ => return Err(InputError::EmptyCouplingGeneset),
     };
 
-    let z_u1 = z_scores.remove("U1_CORE").unwrap_or_else(|| vec![f32::NAN; n_cells]);
-    let z_u2 = z_scores.remove("U2_CORE").unwrap_or_else(|| vec![f32::NAN; n_cells]);
-    let z_sf3b = z_scores.remove("SF3B_AXIS").unwrap_or_else(|| vec![f32::NAN; n_cells]);
+    let z_u1 = z_scores
+        .remove("U1_CORE")
+        .unwrap_or_else(|| vec![f32::NAN; n_cells]);
+    let z_u2 = z_scores
+        .remove("U2_CORE")
+        .unwrap_or_else(|| vec![f32::NAN; n_cells]);
+    let z_sf3b = z_scores
+        .remove("SF3B_AXIS")
+        .unwrap_or_else(|| vec![f32::NAN; n_cells]);
 
     let start = Instant::now();
     let coupling_stress: Vec<f32> = (0..n_cells)

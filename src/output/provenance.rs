@@ -13,10 +13,10 @@ use crate::metrics::intron_retention::{
 };
 use crate::metrics::junctions::{CRYPTIC_MAX, CRYPTIC_MIN, MIN_JUNCTION_UMIS, MIN_RATIO_UMIS};
 use crate::metrics::unspliced::MIN_LAYER_UMIS;
-use crate::model::junctions::JunctionMetrics;
 use crate::model::cell_cycle::CellCycleMetrics;
 use crate::model::cell_qc::CellQc;
 use crate::model::intron_retention::IntronRetentionMetrics;
+use crate::model::junctions::JunctionMetrics;
 use crate::model::sis::SpliceIntegrityMetrics;
 use crate::model::splicing_instability::SplicingInstabilityMetrics;
 use crate::model::unspliced::UnsplicedMetrics;

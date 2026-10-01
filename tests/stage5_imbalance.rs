@@ -1,7 +1,7 @@
 use kira_spliceqc::model::geneset_activity::GenesetActivityMatrix;
 use kira_spliceqc::pipeline::stage2_genesets::standardize_activity;
-use kira_spliceqc::reference::Strata;
 use kira_spliceqc::pipeline::stage5_imbalance::compute;
+use kira_spliceqc::reference::Strata;
 
 fn make_activity(genesets: Vec<&str>, values: Vec<Vec<f32>>) -> GenesetActivityMatrix {
     let n_cells = values[0].len();
@@ -73,7 +73,12 @@ fn synthetic_z_axes_and_magnitude() {
     ];
 
     let activity = make_activity(genesets, values);
-    let metrics = compute(&standardize_activity(&activity, &Strata::global(activity.n_cells), None)).unwrap();
+    let metrics = compute(&standardize_activity(
+        &activity,
+        &Strata::global(activity.n_cells),
+        None,
+    ))
+    .unwrap();
 
     let z_u1 = robust_z(&activity.values[0..2]);
     let z_u2 = robust_z(&activity.values[2..4]);
@@ -120,7 +125,12 @@ fn missing_geneset_nan_propagates() {
         vec![1.0, -1.0],
     ];
     let activity = make_activity(genesets, values);
-    let metrics = compute(&standardize_activity(&activity, &Strata::global(activity.n_cells), None)).unwrap();
+    let metrics = compute(&standardize_activity(
+        &activity,
+        &Strata::global(activity.n_cells),
+        None,
+    ))
+    .unwrap();
 
     assert!(metrics.axis_nmd[0].is_nan());
     assert!(metrics.imbalance[0].is_finite());
@@ -148,8 +158,18 @@ fn deterministic_outputs() {
     ];
     let activity = make_activity(genesets, values);
 
-    let first = compute(&standardize_activity(&activity, &Strata::global(activity.n_cells), None)).unwrap();
-    let second = compute(&standardize_activity(&activity, &Strata::global(activity.n_cells), None)).unwrap();
+    let first = compute(&standardize_activity(
+        &activity,
+        &Strata::global(activity.n_cells),
+        None,
+    ))
+    .unwrap();
+    let second = compute(&standardize_activity(
+        &activity,
+        &Strata::global(activity.n_cells),
+        None,
+    ))
+    .unwrap();
 
     assert_eq!(first.z_u1, second.z_u1);
     assert_eq!(first.z_u2, second.z_u2);

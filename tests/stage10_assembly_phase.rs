@@ -1,7 +1,7 @@
 use kira_spliceqc::model::geneset_activity::GenesetActivityMatrix;
 use kira_spliceqc::pipeline::stage2_genesets::standardize_activity;
-use kira_spliceqc::reference::Strata;
 use kira_spliceqc::pipeline::stage10_assembly_phase::compute;
+use kira_spliceqc::reference::Strata;
 
 fn make_activity(genesets: Vec<&str>, values: Vec<Vec<f32>>) -> GenesetActivityMatrix {
     let n_cells = values[0].len();
@@ -61,7 +61,12 @@ fn synthetic_phase_imbalance() {
     // its z-scores are undefined by design (no silent zeros).
     let values = vec![vec![2.0, 0.0], vec![0.0, 2.0], vec![1.0, 1.5]];
     let activity = make_activity(genesets, values);
-    let metrics = compute(&standardize_activity(&activity, &Strata::global(activity.n_cells), None)).unwrap();
+    let metrics = compute(&standardize_activity(
+        &activity,
+        &Strata::global(activity.n_cells),
+        None,
+    ))
+    .unwrap();
 
     let z_ea = robust_z(&activity.values[0..2]);
     let z_b = robust_z(&activity.values[2..4]);
@@ -81,7 +86,12 @@ fn missing_phase_nan() {
     let genesets = vec!["SPLICE_EA_PHASE", "SPLICE_B_PHASE"];
     let values = vec![vec![1.0, 2.0], vec![2.0, 1.0]];
     let activity = make_activity(genesets, values);
-    let metrics = compute(&standardize_activity(&activity, &Strata::global(activity.n_cells), None)).unwrap();
+    let metrics = compute(&standardize_activity(
+        &activity,
+        &Strata::global(activity.n_cells),
+        None,
+    ))
+    .unwrap();
 
     assert!(metrics.ea_imbalance[0].is_nan());
     assert!(metrics.b_imbalance[0].is_nan());
@@ -98,8 +108,18 @@ fn deterministic_outputs() {
     let values = vec![vec![1.0, 2.0], vec![2.0, 3.0], vec![3.0, 4.0]];
     let activity = make_activity(genesets, values);
 
-    let first = compute(&standardize_activity(&activity, &Strata::global(activity.n_cells), None)).unwrap();
-    let second = compute(&standardize_activity(&activity, &Strata::global(activity.n_cells), None)).unwrap();
+    let first = compute(&standardize_activity(
+        &activity,
+        &Strata::global(activity.n_cells),
+        None,
+    ))
+    .unwrap();
+    let second = compute(&standardize_activity(
+        &activity,
+        &Strata::global(activity.n_cells),
+        None,
+    ))
+    .unwrap();
 
     assert_eq!(first.ea_imbalance, second.ea_imbalance);
     assert_eq!(first.b_imbalance, second.b_imbalance);

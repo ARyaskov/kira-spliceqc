@@ -16,14 +16,14 @@ use crate::model::cell_cycle::{CellCycleMetrics, CellCyclePhase};
 use crate::model::cell_qc::CellQc;
 use crate::model::coupling::CouplingStressMetrics;
 use crate::model::imbalance::SpliceosomeImbalanceMetrics;
+use crate::model::intron_retention::IntronRetentionMetrics;
 use crate::model::junctions::JunctionMetrics;
 use crate::model::missplicing::MissplicingMetrics;
 use crate::model::sis::SpliceIntegrityMetrics;
-use crate::model::intron_retention::IntronRetentionMetrics;
+use crate::model::splicing_instability::{COMPOSITE_FLAG_RULE, SplicingInstabilityMetrics};
 use crate::model::unspliced::UnsplicedMetrics;
 use crate::output::provenance::{Provenance, input_levels};
 use crate::reference::{DEVIATION_THRESHOLD, FLAG_FDR, MIN_STRATUM_CELLS, Strata};
-use crate::model::splicing_instability::{COMPOSITE_FLAG_RULE, SplicingInstabilityMetrics};
 use crate::stats::robust::quantile_f64;
 
 const PIPELINE_DIR: &str = "kira-spliceqc";
@@ -373,7 +373,15 @@ pub fn write_pipeline_contract(
     catalog: &GenesetCatalog,
 ) -> Result<(), InputError> {
     info!("pipeline contract: building rows");
-    let rows = build_rows(matrix, missplicing, imbalance, sis, coupling, cell_cycle, cell_qc)?;
+    let rows = build_rows(
+        matrix,
+        missplicing,
+        imbalance,
+        sis,
+        coupling,
+        cell_cycle,
+        cell_qc,
+    )?;
     info!("pipeline contract: writing spliceqc.tsv");
     write_spliceqc_tsv(&out_dir.join("spliceqc.tsv"), &rows)?;
     info!("pipeline contract: writing panels_report.tsv");
@@ -588,7 +596,8 @@ fn write_panels_report_tsv(
     w.write_all(b"panel_id\tpanel_name\tpanel_group\tpanel_size_defined\tpanel_size_mappable\tmissing_genes\tcoverage_median\tcoverage_p10\tsum_median\tsum_p90\tsum_p99\n")
         .map_err(|e| InputError::io(path, e))?;
     for row in rows {
-        w.write_all(row.as_bytes()).map_err(|e| InputError::io(path, e))?;
+        w.write_all(row.as_bytes())
+            .map_err(|e| InputError::io(path, e))?;
     }
     w.flush().map_err(|e| InputError::io(path, e))?;
     Ok(())
@@ -722,8 +731,11 @@ fn write_summary_json(
                 median: opt(quantile_f64(&mut defined, 0.5)),
                 p10: opt(quantile_f64(&mut defined, 0.1)),
                 p90: opt(quantile_f64(&mut defined, 0.9)),
-                nuclear_fraction_flag_fraction: u.nuclear_fraction_flag.iter().filter(|f| **f).count()
-                    as f64
+                nuclear_fraction_flag_fraction: u
+                    .nuclear_fraction_flag
+                    .iter()
+                    .filter(|f| **f)
+                    .count() as f64
                     / u.nuclear_fraction_flag.len().max(1) as f64,
                 strata: u
                     .reference
@@ -793,7 +805,9 @@ fn write_summary_json(
         },
         cell_cycle: {
             let total = cell_cycle.phase.len().max(1) as f64;
-            let frac = |p: CellCyclePhase| cell_cycle.phase.iter().filter(|q| **q == p).count() as f64 / total;
+            let frac = |p: CellCyclePhase| {
+                cell_cycle.phase.iter().filter(|q| **q == p).count() as f64 / total
+            };
             CellCycleSummaryJson {
                 s_genes_mapped: cell_cycle.s_genes_mapped,
                 g2m_genes_mapped: cell_cycle.g2m_genes_mapped,
@@ -808,7 +822,11 @@ fn write_summary_json(
         },
         junctions: junctions.map(|m| {
             let med = |v: &[f32]| {
-                let mut d: Vec<f64> = v.iter().filter(|x| x.is_finite()).map(|x| *x as f64).collect();
+                let mut d: Vec<f64> = v
+                    .iter()
+                    .filter(|x| x.is_finite())
+                    .map(|x| *x as f64)
+                    .collect();
                 let q = quantile_f64(&mut d, 0.5);
                 if q.is_finite() { Some(q) } else { None }
             };
@@ -1192,6 +1210,9 @@ mod tests {
         let flags = build_flags(f64::NAN, 1000, true, false, false, false);
         assert_eq!(flags, "MISSING_METRICS");
         assert_eq!(build_flags(0.9, 1000, false, true, false, false), "CYCLING");
-        assert_eq!(build_flags(0.9, 1000, false, false, true, true), "LOW_DEPTH,DOUBLET");
+        assert_eq!(
+            build_flags(0.9, 1000, false, false, true, true),
+            "LOW_DEPTH,DOUBLET"
+        );
     }
 }

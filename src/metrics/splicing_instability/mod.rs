@@ -57,10 +57,20 @@ pub fn compute(
     let conflict_panel_enabled = conflict_panel.gene_indices.len() >= MIN_GENES_PER_PANEL_CELL;
     let nmd_panel_enabled = nmd_panel.gene_indices.len() >= MIN_GENES_PER_PANEL_CELL;
 
-    let control_sets: Vec<Vec<u32>> = [&splice_panel, &rbp_panel, &rloop_panel, &conflict_panel, &nmd_panel]
-        .iter()
-        .map(|p| controls.map(|c| c.controls_for(&p.gene_indices)).unwrap_or_default())
-        .collect();
+    let control_sets: Vec<Vec<u32>> = [
+        &splice_panel,
+        &rbp_panel,
+        &rloop_panel,
+        &conflict_panel,
+        &nmd_panel,
+    ]
+    .iter()
+    .map(|p| {
+        controls
+            .map(|c| c.controls_for(&p.gene_indices))
+            .unwrap_or_default()
+    })
+    .collect();
     let libsize_scale: Vec<f32> = (0..n_cells)
         .map(|cell| 1e4_f32 / matrix.libsize(cell).max(1) as f32)
         .collect();
@@ -212,7 +222,11 @@ pub fn compute(
                 f32::NAN
             } else if conflict_panel_enabled {
                 let zrisk = z_conflict[cell];
-                if zrisk.is_finite() { 0.7 * -zres + 0.3 * zrisk } else { f32::NAN }
+                if zrisk.is_finite() {
+                    0.7 * -zres + 0.3 * zrisk
+                } else {
+                    f32::NAN
+                }
             } else {
                 -zres
             };
@@ -220,7 +234,11 @@ pub fn compute(
                 f32::NAN
             } else if nmd_panel_enabled {
                 let znmd = z_nmd[cell];
-                if znmd.is_finite() { 0.6 * sos + 0.4 * -znmd } else { f32::NAN }
+                if znmd.is_finite() {
+                    0.6 * sos + 0.4 * -znmd
+                } else {
+                    f32::NAN
+                }
             } else {
                 sos
             };
@@ -367,7 +385,13 @@ pub fn compute(
 pub fn panel_gene_ids(matrix: &dyn ExpressionMatrix) -> Vec<u32> {
     let symbol_to_idx = symbol_index(matrix);
     let mut ids = Vec::new();
-    for panel in [SPLICEOSOME_PANEL, SPLICING_RBP_PANEL, RLOOP_RESOLUTION_PANEL, CONFLICT_RISK_PANEL, NMD_PANEL] {
+    for panel in [
+        SPLICEOSOME_PANEL,
+        SPLICING_RBP_PANEL,
+        RLOOP_RESOLUTION_PANEL,
+        CONFLICT_RISK_PANEL,
+        NMD_PANEL,
+    ] {
         ids.extend(resolve_panel("", panel, &symbol_to_idx).gene_indices);
     }
     ids

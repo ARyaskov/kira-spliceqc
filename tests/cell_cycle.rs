@@ -73,7 +73,13 @@ fn phases_follow_the_seurat_rule() {
     assert_eq!(cc.s_genes_mapped, S_GENES.len());
     assert_eq!(cc.g2m_genes_mapped, G2M_GENES.len());
     for c in 0..20 {
-        assert_eq!(cc.phase[c], CellCyclePhase::S, "cell {c}: s={} g2m={}", cc.s_score[c], cc.g2m_score[c]);
+        assert_eq!(
+            cc.phase[c],
+            CellCyclePhase::S,
+            "cell {c}: s={} g2m={}",
+            cc.s_score[c],
+            cc.g2m_score[c]
+        );
         assert!(cc.cycling[c]);
         assert!(cc.s_score[c] > 0.5);
     }
@@ -86,11 +92,17 @@ fn phases_follow_the_seurat_rule() {
     // mean-matched controls sit slightly higher than the quiescent baseline
     // and the quiescent scores land a little below 0.)
     let quiescent_cycling = (40..120).filter(|&c| cc.cycling[c]).count();
-    assert!(quiescent_cycling <= 80 / 2, "{quiescent_cycling} of 80 quiescent cells called cycling");
+    assert!(
+        quiescent_cycling <= 80 / 2,
+        "{quiescent_cycling} of 80 quiescent cells called cycling"
+    );
     // Boosted cells score far above every quiescent cell.
     let max_quiescent_s = (40..120).map(|c| cc.s_score[c]).fold(f32::MIN, f32::max);
     let min_boosted_s = (0..20).map(|c| cc.s_score[c]).fold(f32::MAX, f32::min);
-    assert!(min_boosted_s > max_quiescent_s + 0.5, "{min_boosted_s} vs {max_quiescent_s}");
+    assert!(
+        min_boosted_s > max_quiescent_s + 0.5,
+        "{min_boosted_s} vs {max_quiescent_s}"
+    );
     for c in 40..120 {
         assert!(cc.s_score[c].abs() < 0.8, "{}", cc.s_score[c]);
         assert!(cc.g2m_score[c].abs() < 0.8, "{}", cc.g2m_score[c]);

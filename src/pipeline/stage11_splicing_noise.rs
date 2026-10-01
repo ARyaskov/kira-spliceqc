@@ -53,7 +53,11 @@ pub fn compute(activity: &GenesetActivityMatrix) -> Result<SplicingNoiseMetrics,
         return Err(InputError::InsufficientSplicingNoiseGenesets);
     }
 
-    let noise_index = if used > 0 { sum / used as f32 } else { f32::NAN };
+    let noise_index = if used > 0 {
+        sum / used as f32
+    } else {
+        f32::NAN
+    };
     per_geneset_noise.sort_by(|a, b| a.0.cmp(&b.0));
 
     info!(

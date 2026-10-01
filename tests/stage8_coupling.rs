@@ -1,7 +1,7 @@
 use kira_spliceqc::model::geneset_activity::GenesetActivityMatrix;
 use kira_spliceqc::pipeline::stage2_genesets::standardize_activity;
-use kira_spliceqc::reference::Strata;
 use kira_spliceqc::pipeline::stage8_coupling::compute;
+use kira_spliceqc::reference::Strata;
 
 fn make_activity(genesets: Vec<&str>, values: Vec<Vec<f32>>) -> GenesetActivityMatrix {
     let n_cells = values[0].len();
@@ -60,7 +60,12 @@ fn synthetic_coupling_stress() {
         vec![0.0, 2.0],
     ];
     let activity = make_activity(genesets, values);
-    let metrics = compute(&standardize_activity(&activity, &Strata::global(activity.n_cells), None)).unwrap();
+    let metrics = compute(&standardize_activity(
+        &activity,
+        &Strata::global(activity.n_cells),
+        None,
+    ))
+    .unwrap();
 
     let z_tx = robust_z(&activity.values[0..2]);
     let z_u1 = robust_z(&activity.values[2..4]);
@@ -79,7 +84,12 @@ fn missing_coupling_geneset_errors() {
     let genesets = vec!["U1_CORE", "U2_CORE", "SF3B_AXIS"];
     let values = vec![vec![0.0, 1.0], vec![0.0, 1.0], vec![0.0, 1.0]];
     let activity = make_activity(genesets, values);
-    let err = compute(&standardize_activity(&activity, &Strata::global(activity.n_cells), None)).unwrap_err();
+    let err = compute(&standardize_activity(
+        &activity,
+        &Strata::global(activity.n_cells),
+        None,
+    ))
+    .unwrap_err();
     assert!(format!("{err}").contains("coupling"));
 }
 
@@ -93,8 +103,18 @@ fn deterministic_outputs() {
         vec![4.0, 5.0],
     ];
     let activity = make_activity(genesets, values);
-    let first = compute(&standardize_activity(&activity, &Strata::global(activity.n_cells), None)).unwrap();
-    let second = compute(&standardize_activity(&activity, &Strata::global(activity.n_cells), None)).unwrap();
+    let first = compute(&standardize_activity(
+        &activity,
+        &Strata::global(activity.n_cells),
+        None,
+    ))
+    .unwrap();
+    let second = compute(&standardize_activity(
+        &activity,
+        &Strata::global(activity.n_cells),
+        None,
+    ))
+    .unwrap();
 
     assert_eq!(first.coupling_stress, second.coupling_stress);
 }

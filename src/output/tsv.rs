@@ -9,12 +9,12 @@ use crate::model::cell_qc::CellQc;
 use crate::model::coupling::CouplingStressMetrics;
 use crate::model::exon_intron_bias::ExonIntronDefinitionMetrics;
 use crate::model::imbalance::SpliceosomeImbalanceMetrics;
+use crate::model::intron_retention::IntronRetentionMetrics;
 use crate::model::isoform_dispersion::IsoformDispersionMetrics;
 use crate::model::junctions::JunctionMetrics;
 use crate::model::missplicing::MissplicingMetrics;
 use crate::model::sis::{SpliceIntegrityClass, SpliceIntegrityMetrics};
 use crate::model::splicing_instability::SplicingInstabilityMetrics;
-use crate::model::intron_retention::IntronRetentionMetrics;
 use crate::model::unspliced::UnsplicedMetrics;
 
 /// Column naming: every metric derived purely from panel expression carries
@@ -227,30 +227,64 @@ fn cell_values<'a>(
     out.push(Value::OptU64(unspliced.map(|u| u.spliced_umis[cell_id])));
     out.push(Value::OptU64(unspliced.map(|u| u.unspliced_umis[cell_id])));
     out.push(Value::OptU64(unspliced.map(|u| u.ambiguous_umis[cell_id])));
-    out.push(Value::F32(unspliced.map_or(f32::NAN, |u| u.unspliced_fraction[cell_id])));
-    out.push(Value::F32(unspliced.map_or(f32::NAN, |u| u.unspliced_fraction_ci_low[cell_id])));
-    out.push(Value::F32(unspliced.map_or(f32::NAN, |u| u.unspliced_fraction_ci_high[cell_id])));
-    out.push(Value::F32(unspliced.map_or(f32::NAN, |u| u.unspliced_fraction_dev[cell_id])));
-    out.push(Value::OptBool(unspliced.map(|u| u.nuclear_fraction_flag[cell_id])));
-    out.push(Value::F32(ir.map_or(f32::NAN, |m| m.intron_retention_index[cell_id])));
-    out.push(Value::F32(ir.map_or(f32::NAN, |m| m.intron_retention_index_dev[cell_id])));
-    out.push(Value::F32(ir.map_or(f32::NAN, |m| m.ir_gene_dispersion[cell_id])));
+    out.push(Value::F32(
+        unspliced.map_or(f32::NAN, |u| u.unspliced_fraction[cell_id]),
+    ));
+    out.push(Value::F32(
+        unspliced.map_or(f32::NAN, |u| u.unspliced_fraction_ci_low[cell_id]),
+    ));
+    out.push(Value::F32(
+        unspliced.map_or(f32::NAN, |u| u.unspliced_fraction_ci_high[cell_id]),
+    ));
+    out.push(Value::F32(
+        unspliced.map_or(f32::NAN, |u| u.unspliced_fraction_dev[cell_id]),
+    ));
+    out.push(Value::OptBool(
+        unspliced.map(|u| u.nuclear_fraction_flag[cell_id]),
+    ));
+    out.push(Value::F32(
+        ir.map_or(f32::NAN, |m| m.intron_retention_index[cell_id]),
+    ));
+    out.push(Value::F32(
+        ir.map_or(f32::NAN, |m| m.intron_retention_index_dev[cell_id]),
+    ));
+    out.push(Value::F32(
+        ir.map_or(f32::NAN, |m| m.ir_gene_dispersion[cell_id]),
+    ));
     out.push(Value::OptU64(ir.map(|m| m.ir_genes_used[cell_id] as u64)));
     out.push(Value::OptBool(ir.map(|m| m.intron_retention_high[cell_id])));
     out.push(Value::OptU64(jn.map(|m| m.junction_umis[cell_id])));
-    out.push(Value::F32(jn.map_or(f32::NAN, |m| m.unannotated_junction_fraction[cell_id])));
+    out.push(Value::F32(
+        jn.map_or(f32::NAN, |m| m.unannotated_junction_fraction[cell_id]),
+    ));
     out.push(Value::OptU64(jn.map(|m| m.cryptic_3ss_umis[cell_id])));
-    out.push(Value::F32(jn.map_or(f32::NAN, |m| m.cryptic_3ss_fraction[cell_id])));
-    out.push(Value::F32(jn.map_or(f32::NAN, |m| m.cryptic_3ss_fraction_dev[cell_id])));
+    out.push(Value::F32(
+        jn.map_or(f32::NAN, |m| m.cryptic_3ss_fraction[cell_id]),
+    ));
+    out.push(Value::F32(
+        jn.map_or(f32::NAN, |m| m.cryptic_3ss_fraction_dev[cell_id]),
+    ));
     out.push(Value::OptBool(jn.map(|m| m.cryptic_3ss_high[cell_id])));
     out.push(Value::OptU64(jn.map(|m| m.exon_skip_umis[cell_id])));
-    out.push(Value::F32(jn.map_or(f32::NAN, |m| m.exon_skip_fraction[cell_id])));
-    out.push(Value::F32(jn.map_or(f32::NAN, |m| m.exon_skip_fraction_dev[cell_id])));
+    out.push(Value::F32(
+        jn.map_or(f32::NAN, |m| m.exon_skip_fraction[cell_id]),
+    ));
+    out.push(Value::F32(
+        jn.map_or(f32::NAN, |m| m.exon_skip_fraction_dev[cell_id]),
+    ));
     out.push(Value::OptBool(jn.map(|m| m.exon_skip_high[cell_id])));
-    out.push(Value::F32(jn.map_or(f32::NAN, |m| m.splice_site_shift[cell_id])));
-    out.push(Value::F32(jn.map_or(f32::NAN, |m| m.splice_site_shift_dev[cell_id])));
-    out.push(Value::OptBool(jn.map(|m| m.splice_site_shift_high[cell_id])));
-    out.push(Value::OptU64(jn.map(|m| m.site_groups_used[cell_id] as u64)));
+    out.push(Value::F32(
+        jn.map_or(f32::NAN, |m| m.splice_site_shift[cell_id]),
+    ));
+    out.push(Value::F32(
+        jn.map_or(f32::NAN, |m| m.splice_site_shift_dev[cell_id]),
+    ));
+    out.push(Value::OptBool(
+        jn.map(|m| m.splice_site_shift_high[cell_id]),
+    ));
+    out.push(Value::OptU64(
+        jn.map(|m| m.site_groups_used[cell_id] as u64),
+    ));
     out.push(Value::F32(cc.s_score[cell_id]));
     out.push(Value::F32(cc.g2m_score[cell_id]));
     out.push(Value::Str(cc.phase[cell_id].as_str()));
@@ -303,5 +337,6 @@ fn write_value<W: Write>(
         Value::OptBool(Some(b)) => buf.push_str(if *b { "true" } else { "false" }),
         Value::OptBool(None) => {}
     }
-    w.write_all(buf.as_bytes()).map_err(|e| InputError::io(path, e))
+    w.write_all(buf.as_bytes())
+        .map_err(|e| InputError::io(path, e))
 }

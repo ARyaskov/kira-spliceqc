@@ -1,7 +1,7 @@
 use kira_spliceqc::model::geneset_activity::GenesetActivityMatrix;
 use kira_spliceqc::pipeline::stage2_genesets::standardize_activity;
-use kira_spliceqc::reference::Strata;
 use kira_spliceqc::pipeline::stage4_missplicing::compute;
+use kira_spliceqc::reference::Strata;
 
 fn make_activity(genesets: Vec<&str>, values: Vec<Vec<f32>>) -> GenesetActivityMatrix {
     let n_cells = values[0].len();
@@ -73,7 +73,12 @@ fn manual_z_scores_components() {
     ];
 
     let activity = make_activity(genesets, values);
-    let metrics = compute(&standardize_activity(&activity, &Strata::global(activity.n_cells), None)).unwrap();
+    let metrics = compute(&standardize_activity(
+        &activity,
+        &Strata::global(activity.n_cells),
+        None,
+    ))
+    .unwrap();
 
     let z_u1 = robust_z(&activity.values[0..2]);
     let z_u2 = robust_z(&activity.values[2..4]);
@@ -121,7 +126,12 @@ fn missing_geneset_nan_component() {
         vec![1.0, -1.0],
     ];
     let activity = make_activity(genesets, values);
-    let metrics = compute(&standardize_activity(&activity, &Strata::global(activity.n_cells), None)).unwrap();
+    let metrics = compute(&standardize_activity(
+        &activity,
+        &Strata::global(activity.n_cells),
+        None,
+    ))
+    .unwrap();
 
     assert!(metrics.b_nmd[0].is_nan());
     assert!(metrics.b_core[0].is_finite());
@@ -150,8 +160,18 @@ fn deterministic_outputs() {
     ];
     let activity = make_activity(genesets, values);
 
-    let first = compute(&standardize_activity(&activity, &Strata::global(activity.n_cells), None)).unwrap();
-    let second = compute(&standardize_activity(&activity, &Strata::global(activity.n_cells), None)).unwrap();
+    let first = compute(&standardize_activity(
+        &activity,
+        &Strata::global(activity.n_cells),
+        None,
+    ))
+    .unwrap();
+    let second = compute(&standardize_activity(
+        &activity,
+        &Strata::global(activity.n_cells),
+        None,
+    ))
+    .unwrap();
 
     assert_eq!(first.b_core, second.b_core);
     assert_eq!(first.b_u12, second.b_u12);
@@ -167,7 +187,14 @@ fn core_mean_uses_available_panels_when_one_core_panel_is_missing() {
     // core panels, so b_core must be the mean of the two available z-scores
     // rather than NaN.
     let activity = make_activity(
-        vec!["U1_CORE", "U2_CORE", "SRSF_SR", "HNRNP", "MINOR_U12", "NMD_SURVEILLANCE"],
+        vec![
+            "U1_CORE",
+            "U2_CORE",
+            "SRSF_SR",
+            "HNRNP",
+            "MINOR_U12",
+            "NMD_SURVEILLANCE",
+        ],
         vec![
             vec![1.0, 2.0, 3.0, 4.0, 10.0],
             vec![1.0, 2.0, 3.0, 4.0, 10.0],
@@ -177,7 +204,12 @@ fn core_mean_uses_available_panels_when_one_core_panel_is_missing() {
             vec![0.5, 1.0, 1.5, 2.0, 2.5],
         ],
     );
-    let metrics = compute(&standardize_activity(&activity, &Strata::global(activity.n_cells), None)).unwrap();
+    let metrics = compute(&standardize_activity(
+        &activity,
+        &Strata::global(activity.n_cells),
+        None,
+    ))
+    .unwrap();
     let z = robust_z(&[1.0, 2.0, 3.0, 4.0, 10.0]);
     let expected = (-(z[0] + z[0]) / 2.0).max(0.0);
     assert!(metrics.b_core[0].is_finite());

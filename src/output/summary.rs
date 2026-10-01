@@ -1,10 +1,10 @@
 use crate::model::cell_cycle::{CellCycleMetrics, CellCyclePhase};
 use crate::model::cell_qc::CellQc;
 use crate::model::collapse::{SpliceosomeCollapseMetrics, SpliceosomeCollapseStatus};
-use crate::model::junctions::JunctionMetrics;
 use crate::model::cryptic_risk::CrypticSplicingRiskMetrics;
-use crate::model::sis::{SpliceIntegrityClass, SpliceIntegrityMetrics};
 use crate::model::intron_retention::IntronRetentionMetrics;
+use crate::model::junctions::JunctionMetrics;
+use crate::model::sis::{SpliceIntegrityClass, SpliceIntegrityMetrics};
 use crate::model::unspliced::UnsplicedMetrics;
 use crate::reference::Strata;
 use crate::stats::robust::median;
@@ -24,7 +24,11 @@ pub fn format_summary(
 ) -> String {
     let n_cells = metrics.sis.len();
     let cycling_line = {
-        let known = cell_cycle.phase.iter().filter(|p| **p != CellCyclePhase::Unknown).count();
+        let known = cell_cycle
+            .phase
+            .iter()
+            .filter(|p| **p != CellCyclePhase::Unknown)
+            .count();
         if known == 0 {
             "Cycling (S/G2M, Tirosh 2016): N/A (cell-cycle genes not mapped)\n".to_string()
         } else {
@@ -51,7 +55,10 @@ pub fn format_summary(
             strata.n_strata() - 1,
             strata.folded_cells
         ),
-        None => format!("{qc_line}Reference: {} (no stratification column)\n", strata.mode.as_str()),
+        None => format!(
+            "{qc_line}Reference: {} (no stratification column)\n",
+            strata.mode.as_str()
+        ),
     };
     let tier_b = match junctions {
         Some(j) => format!(

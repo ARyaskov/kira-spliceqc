@@ -1,8 +1,8 @@
 use crate::expression::ExpressionMatrix;
 use crate::expression::MmapExpressionMatrix;
 use crate::genesets::controls::ControlPool;
-use crate::reference::Strata;
 use crate::model::splicing_instability::SplicingInstabilityMetrics;
+use crate::reference::Strata;
 
 pub fn run_stage15(matrix: &MmapExpressionMatrix) -> SplicingInstabilityMetrics {
     compute(matrix, None, &Strata::global(matrix.n_cells()))

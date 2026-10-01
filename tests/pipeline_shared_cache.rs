@@ -245,7 +245,11 @@ fn shared_cache_crc_tamper_is_rejected() {
     // Both the low-level mmap and the MmapExpressionMatrix wrapper should reject.
     let err = MmapExpressionMatrix::open_shared_cache(&cache_path).unwrap_err();
     let msg = err.to_string().to_lowercase();
-    assert!(msg.contains("crc") || msg.contains("invalid shared cache"), "got: {}", err);
+    assert!(
+        msg.contains("crc") || msg.contains("invalid shared cache"),
+        "got: {}",
+        err
+    );
 }
 
 #[test]

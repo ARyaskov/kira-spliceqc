@@ -242,7 +242,8 @@ fn execute_simulate(args: SimulateArgs) -> Result<(), SpliceQcError> {
         skip_fraction: args.skip_fraction,
         skip_ratio: args.skip_ratio,
     };
-    let effects = simulate(&config, &args.out).map_err(|e| SpliceQcError::PipelineFailure(e.to_string()))?;
+    let effects =
+        simulate(&config, &args.out).map_err(|e| SpliceQcError::PipelineFailure(e.to_string()))?;
     let count = |e: Effect| effects.iter().filter(|x| **x == e).count();
     println!(
         "simulated {} cells into {}: cryptic {}, ir {}, damaged {}, skip {} (junctions in {}/sj, run with --junctions)",
@@ -272,21 +273,31 @@ fn execute_validate(args: ValidateArgs) -> Result<(), SpliceQcError> {
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| SpliceQcError::InvalidInput(e.to_string()))?
     };
-    let report = evaluate(&cells, &args.truth, &pairs).map_err(|e| SpliceQcError::PipelineFailure(e.to_string()))?;
-    let json = serde_json::to_string_pretty(&report).map_err(|e| SpliceQcError::PipelineFailure(e.to_string()))?;
+    let report = evaluate(&cells, &args.truth, &pairs)
+        .map_err(|e| SpliceQcError::PipelineFailure(e.to_string()))?;
+    let json = serde_json::to_string_pretty(&report)
+        .map_err(|e| SpliceQcError::PipelineFailure(e.to_string()))?;
     std::fs::write(&args.out, json)?;
     let md = args.out.with_extension("md");
     std::fs::write(&md, report.to_markdown())?;
     print!("{}", report.to_markdown());
-    println!("
-written: {} and {}", args.out.display(), md.display());
+    println!(
+        "
+written: {} and {}",
+        args.out.display(),
+        md.display()
+    );
     Ok(())
 }
 
 fn execute_reference_build(args: ReferenceBuildArgs) -> Result<(), SpliceQcError> {
     let config = RunConfig {
         input: args.input,
-        out_dir: args.out.parent().map(|p| p.to_path_buf()).unwrap_or_default(),
+        out_dir: args
+            .out
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_default(),
         cache_path: None,
         layers: args.layers,
         junctions: None,

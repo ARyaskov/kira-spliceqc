@@ -118,8 +118,8 @@ impl MmapExpressionMatrix {
     }
 
     pub fn open_shared_cache(path: &Path) -> Result<Self, InputError> {
-        let cache = mmap_shared_cache(path)
-            .map_err(|e| InputError::InvalidSharedCache(e.to_string()))?;
+        let cache =
+            mmap_shared_cache(path).map_err(|e| InputError::InvalidSharedCache(e.to_string()))?;
 
         let n_genes = cache.n_genes;
         let n_cells = cache.n_cells;
@@ -233,12 +233,7 @@ impl ExpressionMatrix for MmapExpressionMatrix {
         sums.into_iter().map(|s| (s / n) as f32).collect()
     }
 
-    fn gather_panel_log_cp10k(
-        &self,
-        panel_sorted: &[u32],
-        cell: usize,
-        out: &mut Vec<f32>,
-    ) {
+    fn gather_panel_log_cp10k(&self, panel_sorted: &[u32], cell: usize, out: &mut Vec<f32>) {
         debug_assert!(is_sorted_unique(panel_sorted));
         out.reserve(panel_sorted.len());
         let scale = 1e4_f32 / self.libsizes[cell].max(1) as f32;
@@ -327,11 +322,7 @@ impl ExpressionMatrix for MmapExpressionMatrix {
         sum
     }
 
-    fn panel_count_sum_and_detected(
-        &self,
-        panel_sorted: &[u32],
-        cell: usize,
-    ) -> (u64, usize) {
+    fn panel_count_sum_and_detected(&self, panel_sorted: &[u32], cell: usize) -> (u64, usize) {
         debug_assert!(is_sorted_unique(panel_sorted));
         let mut sum = 0u64;
         let mut detected = 0usize;

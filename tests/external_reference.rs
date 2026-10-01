@@ -21,14 +21,22 @@ fn write_dataset(dir: &Path, glia_uf: f64) {
         .collect();
     genes.extend((0..20).map(|i| format!("FILLER{i:02}")));
     let n_cells = 120;
-    let (mut m, mut s, mut u, mut barcodes, mut metadata) =
-        (String::new(), String::new(), String::new(), String::new(), String::from("barcode\tcell_type\n"));
+    let (mut m, mut s, mut u, mut barcodes, mut metadata) = (
+        String::new(),
+        String::new(),
+        String::new(),
+        String::new(),
+        String::from("barcode\tcell_type\n"),
+    );
     let mut entries = 0;
     for c in 0..n_cells {
         let neuron = c < 60;
         let barcode = format!("CELL{c:03}");
         barcodes.push_str(&format!("{barcode}\n"));
-        metadata.push_str(&format!("{barcode}\t{}\n", if neuron { "Neuron" } else { "Glia" }));
+        metadata.push_str(&format!(
+            "{barcode}\t{}\n",
+            if neuron { "Neuron" } else { "Glia" }
+        ));
         let uf = if neuron { 0.6 } else { glia_uf } + (c % 5) as f64 * 0.01;
         for g in 1..=genes.len() {
             let total = 200 + ((c * 11 + g * 7) % 9) as u32;
@@ -51,7 +59,11 @@ fn write_dataset(dir: &Path, glia_uf: f64) {
     fs::write(dir.join("unspliced.mtx"), format!("{header}{u}")).unwrap();
     fs::write(
         dir.join("features.tsv"),
-        genes.iter().enumerate().map(|(i, g)| format!("g{i}\t{g}\n")).collect::<String>(),
+        genes
+            .iter()
+            .enumerate()
+            .map(|(i, g)| format!("g{i}\t{g}\n"))
+            .collect::<String>(),
     )
     .unwrap();
     fs::write(dir.join("barcodes.tsv"), barcodes).unwrap();
@@ -90,8 +102,15 @@ impl Cells {
     fn read(path: &Path) -> Self {
         let text = fs::read_to_string(path).unwrap();
         let mut lines = text.lines();
-        let header = lines.next().unwrap().split('\t').map(str::to_string).collect();
-        let rows = lines.map(|l| l.split('\t').map(str::to_string).collect()).collect();
+        let header = lines
+            .next()
+            .unwrap()
+            .split('\t')
+            .map(str::to_string)
+            .collect();
+        let rows = lines
+            .map(|l| l.split('\t').map(str::to_string).collect())
+            .collect();
         Self { header, rows }
     }
     fn median(&self, col: &str, cells: impl Fn(&str) -> bool) -> f64 {
@@ -110,7 +129,10 @@ impl Cells {
     fn count(&self, col: &str, value: &str, cells: impl Fn(&str) -> bool) -> usize {
         let ci = self.header.iter().position(|h| h == col).unwrap();
         let ni = self.header.iter().position(|h| h == "cell_name").unwrap();
-        self.rows.iter().filter(|r| cells(&r[ni]) && r[ci] == value).count()
+        self.rows
+            .iter()
+            .filter(|r| cells(&r[ni]) && r[ci] == value)
+            .count()
     }
 }
 
@@ -148,7 +170,12 @@ fn reference_build_then_apply_reveals_a_shifted_stratum() {
         serde_json::from_slice(&fs::read(base.join("summary.json")).unwrap()).unwrap();
     assert_eq!(summary["reference"]["mode"], "external");
     assert_eq!(summary["reference"]["column"], "cell_type");
-    assert!(summary["reference"]["external_file"].as_str().unwrap().ends_with("ref.json"));
+    assert!(
+        summary["reference"]["external_file"]
+            .as_str()
+            .unwrap()
+            .ends_with("ref.json")
+    );
     assert_eq!(
         summary["reference"]["external_metrics"],
         serde_json::json!(["unspliced_fraction", "intron_retention_index"])
@@ -156,11 +183,20 @@ fn reference_build_then_apply_reveals_a_shifted_stratum() {
     let ext = Cells::read(&base.join("cells.tsv"));
     let glia_uf_dev = ext.median("unspliced_fraction_dev", glia);
     let neuron_uf_dev = ext.median("unspliced_fraction_dev", neuron);
-    assert!(glia_uf_dev > 5.0, "glia UF deviation under external reference: {glia_uf_dev}");
-    assert!(neuron_uf_dev.abs() < 1.5, "neuron UF deviation: {neuron_uf_dev}");
+    assert!(
+        glia_uf_dev > 5.0,
+        "glia UF deviation under external reference: {glia_uf_dev}"
+    );
+    assert!(
+        neuron_uf_dev.abs() < 1.5,
+        "neuron UF deviation: {neuron_uf_dev}"
+    );
     // Intron retention doubled in glia relative to the control: index ~ log2(2).
     let glia_iri = ext.median("intron_retention_index", glia);
-    assert!(glia_iri > 0.6 && glia_iri < 1.2, "glia IRI vs control: {glia_iri}");
+    assert!(
+        glia_iri > 0.6 && glia_iri < 1.2,
+        "glia IRI vs control: {glia_iri}"
+    );
     assert!(ext.median("intron_retention_index", neuron).abs() < 0.2);
     assert!(ext.median("intron_retention_index_dev", glia) > 3.0);
     assert!(ext.count("intron_retention_high", "true", glia) >= 50);
@@ -195,8 +231,11 @@ fn reference_build_requires_layers() {
     write_dataset(&input, 0.2);
     fs::remove_file(input.join("spliced.mtx")).unwrap();
     fs::remove_file(input.join("unspliced.mtx")).unwrap();
-    let err = build_reference_file(config(&input, dir.path(), None), &dir.path().join("ref.json"))
-        .unwrap_err()
-        .to_string();
+    let err = build_reference_file(
+        config(&input, dir.path(), None),
+        &dir.path().join("ref.json"),
+    )
+    .unwrap_err()
+    .to_string();
     assert!(err.contains("layers"), "{err}");
 }

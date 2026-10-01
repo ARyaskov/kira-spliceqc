@@ -21,7 +21,8 @@ pub fn run_stage17(
         gene_ratios: file.gene_ratios_for(matrix),
         norms: file.intron_retention_norms(),
     });
-    let metrics = crate::metrics::intron_retention::compute(layers, strata, external_norms.as_ref());
+    let metrics =
+        crate::metrics::intron_retention::compute(layers, strata, external_norms.as_ref());
     info!(
         elapsed_ms = start.elapsed().as_millis(),
         undefined_cells = metrics.undefined_cells,

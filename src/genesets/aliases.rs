@@ -121,7 +121,11 @@ pub fn symbol_index(matrix: &dyn ExpressionMatrix) -> AHashMap<String, u32> {
 
 /// Resolves a catalog entry given its symbol and an optional id: the id
 /// first (exact or version-stripped), then the symbol with aliases.
-pub fn resolve_entry(index: &AHashMap<String, u32>, symbol: &str, id: Option<&str>) -> Option<(u32, bool)> {
+pub fn resolve_entry(
+    index: &AHashMap<String, u32>,
+    symbol: &str,
+    id: Option<&str>,
+) -> Option<(u32, bool)> {
     if let Some(id) = id.filter(|s| !s.is_empty()) {
         let upper = id.to_ascii_uppercase();
         if let Some(&g) = index.get(&upper) {
@@ -146,7 +150,11 @@ pub fn resolve_symbol(index: &AHashMap<String, u32>, symbol: &str) -> Option<(u3
     LEGACY_ALIASES
         .iter()
         .filter(|(_, current)| current.eq_ignore_ascii_case(symbol))
-        .find_map(|(legacy, _)| index.get(&legacy.to_ascii_uppercase()).map(|&id| (id, true)))
+        .find_map(|(legacy, _)| {
+            index
+                .get(&legacy.to_ascii_uppercase())
+                .map(|&id| (id, true))
+        })
 }
 
 /// Species guess from gene symbol casing: mouse/rat symbols are title-case
@@ -231,9 +239,18 @@ mod tests {
         index.insert("SRSF1".to_string(), 1u32);
         index.insert("ENSG00000136450.14".to_string(), 1u32);
         index.insert("ENSG00000136450".to_string(), 1u32);
-        assert_eq!(resolve_entry(&index, "missing", Some("ENSG00000136450")), Some((1, false)));
-        assert_eq!(resolve_entry(&index, "missing", Some("ensg00000136450.3")), Some((1, false)));
-        assert_eq!(resolve_entry(&index, "SRSF1", Some("ENSG99999999999")), Some((1, false)));
+        assert_eq!(
+            resolve_entry(&index, "missing", Some("ENSG00000136450")),
+            Some((1, false))
+        );
+        assert_eq!(
+            resolve_entry(&index, "missing", Some("ensg00000136450.3")),
+            Some((1, false))
+        );
+        assert_eq!(
+            resolve_entry(&index, "SRSF1", Some("ENSG99999999999")),
+            Some((1, false))
+        );
         assert_eq!(resolve_entry(&index, "nope", None), None);
     }
 
@@ -241,7 +258,10 @@ mod tests {
     fn alias_table_has_no_self_loops_or_duplicate_legacy_entries() {
         let mut seen = std::collections::HashSet::new();
         for (legacy, current) in LEGACY_ALIASES {
-            assert!(legacy != current || *legacy == "SNRNP25" || *legacy == "RBM39", "{legacy}");
+            assert!(
+                legacy != current || *legacy == "SNRNP25" || *legacy == "RBM39",
+                "{legacy}"
+            );
             if legacy != current {
                 assert!(seen.insert(*legacy), "duplicate legacy symbol {legacy}");
             }

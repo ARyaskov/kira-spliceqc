@@ -17,7 +17,11 @@ pub struct LayerMatrix {
 impl LayerMatrix {
     /// Builds a layer from `(gene, cell, count)` triplets. Triplets may be in
     /// any order; duplicates of the same `(gene, cell)` are summed.
-    pub fn from_triplets(n_genes: usize, n_cells: usize, mut triplets: Vec<(u32, u32, u32)>) -> Self {
+    pub fn from_triplets(
+        n_genes: usize,
+        n_cells: usize,
+        mut triplets: Vec<(u32, u32, u32)>,
+    ) -> Self {
         triplets.sort_unstable_by_key(|&(gene, cell, _)| (cell, gene));
 
         let mut col_ptr: Vec<u64> = Vec::with_capacity(n_cells + 1);
