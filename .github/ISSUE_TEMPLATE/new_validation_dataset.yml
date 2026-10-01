@@ -1,0 +1,40 @@
+name: New validation dataset
+description: Propose a public dataset for benchmark tiers 2 or 3
+labels: ["benchmark", "validation"]
+body:
+  - type: markdown
+    attributes:
+      value: Tiers and acceptance criteria are described in `benchmarks/README.md`; the manifest is `benchmarks/datasets.tsv`.
+  - type: input
+    id: accession
+    attributes:
+      label: Accession
+      placeholder: "GSE117063 / E-MTAB-... / PRJNA..."
+    validations:
+      required: true
+  - type: dropdown
+    id: tier
+    attributes:
+      label: Tier
+      options: ["2 (positive control with per-cell or per-sample truth)", "3 (agreement with a published tool)"]
+    validations:
+      required: true
+  - type: textarea
+    id: truth
+    attributes:
+      label: Ground truth
+      description: What is known per cell or per sample (genotype, perturbation, protocol, dose) and how it was obtained
+    validations:
+      required: true
+  - type: textarea
+    id: metric
+    attributes:
+      label: Metric under test and expected result
+      description: Which column should separate the groups, in which direction, and the acceptance threshold (AUROC, Spearman, kappa)
+    validations:
+      required: true
+  - type: textarea
+    id: processing
+    attributes:
+      label: Processing notes
+      description: Chemistry, available input levels (FASTQ for STARsolo, or processed layers / junction matrices), whitelist, reference genome

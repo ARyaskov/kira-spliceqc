@@ -1,0 +1,43 @@
+name: New panel
+description: Propose a geneset for the catalog or the stage-15 panels
+labels: ["panel", "catalog"]
+body:
+  - type: markdown
+    attributes:
+      value: See `resources/genesets/README.md` for the acceptance criteria.
+  - type: input
+    id: id
+    attributes:
+      label: Proposed geneset_id and axis
+      placeholder: "MINOR_U12_EXT / MINOR_SPLICEOSOME"
+    validations:
+      required: true
+  - type: textarea
+    id: genes
+    attributes:
+      label: Genes
+      description: Current HGNC symbols, one per line, optionally with Ensembl ids
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: hypothesis
+    attributes:
+      label: Biological hypothesis
+      description: What a high or low activity of this panel means for splicing, with references (DOI or PMID)
+    validations:
+      required: true
+  - type: textarea
+    id: controls
+    attributes:
+      label: Positive control
+      description: A public dataset where the panel should move (accession, cell subset, expected direction)
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: The panel does not overlap the cell-cycle lists (or the overlap is justified)
+        - label: I ran `cargo test --test null_model` with the panel added and the library-size correlation stayed below 0.1

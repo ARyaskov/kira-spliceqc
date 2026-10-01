@@ -1,0 +1,36 @@
+name: Bug report
+description: Wrong output, crash or non-deterministic result
+labels: ["bug"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: kira-spliceqc version
+      description: Output of `kira-spliceqc --version` (and `summary.json.provenance.tool` if available)
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command line
+      render: bash
+    validations:
+      required: true
+  - type: dropdown
+    id: level
+    attributes:
+      label: Input levels
+      options: ["L0 gene counts only", "L0 + L1 spliced/unspliced", "L0 + L2 junctions", "L0 + L1 + L2"]
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and observed behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log output and `summary.json.provenance`
+      render: text
