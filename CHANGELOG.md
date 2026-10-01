@@ -9,8 +9,24 @@ All notable changes to this project are documented here. The format follows
 Phases 1 and 3 of the scientific roadmap (Tier A and Tier B, direct
 splicing measurements).
 
+### Added (validation)
+
+- `kira-spliceqc simulate`: Poisson dataset with two cell types, layers,
+  junction matrix and spiked effects (cryptic 3' splice sites, intron
+  retention, damaged cells, exon skipping) with a `truth.tsv`.
+- `kira-spliceqc validate`: AUROC / AUPRC per metric and precision /
+  recall / F1 / FPR per flag against a truth table, overall and per cell
+  type, as JSON and Markdown; `--pair truth:metric[:flag[:sign]]`.
+- `benchmarks/`: tier-1 runner, STARsolo alignment template, dataset
+  manifest and acceptance criteria for tiers 2-3; `tests/validation_tier1.rs`
+  requires AUROC >= 0.95, flag FPR <= 1 % and recall >= 0.9 for every
+  spiked effect.
+
 ### Changed
 
+- `splice_site_shift_dev` is standardized within stratum and
+  junction-depth bin (the raw score rises with junction depth); false
+  `splice_site_shift_high` calls on the simulation drop from 7 % to 1 %.
 - Experimental composite flags (`splice_overload_high`, `rloop_risk_high`,
   `splicing_instability_high`) use the shared outlier rule (signed
   composite standardized within the stratum, deviation >= 3, BH-adjusted

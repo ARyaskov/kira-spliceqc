@@ -206,6 +206,31 @@ signatures, not measurements of splicing. Composite indices (`sis`, `SOS`,
 `RLR`, `SII`, regimes) are experimental until validated; see METRICS.md for the
 full mapping from v0.2 names.
 
+## Validation
+
+Tier 1 (simulations with known truth) runs anywhere:
+
+```bash
+kira-spliceqc simulate --out ./sim
+```
+
+```bash
+kira-spliceqc run --input ./sim --junctions ./sim/sj --out ./sim-out --run-mode pipeline
+```
+
+```bash
+kira-spliceqc validate --run ./sim-out --truth ./sim/truth.tsv --out ./validation.json
+```
+
+`validate` reports AUROC / AUPRC per metric and precision / recall / FPR per
+flag, overall and per cell type (`validation.json` + `validation.md`); custom
+pairs: `--pair truth_col:metric_col[:flag_col[:sign]]`. On the default
+simulation every spiked effect (cryptic 3' splice sites, intron retention,
+damaged cells, exon skipping) is recovered with AUROC 1.0 and flag FPR below
+0.5 %. `benchmarks/` holds the tier-2 (public positive controls) and tier-3
+(agreement with velocyto, DropletQC, SpliZ, IRFinder) plans and scripts; those
+need STAR alignments and have not been executed yet.
+
 ## Shared cache specification
 
 - Cache format specification: [kira-shared-sc-cache/CACHE_FILE.md](https://github.com/ARyaskov/kira-shared-sc-cache/blob/main/CACHE_FILE.md)

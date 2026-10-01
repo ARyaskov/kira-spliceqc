@@ -3,6 +3,8 @@ use std::path::PathBuf;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use kira_spliceqc::cli::config::{AnalysisMode, RunConfig, RunMode};
 use kira_spliceqc::cli::run::{SpliceQcError, build_reference_file, run_pipeline};
+use kira_spliceqc::validation::evaluate::{Pair, default_pairs, evaluate};
+use kira_spliceqc::validation::simulate::{Effect, SimulationConfig, simulate};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
@@ -19,6 +21,62 @@ pub enum Commands {
     Run(RunArgs),
     /// Reference-file commands.
     Reference(ReferenceCommand),
+    /// Write a synthetic dataset with known truth (tier-1 validation).
+    Simulate(SimulateArgs),
+    /// Score a run's cells.tsv against a truth table (AUROC, AUPRC, flag
+    /// precision/recall).
+    Validate(ValidateArgs),
+}
+
+#[derive(Args, Clone)]
+pub struct SimulateArgs {
+    /// Output directory (10x matrix + layers + sj/ junctions + metadata.tsv + truth.tsv).
+    #[arg(long)]
+    pub out: PathBuf,
+    #[arg(long, default_value_t = 2000)]
+    pub n_cells: usize,
+    #[arg(long, default_value_t = 800)]
+    pub n_filler_genes: usize,
+    #[arg(long, default_value_t = 80)]
+    pub n_junction_genes: usize,
+    #[arg(long, default_value_t = 0x5EED)]
+    pub seed: u64,
+    /// Fraction of cells with cryptic 3' splice-site usage (SF3B1-like).
+    #[arg(long, default_value_t = 0.05)]
+    pub cryptic_fraction: f64,
+    /// Share of donor reads at the cryptic acceptor in those cells.
+    #[arg(long, default_value_t = 0.15)]
+    pub cryptic_ratio: f64,
+    /// Fraction of cells with global intron retention.
+    #[arg(long, default_value_t = 0.05)]
+    pub ir_fraction: f64,
+    #[arg(long, default_value_t = 2.0)]
+    pub ir_fold: f64,
+    /// Fraction of damaged cells (unspliced counts / 10).
+    #[arg(long, default_value_t = 0.03)]
+    pub damaged_fraction: f64,
+    /// Fraction of cells with exon skipping.
+    #[arg(long, default_value_t = 0.03)]
+    pub skip_fraction: f64,
+    #[arg(long, default_value_t = 0.25)]
+    pub skip_ratio: f64,
+}
+
+#[derive(Args, Clone)]
+pub struct ValidateArgs {
+    /// Run output directory (standalone: contains cells.tsv; pipeline: <out>/kira-spliceqc).
+    #[arg(long)]
+    pub run: PathBuf,
+    /// Truth table: barcode column + boolean truth columns (+ optional cell_type).
+    #[arg(long)]
+    pub truth: PathBuf,
+    /// Scoring pairs `truth:metric[:flag[:sign]]`; defaults cover the
+    /// simulate truth columns.
+    #[arg(long)]
+    pub pair: Vec<String>,
+    /// Output JSON (a .md sibling is written too).
+    #[arg(long)]
+    pub out: PathBuf,
 }
 
 #[derive(Args, Clone)]
@@ -134,6 +192,8 @@ fn main() {
         Some(Commands::Reference(cmd)) => match cmd.action {
             ReferenceAction::Build(args) => execute_reference_build(args),
         },
+        Some(Commands::Simulate(args)) => execute_simulate(args),
+        Some(Commands::Validate(args)) => execute_validate(args),
         None => execute_run(cli.run),
     };
 
@@ -162,6 +222,61 @@ fn handle_error(err: SpliceQcError) -> ! {
             std::process::exit(2);
         }
     }
+}
+
+fn execute_simulate(args: SimulateArgs) -> Result<(), SpliceQcError> {
+    let config = SimulationConfig {
+        n_cells: args.n_cells,
+        n_filler_genes: args.n_filler_genes,
+        n_junction_genes: args.n_junction_genes,
+        seed: args.seed,
+        cryptic_fraction: args.cryptic_fraction,
+        cryptic_ratio: args.cryptic_ratio,
+        ir_fraction: args.ir_fraction,
+        ir_fold: args.ir_fold,
+        damaged_fraction: args.damaged_fraction,
+        skip_fraction: args.skip_fraction,
+        skip_ratio: args.skip_ratio,
+    };
+    let effects = simulate(&config, &args.out).map_err(|e| SpliceQcError::PipelineFailure(e.to_string()))?;
+    let count = |e: Effect| effects.iter().filter(|x| **x == e).count();
+    println!(
+        "simulated {} cells into {}: cryptic {}, ir {}, damaged {}, skip {} (junctions in {}/sj, run with --junctions)",
+        effects.len(),
+        args.out.display(),
+        count(Effect::Cryptic),
+        count(Effect::Ir),
+        count(Effect::Damaged),
+        count(Effect::Skip),
+        args.out.display()
+    );
+    Ok(())
+}
+
+fn execute_validate(args: ValidateArgs) -> Result<(), SpliceQcError> {
+    let cells = if args.run.join("cells.tsv").is_file() {
+        args.run.join("cells.tsv")
+    } else {
+        args.run.join("kira-spliceqc").join("cells.tsv")
+    };
+    let pairs = if args.pair.is_empty() {
+        default_pairs()
+    } else {
+        args.pair
+            .iter()
+            .map(|p| Pair::parse(p))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| SpliceQcError::InvalidInput(e.to_string()))?
+    };
+    let report = evaluate(&cells, &args.truth, &pairs).map_err(|e| SpliceQcError::PipelineFailure(e.to_string()))?;
+    let json = serde_json::to_string_pretty(&report).map_err(|e| SpliceQcError::PipelineFailure(e.to_string()))?;
+    std::fs::write(&args.out, json)?;
+    let md = args.out.with_extension("md");
+    std::fs::write(&md, report.to_markdown())?;
+    print!("{}", report.to_markdown());
+    println!("
+written: {} and {}", args.out.display(), md.display());
+    Ok(())
 }
 
 fn execute_reference_build(args: ReferenceBuildArgs) -> Result<(), SpliceQcError> {

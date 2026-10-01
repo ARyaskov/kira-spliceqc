@@ -10,3 +10,4 @@ pub mod pipeline;
 pub mod reference;
 pub mod simd;
 pub mod stats;
+pub mod validation;

@@ -1,0 +1,10 @@
+id	tier	accession	description	truth	truth_column	metric	flag	expected
+got_cll_sf3b1	2	GSE117063	CLL Genotyping of Transcriptomes, SF3B1 K700E (Nam et al. 2019 Nature)	per-cell genotype from GoT amplicon	truth_sf3b1	cryptic_3ss_fraction_dev	cryptic_3ss_high	AUROC >= 0.75 within patient
+got_mds_splicing	2	GSE117063	MDS CD34+ with SF3B1/SRSF2/U2AF1 (Nam et al. 2019)	per-cell genotype	truth_mut	cryptic_3ss_fraction_dev;intron_retention_index_dev	cryptic_3ss_high	sign and order as bulk (Pellagatti 2018)
+perturbseq_k562	2	GSE202088	Genome-wide Perturb-seq K562 (Replogle et al. 2022 Cell)	CRISPRi target per cell	truth_splicing_kd	intron_retention_index_dev	intron_retention_high	AUROC >= 0.7 snRNP/SF3B targets vs controls
+sf3b_inhibitor_dose	2	TBD	SF3b inhibitor dose series (pladienolide B / E7107 / H3B-8800)	dose per sample	dose	intron_retention_index;exon_skip_fraction		Spearman >= 0.8 across samples
+nuclei_vs_cells	2	TBD	Matched snRNA-seq and scRNA-seq of one tissue	protocol per sample	truth_nuclei	unspliced_fraction		AUROC >= 0.95; ~0.5 after protocol stratification
+velocyto_agreement	3	any L1 dataset	same layers through velocyto/scVelo	per-cell unspliced fraction	-	unspliced_fraction		Spearman >= 0.99
+dropletqc_agreement	3	any L1 dataset	DropletQC damaged-cell calls	per-cell call	-	nuclear_fraction_flag		kappa >= 0.7
+spliz_agreement	3	any L2 dataset	SpliZ on the same BAM	per-gene z	-	splice_site_shift		Spearman >= 0.8
+irfinder_agreement	3	any L1 dataset	IRFinder pseudobulk	per-gene IR ratio	-	intron_retention_index		Spearman >= 0.7
