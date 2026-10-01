@@ -15,16 +15,13 @@ use crate::model::isoform_dispersion::IsoformDispersionMetrics;
 use crate::model::junctions::JunctionMetrics;
 use crate::model::missplicing::MissplicingMetrics;
 use crate::model::sis::{SpliceIntegrityClass, SpliceIntegrityMetrics};
-use crate::model::splicing_instability::{
-    RLOOP_RISK_HIGH_THRESHOLD, SPLICE_OVERLOAD_HIGH_THRESHOLD, SPLICING_INSTABILITY_HIGH_THRESHOLD,
-    SplicingInstabilityMetrics,
-};
+use crate::model::splicing_instability::{COMPOSITE_FLAG_RULE, SplicingInstabilityMetrics};
 use crate::model::splicing_noise::SplicingNoiseMetrics;
 use crate::model::timecourse::{SplicingTrajectoryClass, TimecourseSplicingMetrics};
 use crate::model::intron_retention::IntronRetentionMetrics;
 use crate::model::unspliced::UnsplicedMetrics;
 use crate::output::provenance::{Provenance, input_levels};
-use crate::reference::{MIN_STRATUM_CELLS, Strata};
+use crate::reference::{DEVIATION_THRESHOLD, FLAG_FDR, MIN_STRATUM_CELLS, Strata};
 
 /// Bumped to 2.0 in v0.3: expression-signature keys carry the `_expr`
 /// suffix (`regulator_expr`, `missplicing_expr`, `imbalance_expr`,
@@ -495,9 +492,9 @@ struct JsonSplicingInstabilityGlobalStats {
 
 #[derive(Serialize)]
 struct JsonSplicingInstabilityThresholds {
-    splice_overload_high: f32,
-    rloop_risk_high: f32,
-    splicing_instability_high: f32,
+    flag_rule: &'static str,
+    deviation_threshold: f32,
+    fdr: f64,
 }
 
 #[derive(Serialize)]
@@ -529,6 +526,9 @@ struct JsonSplicingInstabilityComposites {
     sos: Vec<Option<f32>>,
     rlr: Vec<Option<f32>>,
     sii: Vec<Option<f32>>,
+    sos_dev: Vec<Option<f32>>,
+    rlr_dev: Vec<Option<f32>>,
+    sii_dev: Vec<Option<f32>>,
     splice_overload_high: Vec<bool>,
     rloop_risk_high: Vec<bool>,
     splicing_instability_high: Vec<bool>,
@@ -841,13 +841,16 @@ pub fn write_json(
             nmd_core: opt_vec(&splicing_instability.nmd_core),
             composites: experimental.then(|| JsonSplicingInstabilityComposites {
                 thresholds: JsonSplicingInstabilityThresholds {
-                    splice_overload_high: SPLICE_OVERLOAD_HIGH_THRESHOLD,
-                    rloop_risk_high: RLOOP_RISK_HIGH_THRESHOLD,
-                    splicing_instability_high: SPLICING_INSTABILITY_HIGH_THRESHOLD,
+                    flag_rule: COMPOSITE_FLAG_RULE,
+                    deviation_threshold: DEVIATION_THRESHOLD,
+                    fdr: FLAG_FDR,
                 },
                 sos: opt_vec(&splicing_instability.sos),
                 rlr: opt_vec(&splicing_instability.rlr),
                 sii: opt_vec(&splicing_instability.sii),
+                sos_dev: opt_vec(&splicing_instability.sos_dev),
+                rlr_dev: opt_vec(&splicing_instability.rlr_dev),
+                sii_dev: opt_vec(&splicing_instability.sii_dev),
                 splice_overload_high: splicing_instability.splice_overload_high.clone(),
                 rloop_risk_high: splicing_instability.rloop_risk_high.clone(),
                 splicing_instability_high: splicing_instability.splicing_instability_high.clone(),

@@ -5,10 +5,8 @@ use crate::expression::ExpressionMatrix;
 use crate::genesets::aliases::{resolve_symbol, symbol_index};
 use crate::genesets::controls::ControlPool;
 use crate::model::splicing_instability::{
-    PanelCoverage, RLOOP_RISK_HIGH_THRESHOLD, SPLICE_OVERLOAD_HIGH_THRESHOLD,
-    SPLICING_INSTABILITY_HIGH_THRESHOLD, SplicingInstabilityGlobalStats,
-    SplicingInstabilityMetrics, SplicingInstabilityMissingness, SplicingInstabilityRobustRef,
-    SplicingInstabilityZReference,
+    PanelCoverage, SplicingInstabilityGlobalStats, SplicingInstabilityMetrics,
+    SplicingInstabilityMissingness, SplicingInstabilityRobustRef, SplicingInstabilityZReference,
 };
 
 use self::aggregate::aggregate_cluster_stats;
@@ -17,7 +15,7 @@ use self::panels::{
     SPLICEOSOME_PANEL, SPLICEQC_INSTABILITY_PANEL_V1, SPLICING_RBP_PANEL,
 };
 use self::scores::{panel_trimmed_mean, percentile};
-use crate::reference::{Strata, robust_z_by_stratum_and_depth};
+use crate::reference::{Strata, flag_outliers, robust_z_by_stratum, robust_z_by_stratum_and_depth};
 use crate::stats::robust::{RobustRef, robust_z_logged};
 
 pub mod aggregate;
@@ -168,7 +166,10 @@ pub fn compute(
     };
 
     // Composite scores — independent per cell.
-    let composite: Vec<(f32, f32, f32, bool, bool, bool, bool)> = (0..n_cells)
+    // Composites keep their documented (relu-based) definitions; the flags
+    // come from signed versions standardized within the stratum, so they are
+    // calibrated like every other flag instead of using fixed cut-offs.
+    let composite: Vec<(f32, f32, f32, f32, f32, f32)> = (0..n_cells)
         .into_par_iter()
         .map(|cell| {
             let zs = z_splice[cell];
@@ -206,31 +207,53 @@ pub fn compute(
                 relu(sos)
             };
 
-            let so_high = sos.is_finite() && sos >= SPLICE_OVERLOAD_HIGH_THRESHOLD;
-            let rl_high = rlr.is_finite() && rlr >= RLOOP_RISK_HIGH_THRESHOLD;
-            let si_high = sii.is_finite() && sii >= SPLICING_INSTABILITY_HIGH_THRESHOLD;
-            let gi_flag = so_high && rl_high;
+            // Signed counterparts (no relu) for calibrated flags.
+            let rlr_signed = if !zres.is_finite() {
+                f32::NAN
+            } else if conflict_panel_enabled {
+                let zrisk = z_conflict[cell];
+                if zrisk.is_finite() { 0.7 * -zres + 0.3 * zrisk } else { f32::NAN }
+            } else {
+                -zres
+            };
+            let sii_signed = if !sos.is_finite() {
+                f32::NAN
+            } else if nmd_panel_enabled {
+                let znmd = z_nmd[cell];
+                if znmd.is_finite() { 0.6 * sos + 0.4 * -znmd } else { f32::NAN }
+            } else {
+                sos
+            };
 
-            (sos, rlr, sii, so_high, rl_high, si_high, gi_flag)
+            (sos, rlr, sii, sos, rlr_signed, sii_signed)
         })
         .collect();
 
     let mut sos = Vec::with_capacity(n_cells);
     let mut rlr = Vec::with_capacity(n_cells);
     let mut sii = Vec::with_capacity(n_cells);
-    let mut splice_overload_high = Vec::with_capacity(n_cells);
-    let mut rloop_risk_high = Vec::with_capacity(n_cells);
-    let mut splicing_instability_high = Vec::with_capacity(n_cells);
-    let mut genome_instability_splicing_flag = Vec::with_capacity(n_cells);
-    for (s, r, i, so_h, rl_h, si_h, gi) in composite {
+    let mut sos_signed = Vec::with_capacity(n_cells);
+    let mut rlr_signed = Vec::with_capacity(n_cells);
+    let mut sii_signed = Vec::with_capacity(n_cells);
+    for (s, r, i, ss, rs, is) in composite {
         sos.push(s);
         rlr.push(r);
         sii.push(i);
-        splice_overload_high.push(so_h);
-        rloop_risk_high.push(rl_h);
-        splicing_instability_high.push(si_h);
-        genome_instability_splicing_flag.push(gi);
+        sos_signed.push(ss);
+        rlr_signed.push(rs);
+        sii_signed.push(is);
     }
+    let (sos_dev, _) = robust_z_by_stratum(&sos_signed, strata);
+    let (rlr_dev, _) = robust_z_by_stratum(&rlr_signed, strata);
+    let (sii_dev, _) = robust_z_by_stratum(&sii_signed, strata);
+    let splice_overload_high = flag_outliers(&sos_dev, strata, 1.0);
+    let rloop_risk_high = flag_outliers(&rlr_dev, strata, 1.0);
+    let splicing_instability_high = flag_outliers(&sii_dev, strata, 1.0);
+    let genome_instability_splicing_flag: Vec<bool> = splice_overload_high
+        .iter()
+        .zip(&rloop_risk_high)
+        .map(|(a, b)| *a && *b)
+        .collect();
 
     let global_stats = SplicingInstabilityGlobalStats {
         sos_p50: percentile(&sos, 0.5),
@@ -326,6 +349,9 @@ pub fn compute(
         sos,
         rlr,
         sii,
+        sos_dev,
+        rlr_dev,
+        sii_dev,
         splice_overload_high,
         rloop_risk_high,
         splicing_instability_high,

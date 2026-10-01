@@ -12,6 +12,10 @@ pub struct SplicingInstabilityMetrics {
     pub sos: Vec<f32>,
     pub rlr: Vec<f32>,
     pub sii: Vec<f32>,
+    /// Stratum-standardized signed composites behind the flags.
+    pub sos_dev: Vec<f32>,
+    pub rlr_dev: Vec<f32>,
+    pub sii_dev: Vec<f32>,
     pub splice_overload_high: Vec<bool>,
     pub rloop_risk_high: Vec<bool>,
     pub splicing_instability_high: Vec<bool>,
@@ -86,6 +90,9 @@ pub struct SplicingInstabilityMissingness {
     pub panel_coverage: Vec<PanelCoverage>,
 }
 
-pub const SPLICE_OVERLOAD_HIGH_THRESHOLD: f32 = 2.0;
-pub const RLOOP_RISK_HIGH_THRESHOLD: f32 = 1.5;
-pub const SPLICING_INSTABILITY_HIGH_THRESHOLD: f32 = 2.0;
+/// Flag rule shared with every other outlier flag (see `reference`): the
+/// signed, stratum-standardized composite must deviate by at least
+/// `DEVIATION_THRESHOLD` with a BH-adjusted p below `FLAG_FDR`. The fixed
+/// cut-offs of v0.3 (SOS >= 2.0, RLR >= 1.5, SII >= 2.0) fired on 4 % of
+/// null cells and are gone.
+pub const COMPOSITE_FLAG_RULE: &str = "signed composite dev >= 3 and BH-adjusted p < 0.05 within stratum";

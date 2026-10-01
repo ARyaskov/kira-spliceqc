@@ -7,8 +7,9 @@
 //!
 //! Phase 1 targets: every non-experimental flag fires on at most 1 % of cells
 //! and |Spearman(metric, libsize)| <= 0.1 for every standardized metric.
-//! The experimental composite flags (fixed thresholds, unvalidated) keep a
-//! looser baseline bound until Phase 2 calibrates them. The dataset also
+//! The experimental composite flags are calibrated with the same deviation
+//! rule as the production flags since Phase 2, so they share the 1 % bound;
+//! the SIS classes (fixed cut-offs) keep a baseline bound. The dataset also
 //! carries spliced/unspliced layers with one shared unspliced ratio, so the
 //! Tier A metrics are tested on the same null.
 
@@ -46,10 +47,10 @@ const MAX_ABS_SPEARMAN_RAW_CORE: f64 = 0.15;
 /// |median| below this and a flag rate below `MAX_FLAG_FRACTION` in every
 /// quintile.
 const MAX_ABS_QUINTILE_MEDIAN: f64 = 0.15;
-/// Baselines for the experimental composites (fixed thresholds; measured
-/// 4.6 % rloop_risk_high and 3.6 % Impaired+Broken after depth correction,
-/// |rho(sis, libsize)| up to 0.18 because SIS still contains the raw entropy).
-const MAX_EXPERIMENTAL_FLAG_FRACTION: f64 = 0.08;
+/// Experimental composite flags share the production bound since their
+/// recalibration; the SIS classes keep a baseline (measured 2.9-4.3 %
+/// Impaired+Broken, |rho(sis, libsize)| up to 0.18 from the raw entropy).
+const MAX_EXPERIMENTAL_FLAG_FRACTION: f64 = 0.01;
 const MAX_FAILURE_FRACTION: f64 = 0.08;
 const MAX_EXPERIMENTAL_ABS_SPEARMAN: f64 = 0.30;
 /// Shared unspliced ratio of every gene in the null layers.

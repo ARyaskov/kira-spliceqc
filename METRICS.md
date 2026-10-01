@@ -335,11 +335,16 @@ Splicing Instability Index (SII):
 - with NMD panel disabled:
   - `SII(c) = relu(SOS(c))`
 
-Flags:
-- `splice_overload_high`: `SOS >= 2.0`
-- `rloop_risk_high`: `RLR >= 1.5`
-- `splicing_instability_high`: `SII >= 2.0`
+Flags (recalibrated in v0.4; the fixed cut-offs SOS >= 2.0 / RLR >= 1.5 /
+SII >= 2.0 fired on 4 % of null cells):
+- signed composites `SOS`, `RLR_signed = 0.7 * (-Z(rloop)) + 0.3 * Z(conflict)` (or
+  `-Z(rloop)`), `SII_signed = 0.6 * SOS + 0.4 * (-Z(nmd))` (or `SOS`) are standardized
+  within the reference stratum (`sos_dev`, `rlr_dev`, `sii_dev`)
+- `splice_overload_high`: `sos_dev >= 3` and BH-adjusted p < 0.05 within the stratum
+- `rloop_risk_high`: same rule on `rlr_dev`
+- `splicing_instability_high`: same rule on `sii_dev`
 - `genome_instability_splicing_flag`: `splice_overload_high && rloop_risk_high`
+- the reported `SOS`/`RLR`/`SII` values keep the relu-based definitions above
 
 NaN behavior:
 - flags evaluate to `false` for non-finite scores

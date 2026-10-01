@@ -85,7 +85,8 @@ fn summary_json_schema() {
         v["splicing_instability"]["panel_version"],
         "SPLICEQC_INSTABILITY_PANEL_V1"
     );
-    assert!(v["splicing_instability"]["thresholds"]["splice_overload_high"].is_number());
+    assert!(v["splicing_instability"]["thresholds"]["flag_rule"].is_string());
+    assert_eq!(v["splicing_instability"]["thresholds"]["deviation_threshold"], 3.0);
     assert!(
         v["splicing_instability"]["global_stats"]["sos_p50"].is_number()
             || v["splicing_instability"]["global_stats"]["sos_p50"].is_null()

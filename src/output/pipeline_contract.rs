@@ -22,11 +22,8 @@ use crate::model::sis::SpliceIntegrityMetrics;
 use crate::model::intron_retention::IntronRetentionMetrics;
 use crate::model::unspliced::UnsplicedMetrics;
 use crate::output::provenance::{Provenance, input_levels};
-use crate::reference::{MIN_STRATUM_CELLS, Strata};
-use crate::model::splicing_instability::{
-    RLOOP_RISK_HIGH_THRESHOLD, SPLICE_OVERLOAD_HIGH_THRESHOLD, SPLICING_INSTABILITY_HIGH_THRESHOLD,
-    SplicingInstabilityMetrics,
-};
+use crate::reference::{DEVIATION_THRESHOLD, FLAG_FDR, MIN_STRATUM_CELLS, Strata};
+use crate::model::splicing_instability::{COMPOSITE_FLAG_RULE, SplicingInstabilityMetrics};
 use crate::stats::robust::quantile_f64;
 
 const PIPELINE_DIR: &str = "kira-spliceqc";
@@ -229,9 +226,9 @@ struct QcJson {
 
 #[derive(Serialize)]
 struct SplicingInstabilityThresholdsJson {
-    splice_overload_high: f32,
-    rloop_risk_high: f32,
-    splicing_instability_high: f32,
+    flag_rule: &'static str,
+    deviation_threshold: f32,
+    fdr: f64,
 }
 
 #[derive(Serialize)]
@@ -888,9 +885,9 @@ fn build_splicing_instability_summary(
         conflict_panel_enabled: metrics.conflict_panel_enabled,
         nmd_panel_enabled: metrics.nmd_panel_enabled,
         thresholds: SplicingInstabilityThresholdsJson {
-            splice_overload_high: SPLICE_OVERLOAD_HIGH_THRESHOLD,
-            rloop_risk_high: RLOOP_RISK_HIGH_THRESHOLD,
-            splicing_instability_high: SPLICING_INSTABILITY_HIGH_THRESHOLD,
+            flag_rule: COMPOSITE_FLAG_RULE,
+            deviation_threshold: DEVIATION_THRESHOLD,
+            fdr: FLAG_FDR,
         },
         global_stats: SplicingInstabilityGlobalStatsJson {
             sos_p50: opt_f32(metrics.global_stats.sos_p50),

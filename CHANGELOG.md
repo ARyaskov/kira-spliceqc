@@ -9,6 +9,15 @@ All notable changes to this project are documented here. The format follows
 Phases 1 and 3 of the scientific roadmap (Tier A and Tier B, direct
 splicing measurements).
 
+### Changed
+
+- Experimental composite flags (`splice_overload_high`, `rloop_risk_high`,
+  `splicing_instability_high`) use the shared outlier rule (signed
+  composite standardized within the stratum, deviation >= 3, BH-adjusted
+  p < 0.05) instead of fixed cut-offs that fired on 4 % of null cells;
+  the JSON `thresholds` block now states the rule. On the null model the
+  three flags fire on 0.0-0.1 % of cells.
+
 ### Added
 
 - Input level L2: STARsolo `SJ/` junction count matrices (auto-detected as
